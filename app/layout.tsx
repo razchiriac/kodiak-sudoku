@@ -26,6 +26,15 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  // Tints the Android browser/PWA status bar to match the page so
+  // there's no jarring strip of contrasting color above the header.
+  // We pair light/dark variants so the bar tracks the user's system
+  // theme. Note: manifest.ts has a single theme_color used at install
+  // time before the page can negotiate its own.
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#0a0a0a" },
+  ],
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Keyboard } from "lucide-react";
-import { useGameStore } from "@/lib/zustand/game-store";
+import { readPersistedSnapshot, useGameStore } from "@/lib/zustand/game-store";
 import { SudokuGrid } from "@/components/game/sudoku-grid";
 import { NumberPad } from "@/components/game/number-pad";
 import { ControlPanel } from "@/components/game/control-panel";
@@ -59,6 +59,9 @@ export function PlayClient({
   useEffect(() => {
     if (initialized.current) return;
     initialized.current = true;
+
+    // Priority 1: signed-in user with a server-side savedGame row.
+    // Server is the source of truth for them.
     if (savedGame && isSignedIn) {
       resumeFromSnapshot(
         {
@@ -80,17 +83,54 @@ export function PlayClient({
         },
         puzzle.puzzle,
       );
-    } else {
-      startGame({
-        meta: {
-          puzzleId: puzzle.id,
-          difficultyBucket: puzzle.difficultyBucket,
-          mode,
-          solution: mode === "daily" ? null : puzzle.solution,
-        },
-        puzzle: puzzle.puzzle,
-      });
+      return;
     }
+
+    // Priority 2: anonymous user with a persisted snapshot for THIS
+    // exact puzzle. Without this branch, refreshing /play/<id> while
+    // signed out wipes the in-progress game because startGame() resets
+    // the store and the persist middleware then writes the empty
+    // state back to localStorage.
+    //
+    // Guards:
+    //   - puzzleId match prevents pasting old progress over a brand
+    //     new random puzzle that happens to share the URL slot.
+    //   - !isComplete prevents auto-restoring a completed puzzle in
+    //     its won state on refresh (player should get a fresh game).
+    const local = !isSignedIn ? readPersistedSnapshot() : null;
+    if (local && local.meta.puzzleId === puzzle.id && !local.isComplete) {
+      resumeFromSnapshot(
+        {
+          meta: {
+            puzzleId: puzzle.id,
+            difficultyBucket: puzzle.difficultyBucket,
+            mode,
+            solution: mode === "daily" ? null : puzzle.solution,
+          },
+          board: local.board,
+          notesB64: local.notesB64,
+          elapsedMs: local.elapsedMs,
+          mistakes: local.mistakes,
+          hintsUsed: local.hintsUsed,
+          isPaused: local.isPaused,
+          isComplete: false,
+          startedAt: local.startedAt,
+        },
+        puzzle.puzzle,
+      );
+      return;
+    }
+
+    // Priority 3: fresh puzzle.
+    startGame({
+      meta: {
+        puzzleId: puzzle.id,
+        difficultyBucket: puzzle.difficultyBucket,
+        mode,
+        solution: mode === "daily" ? null : puzzle.solution,
+      },
+      puzzle: puzzle.puzzle,
+    });
   }, [puzzle, savedGame, isSignedIn, mode, startGame, resumeFromSnapshot]);
 
   // Inject the remote hint fetcher used for daily puzzles. Stays inert

@@ -79,14 +79,28 @@ export function SudokuGrid() {
 
 // Paused state overlay. Hides the board so a player can't "pause to think"
 // and gain an unfair advantage in timed modes.
+//
+// The overlay itself is the resume affordance: tapping/clicking anywhere
+// on it calls togglePause. On desktop we still hint at the Space
+// shortcut; on touch devices (no keyboard) we tell the user to tap
+// because "Press Space" is meaningless there.
 function PauseOverlay() {
+  const togglePause = useGameStore((s) => s.togglePause);
   return (
-    <div className="absolute inset-0 flex items-center justify-center bg-background/95 backdrop-blur-sm">
+    <button
+      type="button"
+      onClick={togglePause}
+      aria-label="Resume game"
+      className="absolute inset-0 flex items-center justify-center bg-background/95 backdrop-blur-sm focus:outline-none"
+    >
       <p className="text-center text-lg font-medium text-muted-foreground">
         Paused
         <br />
-        <span className="text-sm">Press Space to resume</span>
+        {/* Two hints, one shown per breakpoint. sm: covers the
+            keyboard-friendly desktop case; the default covers touch. */}
+        <span className="text-sm sm:hidden">Tap here to resume</span>
+        <span className="hidden text-sm sm:inline">Press Space to resume</span>
       </p>
-    </div>
+    </button>
   );
 }

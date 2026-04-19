@@ -1,0 +1,44 @@
+name: db-backup
+
+# Daily logical backup of the production Supabase Postgres. The Supabase
+# free plan keeps PITR for 7 days only; this workflow gives us a longer
+# offsite retention window using a free GitHub-hosted runner.
+#
+# Required repo secrets:
+#   PROD_DATABASE_URL — full postgres URL with password
+#
+# Backups land as artifacts on each run and as a tag-named release file
+# weekly. Adjust schedule as needed.
+
+on:
+  schedule:
+    - cron: "0 5 * * *" # 05:00 UTC daily
+  workflow_dispatch:
+
+jobs:
+  pg-dump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Install postgres client
+        run: |
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-16
+
+      - name: Dump database
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+        run: |
+          STAMP=$(date -u +"%Y%m%dT%H%M%SZ")
+          pg_dump --format=custom --no-owner --no-privileges \
+            --exclude-schema=auth --exclude-schema=storage \
+            --file="sudoku-${STAMP}.dump" \
+            "${DATABASE_URL}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sudoku-db-dump
+          path: sudoku-*.dump
+          retention-days: 30

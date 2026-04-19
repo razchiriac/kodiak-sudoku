@@ -9,9 +9,13 @@ export type HistoryEntry =
       index: CellIndex;
       prevValue: Digit;
       nextValue: Digit;
-      // Snapshot of the cell's notes mask before the value was placed, so
-      // an undo can restore notes that were auto-cleared on placement.
-      prevNotesMask: number;
+      // Full notes snapshots before and after this placement. Captures
+      // both the placed cell's cleared notes AND any peer notes pruned
+      // by the unconditional smart-notes behavior. Mirrors the
+      // notes-bulk pattern so undo/redo for value entries is uniform.
+      // Memory is fine: 162 bytes per buffer, max 200 entries kept.
+      prevNotes: Uint16Array;
+      nextNotes: Uint16Array;
     }
   | {
       kind: "note";

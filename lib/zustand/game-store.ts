@@ -84,7 +84,6 @@ type GameState = {
   // Settings the player can flip in the UI. Defaults are conservative.
   settings: {
     strict: boolean;
-    autoPruneNotes: boolean;
     highlightSameDigit: boolean;
   };
 };
@@ -151,7 +150,6 @@ const INITIAL: GameState = {
   startedAt: 0,
   settings: {
     strict: false,
-    autoPruneNotes: false,
     highlightSameDigit: true,
   },
 };
@@ -268,10 +266,18 @@ export const useGameStore = create<GameState & GameActions>()(
         const board = new Uint8Array(s.board);
         board[idx] = digit;
 
-        // Clear notes on the cell we just filled, and optionally prune the
-        // newly placed digit from peers' notes (smart-notes setting).
+        // Snapshot the full notes buffer before mutation so the history
+        // entry can restore it verbatim on undo. We need the snapshot
+        // BEFORE clearCellNotes / prunePeerNotes because both return new
+        // buffers but we want the original state for undo.
+        const prevNotes = new Uint16Array(s.notes);
+
+        // Clear notes on the cell we just filled, then prune the newly
+        // placed digit from every peer's notes. Pruning is now
+        // unconditional: placing a digit always invalidates that digit
+        // as a candidate in its row, column, and box.
         let notes = clearCellNotes(s.notes, idx);
-        if (s.settings.autoPruneNotes) notes = prunePeerNotes(notes, idx, digit);
+        notes = prunePeerNotes(notes, idx, digit);
 
         // Increment mistakes if the placement creates a conflict. We use
         // the local validator because it's instant and the server check
@@ -284,7 +290,10 @@ export const useGameStore = create<GameState & GameActions>()(
           index: idx,
           prevValue,
           nextValue: digit,
-          prevNotesMask: s.notes[idx],
+          prevNotes,
+          // notes is already a fresh buffer from clearCellNotes/prune,
+          // so we can keep the reference. The store never mutates it.
+          nextNotes: notes,
         };
         const next = {
           ...s,
@@ -312,15 +321,20 @@ export const useGameStore = create<GameState & GameActions>()(
 
         const board = new Uint8Array(s.board);
         board[idx] = 0;
+        const prevNotes = new Uint16Array(s.notes);
         const notes = clearCellNotes(s.notes, idx);
 
-        // Erase is recorded as a value edit so undo restores both.
+        // Erase is recorded as a value edit so undo restores both. Erase
+        // doesn't touch peer notes — the snapshots only differ in the
+        // erased cell — but we use the same buffer-swap entry shape for
+        // uniformity with placements.
         const entry: HistoryEntry = {
           kind: "value",
           index: idx,
           prevValue,
           nextValue: 0,
-          prevNotesMask: prevMask,
+          prevNotes,
+          nextNotes: notes,
         };
         set({
           board,
@@ -368,8 +382,11 @@ export const useGameStore = create<GameState & GameActions>()(
         if (e.kind === "value") {
           const board = new Uint8Array(s.board);
           board[e.index] = e.prevValue;
-          const notes = new Uint16Array(s.notes);
-          notes[e.index] = e.prevNotesMask;
+          // Restore the entire pre-placement notes buffer in one shot.
+          // This includes both the placed cell's notes AND any peer
+          // candidates that were pruned. Copy so the stored entry stays
+          // immutable for redo (same convention as notes-bulk).
+          const notes = new Uint16Array(e.prevNotes);
           set({
             board,
             notes,
@@ -397,7 +414,10 @@ export const useGameStore = create<GameState & GameActions>()(
         if (e.kind === "value") {
           const board = new Uint8Array(s.board);
           board[e.index] = e.nextValue;
-          const notes = clearCellNotes(s.notes, e.index);
+          // Re-apply the post-placement notes buffer wholesale (cleared
+          // cell + pruned peers). Copy for the same immutability reason
+          // as undo above.
+          const notes = new Uint16Array(e.nextNotes);
           set({
             board,
             notes,
@@ -446,14 +466,18 @@ export const useGameStore = create<GameState & GameActions>()(
         const prevValue = s.board[idx];
         const board = new Uint8Array(s.board);
         board[idx] = suggestion.digit;
+        // Same snapshot-then-mutate pattern as inputDigit so undo can
+        // restore the full notes buffer (including peer pruning).
+        const prevNotes = new Uint16Array(s.notes);
         let notes = clearCellNotes(s.notes, idx);
-        if (s.settings.autoPruneNotes) notes = prunePeerNotes(notes, idx, suggestion.digit);
+        notes = prunePeerNotes(notes, idx, suggestion.digit);
         const entry: HistoryEntry = {
           kind: "value",
           index: idx,
           prevValue,
           nextValue: suggestion.digit,
-          prevNotesMask: s.notes[idx],
+          prevNotes,
+          nextNotes: notes,
         };
         set({
           board,

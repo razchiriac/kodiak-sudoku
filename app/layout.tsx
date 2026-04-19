@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import "./globals.css";
@@ -17,6 +17,16 @@ export const metadata: Metadata = {
     description: "The smoothest Sudoku you can play in a browser.",
     type: "website",
   },
+};
+
+// Mobile viewport configuration. Without this, mobile Safari can apply
+// odd default scaling that makes the board render too small. We also
+// set viewportFit: "cover" so we can use safe-area-insets later if
+// needed (e.g. on iPhones with a home-indicator bar).
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

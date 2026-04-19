@@ -175,9 +175,14 @@ export function PlayClient({
   if (!meta) return null; // first render before startGame() runs
 
   return (
-    <div className="container flex flex-col items-center gap-4 py-6 sm:py-10">
+    // On mobile we want the play screen as compact as possible so the
+    // board can grow. We swap the Tailwind `container` class (which adds
+    // generous horizontal padding) for a tight `px-2` + `max-w-screen-sm`
+    // and trim vertical padding from py-6 to py-3. Desktop keeps the
+    // generous container + py-10.
+    <div className="mx-auto flex w-full max-w-screen-sm flex-col items-center gap-3 px-2 py-3 sm:container sm:gap-4 sm:py-10">
       <KeyboardListener onShortcuts={() => setShortcutsOpen(true)} />
-      <div className="flex w-full max-w-[min(90vw,560px)] items-center justify-between">
+      <div className="flex w-full max-w-[560px] items-center justify-between">
         <div className="text-sm text-muted-foreground">
           {mode === "daily"
             ? "Daily puzzle"
@@ -185,11 +190,15 @@ export function PlayClient({
         </div>
         <div className="flex items-center gap-2">
           <Timer />
+          {/* Keyboard shortcuts overlay is desktop-only — there is no
+              physical keyboard on a phone, so the button is just dead
+              space there. Hide it below the sm breakpoint. */}
           <Button
             size="icon"
             variant="ghost"
             aria-label="Keyboard shortcuts"
             onClick={() => setShortcutsOpen(true)}
+            className="hidden sm:inline-flex"
           >
             <Keyboard />
           </Button>

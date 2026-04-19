@@ -152,3 +152,28 @@ export function digitCounts(board: Board): number[] {
   for (let i = 0; i < BOARD_SIZE; i++) counts[board[i]]++;
   return counts;
 }
+
+// Compute the full set of legal candidate digits for every empty cell.
+// For each empty cell, we start with all nine bits set and turn off any
+// digit that already appears in the cell's row, column, or 3x3 box.
+// Filled cells get a zero mask (no notes).
+//
+// This powers the "auto-notes" action: one tap and the player gets a
+// freshly-correct pencil-mark grid to start narrowing down. We always
+// return a brand new Uint16Array so the caller can pass the previous
+// notes buffer to the history stack without aliasing.
+export function computeAllCandidates(board: Board): Notes {
+  const notes = new Uint16Array(BOARD_SIZE);
+  // 0b1_1111_1111 = bits 0..8 set, i.e. digits 1..9 are all candidates.
+  const ALL = 0b1_1111_1111;
+  for (let i = 0; i < BOARD_SIZE; i++) {
+    if (board[i] !== 0) continue;
+    let mask = ALL;
+    for (const p of peers(i)) {
+      const v = board[p];
+      if (v !== 0) mask &= ~(1 << (v - 1));
+    }
+    notes[i] = mask;
+  }
+  return notes;
+}

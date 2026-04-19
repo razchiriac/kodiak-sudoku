@@ -18,6 +18,16 @@ export type HistoryEntry =
       index: CellIndex;
       prevMask: number;
       nextMask: number;
+    }
+  // "notes-bulk" is a single history step that covers ALL 81 cells at
+  // once. It exists for actions like "auto-fill notes" that mutate the
+  // entire notes buffer in one shot — without it, an undo would need
+  // to be tapped 81 times. We store the full prev and next buffers; at
+  // 162 bytes each it's negligible memory.
+  | {
+      kind: "notes-bulk";
+      prevNotes: Uint16Array;
+      nextNotes: Uint16Array;
     };
 
 const MAX_ENTRIES = 200;

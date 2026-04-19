@@ -65,7 +65,11 @@ function CellInner({
         onSelect(index);
       }}
       className={cn(
-        "relative flex aspect-square select-none items-center justify-center text-2xl font-medium transition-colors sm:text-3xl",
+        // Digit size scales with viewport width via clamp() so the
+        // value stays proportional whether the board is 350px or
+        // 560px. The fixed sm:text-3xl breakpoint kept clues legible
+        // before — the clamp range covers the same span continuously.
+        "relative flex aspect-square select-none items-center justify-center text-[clamp(1.25rem,5vw,1.875rem)] font-medium transition-colors",
         bg,
         isFixed ? "text-foreground" : "text-primary",
         isConflict && "text-destructive",
@@ -100,7 +104,11 @@ function NoteGrid({ mask, highlight: _highlight }: { mask: number; highlight: nu
       <span
         key={d}
         className={cn(
-          "flex items-center justify-center text-[10px] leading-none text-muted-foreground sm:text-xs",
+          // Pencil marks scale with viewport width so they stay
+          // legible on a 560px board without overflowing a 350px
+          // mobile cell. The clamp keeps the floor at 8px (still
+          // readable) and the ceiling at 12px.
+          "flex items-center justify-center text-[clamp(0.5rem,1.6vw,0.75rem)] leading-none text-muted-foreground",
           !has && "opacity-0",
         )}
       >

@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { ThemeToggle } from "./theme-toggle";
 import { AuthMenu } from "./auth-menu";
+import { MobileNav } from "./mobile-nav";
 
 // Site header. Server Component — the interactive bits (theme toggle,
-// auth menu) are tiny client islands.
+// auth menu, mobile nav) are tiny client islands.
 export function Header() {
   return (
     <header className="sticky top-0 z-40 w-full border-b bg-background/80 backdrop-blur">
@@ -31,6 +32,9 @@ export function Header() {
         <div className="flex items-center gap-2">
           <ThemeToggle />
           <AuthMenu />
+          {/* Mobile-only hamburger; hidden via Tailwind on sm+ where the
+              inline nav above is visible instead. */}
+          <MobileNav />
         </div>
       </div>
     </header>

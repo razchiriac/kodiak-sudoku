@@ -6,6 +6,7 @@ import {
   BOARD_SIZE,
   buildFixedMask,
   clearCellNotes,
+  computeAllCandidates,
   digitCounts,
   emptyNotes,
   parseBoard,
@@ -103,6 +104,10 @@ type GameActions = {
 
   inputDigit: (digit: number) => void;
   eraseSelection: () => void;
+  // Replace every empty cell's notes with the full set of legal
+  // candidates (1..9 minus peers' values). Pushes a single bulk
+  // history entry so one undo reverts the whole operation.
+  autoFillNotes: () => void;
 
   undo: () => void;
   redo: () => void;
@@ -326,6 +331,35 @@ export const useGameStore = create<GameState & GameActions>()(
         });
       },
 
+      autoFillNotes: () => {
+        const s = get();
+        if (s.isComplete || s.isPaused) return;
+        // Snapshot the current notes so undo can restore them in one
+        // step. We freeze the prev buffer by copying it; computeAll
+        // already returns a fresh buffer so nextNotes is safe to keep
+        // by reference.
+        const prevNotes = new Uint16Array(s.notes);
+        const nextNotes = computeAllCandidates(s.board);
+
+        // Skip if nothing actually changed — avoids polluting the undo
+        // stack with no-op entries (e.g. tapping the button twice).
+        let changed = false;
+        for (let i = 0; i < BOARD_SIZE; i++) {
+          if (prevNotes[i] !== nextNotes[i]) {
+            changed = true;
+            break;
+          }
+        }
+        if (!changed) return;
+
+        const entry: HistoryEntry = {
+          kind: "notes-bulk",
+          prevNotes,
+          nextNotes,
+        };
+        set({ notes: nextNotes, history: pushEntry(s.history, entry) });
+      },
+
       undo: () => {
         const s = get();
         const u = undo(s.history);
@@ -344,10 +378,14 @@ export const useGameStore = create<GameState & GameActions>()(
             isComplete: isComplete(board),
             // Lock isComplete back to false if undoing past the win.
           });
-        } else {
+        } else if (e.kind === "note") {
           const notes = new Uint16Array(s.notes);
           notes[e.index] = e.prevMask;
           set({ notes, history: u.next });
+        } else {
+          // notes-bulk: swap the entire notes buffer back. We copy so
+          // the stored entry's prevNotes stays immutable for redo.
+          set({ notes: new Uint16Array(e.prevNotes), history: u.next });
         }
       },
 
@@ -367,10 +405,13 @@ export const useGameStore = create<GameState & GameActions>()(
             conflicts: findConflicts(board),
             isComplete: isComplete(board),
           });
-        } else {
+        } else if (e.kind === "note") {
           const notes = new Uint16Array(s.notes);
           notes[e.index] = e.nextMask;
           set({ notes, history: r.next });
+        } else {
+          // notes-bulk: re-apply the recomputed candidates.
+          set({ notes: new Uint16Array(e.nextNotes), history: r.next });
         }
       },
 

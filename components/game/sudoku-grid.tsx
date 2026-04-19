@@ -34,7 +34,27 @@ export function SudokuGrid() {
     <div
       role="grid"
       aria-label="Sudoku puzzle"
-      className="relative grid aspect-square w-full max-w-[min(90vw,560px)] grid-cols-9 grid-rows-9 overflow-hidden rounded-lg border-2 border-foreground/60 bg-background shadow-sm"
+      // Width budget: on mobile we drop the old 90vw cap and let the
+      // grid fill the page wrapper (which is `px-2`), so a 390px
+      // viewport gets a ~374px board with no wasted gutter.
+      //
+      // Height budget (the calc): on a phone in portrait the board
+      // can be height-bound on smaller devices. We compute the
+      // largest square that fits after subtracting the rest of the
+      // chrome (header, padding, title row, 2-row control panel on
+      // mobile, number pad, footer). The rem subtractions are tuned
+      // per breakpoint:
+      //   - mobile (<sm): 26rem accounts for the stacked footer
+      //     (which collapses to a single row on sm+) plus the
+      //     two-row control panel.
+      //   - sm+: 24rem because the control panel collapses to a
+      //     single row and the footer becomes single-row too.
+      // 100dvh (dynamic viewport height) handles iOS Safari's
+      // collapsing URL bar so we don't get a sudden overflow when it
+      // shows. On tall phones the width cap (374px on a 390px
+      // viewport) still binds first; the height cap only kicks in on
+      // shorter screens, where it prevents page scroll.
+      className="relative grid aspect-square w-full max-w-[min(100%,560px,calc(100dvh-26rem))] grid-cols-9 grid-rows-9 overflow-hidden rounded-lg border-2 border-foreground/60 bg-background shadow-sm sm:max-w-[min(560px,calc(100dvh-24rem))]"
     >
       {Array.from({ length: 81 }, (_, i) => (
         <Cell

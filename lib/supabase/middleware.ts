@@ -21,7 +21,7 @@ export async function updateSession(request: NextRequest) {
         getAll() {
           return request.cookies.getAll();
         },
-        setAll(toSet) {
+        setAll(toSet: { name: string; value: string; options?: Parameters<typeof response.cookies.set>[2] }[]) {
           // Mirror cookies onto BOTH the inbound request (so server
           // components rendered for this request see the fresh values)
           // AND the outbound response (so the browser stores them).

@@ -1,19 +1,25 @@
 import { describe, expect, it } from "vitest";
 import { emptyHistory, pushEntry, redo, undo, type HistoryEntry } from "./history";
 
+// Empty notes buffers are fine for stack-shape tests; we're not
+// asserting note semantics here, just push/undo/redo ordering.
+const EMPTY_NOTES = new Uint16Array(81);
+
 const E1: HistoryEntry = {
   kind: "value",
   index: 0,
   prevValue: 0,
   nextValue: 5,
-  prevNotesMask: 0,
+  prevNotes: EMPTY_NOTES,
+  nextNotes: EMPTY_NOTES,
 };
 const E2: HistoryEntry = {
   kind: "value",
   index: 1,
   prevValue: 0,
   nextValue: 7,
-  prevNotesMask: 0,
+  prevNotes: EMPTY_NOTES,
+  nextNotes: EMPTY_NOTES,
 };
 
 describe("history stack", () => {
@@ -47,7 +53,8 @@ describe("history stack", () => {
       index: 5,
       prevValue: 0,
       nextValue: 9,
-      prevNotesMask: 0,
+      prevNotes: EMPTY_NOTES,
+      nextNotes: EMPTY_NOTES,
     };
     h = pushEntry(h, newEdit);
     expect(h.future).toEqual([]);

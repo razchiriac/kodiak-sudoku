@@ -20,6 +20,12 @@ type CellProps = {
   isPeer: boolean;
   isSameDigit: boolean;
   isConflict: boolean;
+  // Digit (1..9) that should be highlighted inside the notes grid
+  // when this cell is empty and contains that digit as a pencil
+  // mark. 0 means "no highlight". Populated by the parent when a
+  // filled cell is selected, so empty cells telegraph "here's a
+  // candidate for the selected value".
+  highlightNoteDigit: number;
   onSelect: (index: number) => void;
 };
 
@@ -32,6 +38,7 @@ function CellInner({
   isPeer,
   isSameDigit,
   isConflict,
+  highlightNoteDigit,
   onSelect,
 }: CellProps) {
   const row = Math.floor(index / 9);
@@ -87,7 +94,7 @@ function CellInner({
       {value > 0 ? (
         value
       ) : notesMask !== 0 ? (
-        <NoteGrid mask={notesMask} highlight={isSameDigit ? -1 : 0} />
+        <NoteGrid mask={notesMask} highlightDigit={highlightNoteDigit} />
       ) : null}
     </button>
   );
@@ -96,27 +103,41 @@ function CellInner({
 // Tiny 3x3 grid of pencil-mark digits. Renders as text rather than per-
 // digit elements to keep DOM small (81 cells * 9 notes = 729 nodes max
 // without this optimization; this version is 81 + ~9 visible per cell).
-function NoteGrid({ mask, highlight: _highlight }: { mask: number; highlight: number }) {
+//
+// `highlightDigit` (1..9, or 0 for none) styles the matching note so
+// it visually matches the parent grid's "same-digit" highlighting —
+// when the player selects a filled cell of value N, every empty cell
+// with N in its pencil marks shows N highlighted while leaving the
+// other notes alone.
+function NoteGrid({ mask, highlightDigit }: { mask: number; highlightDigit: number }) {
   const cells: React.ReactNode[] = [];
   for (let d = 1; d <= 9; d++) {
     const has = (mask & (1 << (d - 1))) !== 0;
+    const isHit = has && d === highlightDigit;
     cells.push(
       <span
         key={d}
         className={cn(
           // Pencil marks scale with viewport width so they stay
           // legible on a 560px board without overflowing a 350px
-          // mobile cell. The clamp keeps the floor at 8px (still
-          // readable) and the ceiling at 12px.
-          "flex items-center justify-center text-[clamp(0.5rem,1.6vw,0.75rem)] leading-none text-muted-foreground",
+          // mobile cell. Bumped the clamp up: 10px floor, 14px
+          // ceiling, so the marks read clearly without crowding
+          // the sub-cell.
+          "flex items-center justify-center text-[clamp(0.625rem,2vw,0.875rem)] leading-none text-muted-foreground",
           !has && "opacity-0",
+          // Same-digit highlight applied per sub-cell: reuse the
+          // board-level bg-cell-same token so the treatment reads
+          // as a single visual system.
+          isHit && "rounded-sm bg-cell-same font-semibold text-foreground",
         )}
       >
         {d}
       </span>,
     );
   }
-  return <div className="grid h-full w-full grid-cols-3 grid-rows-3 p-0.5">{cells}</div>;
+  // p-px instead of the old p-0.5 gives the slightly larger digits
+  // an extra hair of room inside each sub-cell.
+  return <div className="grid h-full w-full grid-cols-3 grid-rows-3 p-px">{cells}</div>;
 }
 
 // Tight memo comparator. We compare every prop explicitly to avoid the
@@ -130,6 +151,7 @@ export const Cell = memo(CellInner, (a, b) => {
     a.isPeer === b.isPeer &&
     a.isSameDigit === b.isSameDigit &&
     a.isConflict === b.isConflict &&
+    a.highlightNoteDigit === b.highlightNoteDigit &&
     a.onSelect === b.onSelect &&
     a.index === b.index
   );

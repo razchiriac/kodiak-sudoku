@@ -246,8 +246,15 @@ export function PlayClient({
       </div>
 
       <SudokuGrid />
-      <ControlPanel />
-      <NumberPad />
+      {/* Below-board region: 5 equal columns. Left stack of 3
+          control buttons, 3x3 number pad (col-span-3 internally),
+          right stack of 3 control buttons. Heights line up in 3
+          rows across all three sub-regions. */}
+      <div className="grid w-full max-w-[560px] grid-cols-5 gap-1 sm:gap-2">
+        <ControlPanel side="left" />
+        <NumberPad />
+        <ControlPanel side="right" />
+      </div>
 
       <CompletionModal
         open={completionOpen}

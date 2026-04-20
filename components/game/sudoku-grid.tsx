@@ -41,20 +41,25 @@ export function SudokuGrid() {
       // Height budget (the calc): on a phone in portrait the board
       // can be height-bound on smaller devices. We compute the
       // largest square that fits after subtracting the rest of the
-      // chrome (header, padding, title row, 2-row control panel on
-      // mobile, number pad, footer). The rem subtractions are tuned
-      // per breakpoint:
-      //   - mobile (<sm): 26rem accounts for the stacked footer
-      //     (which collapses to a single row on sm+) plus the
-      //     two-row control panel.
-      //   - sm+: 24rem because the control panel collapses to a
-      //     single row and the footer becomes single-row too.
+      // chrome (header, padding, title row, the 3-row below-board
+      // region of control stacks + 3x3 number pad, footer). The
+      // rem subtractions are tuned per breakpoint:
+      //   - mobile (<sm): 30rem. The below-board region now uses
+      //     aspect-square buttons in a 5-col grid, so at a 374px
+      //     viewport each button is ~75px square and the region is
+      //     ~3×75 = 225px tall (vs ~174px in the old row+row
+      //     layout). +~3rem on top of the previous 26rem, rounded
+      //     up for the stacked mobile footer.
+      //   - sm+: 29rem. The number pad drops aspect-square in
+      //     favor of a fixed h-16, so the region is ~3×64+16 =
+      //     208px (vs ~134px before). +~5rem on top of the
+      //     previous 24rem.
       // 100dvh (dynamic viewport height) handles iOS Safari's
       // collapsing URL bar so we don't get a sudden overflow when it
-      // shows. On tall phones the width cap (374px on a 390px
-      // viewport) still binds first; the height cap only kicks in on
-      // shorter screens, where it prevents page scroll.
-      className="relative grid aspect-square w-full max-w-[min(100%,560px,calc(100dvh-26rem))] grid-cols-9 grid-rows-9 overflow-hidden rounded-lg border-2 border-foreground/60 bg-background shadow-sm sm:max-w-[min(560px,calc(100dvh-24rem))]"
+      // shows. On tall phones and typical laptop viewports the
+      // width cap (560px) still binds first; the height cap only
+      // kicks in on shorter screens, where it prevents page scroll.
+      className="relative grid aspect-square w-full max-w-[min(100%,560px,calc(100dvh-30rem))] grid-cols-9 grid-rows-9 overflow-hidden rounded-lg border-2 border-foreground/60 bg-background shadow-sm sm:max-w-[min(560px,calc(100dvh-29rem))]"
     >
       {Array.from({ length: 81 }, (_, i) => (
         <Cell
@@ -69,6 +74,14 @@ export function SudokuGrid() {
             highlightSameDigit && selectedDigit > 0 && board[i] === selectedDigit && selection !== i
           }
           isConflict={conflicts.has(i)}
+          // When a filled cell is selected, tell every empty cell
+          // to highlight the matching note (if any) so the player
+          // can see exactly where that digit is a candidate.
+          // Gated on the same `highlightSameDigit` setting so both
+          // features live or die together.
+          highlightNoteDigit={
+            highlightSameDigit && selectedDigit > 0 ? selectedDigit : 0
+          }
           onSelect={handleSelect}
         />
       ))}

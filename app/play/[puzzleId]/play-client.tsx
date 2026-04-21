@@ -40,12 +40,18 @@ export function PlayClient({
   isSignedIn,
   mode,
   dailyDate,
+  previousBestMs,
 }: {
   puzzle: PuzzleProp;
   savedGame: SavedProp;
   isSignedIn: boolean;
   mode: "random" | "daily";
   dailyDate?: string;
+  // Previous best time (ms) for this user in this difficulty, or null
+  // when the pb-ribbon flag (RAZ-22) is off, the user is anonymous, or
+  // they have no completions in this bucket. Forwarded to the
+  // CompletionModal which decides whether to render the ribbon.
+  previousBestMs: number | null;
 }) {
   const startGame = useGameStore((s) => s.startGame);
   const resumeFromSnapshot = useGameStore((s) => s.resumeFromSnapshot);
@@ -261,6 +267,7 @@ export function PlayClient({
         onOpenChange={setCompletionOpen}
         submitting={submitting}
         submitError={submitError}
+        previousBestMs={previousBestMs}
       />
       <ShortcutsOverlay open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
     </div>

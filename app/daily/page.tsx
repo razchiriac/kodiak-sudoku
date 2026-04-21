@@ -1,6 +1,11 @@
 import { notFound } from "next/navigation";
 import { getCurrentUser } from "@/lib/supabase/server";
-import { getDailyPuzzle, getSavedGame } from "@/lib/db/queries";
+import {
+  getBestTimeForDifficulty,
+  getDailyPuzzle,
+  getSavedGame,
+} from "@/lib/db/queries";
+import { pbRibbon } from "@/lib/flags";
 import { PlayClient } from "../play/[puzzleId]/play-client";
 
 // Daily must be dynamic: it depends on the current UTC date and the
@@ -20,6 +25,13 @@ export default async function DailyPage() {
   // completion to decide whether to show "you've already played today"
   // (handled inside PlayClient when the submit returns already_completed).
   const saved = user ? await getSavedGame(user.id, daily.puzzle.id) : null;
+
+  // RAZ-22 / pb-ribbon: same pattern as the random play page.
+  const showPbRibbon = user ? await pbRibbon() : false;
+  const previousBestMs =
+    showPbRibbon && user
+      ? await getBestTimeForDifficulty(user.id, daily.puzzle.difficultyBucket)
+      : null;
 
   return (
     <PlayClient
@@ -46,6 +58,7 @@ export default async function DailyPage() {
       isSignedIn={!!user}
       mode="daily"
       dailyDate={daily.date as string}
+      previousBestMs={previousBestMs}
     />
   );
 }

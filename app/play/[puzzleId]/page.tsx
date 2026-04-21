@@ -1,6 +1,11 @@
 import { notFound } from "next/navigation";
-import { getPuzzleById, getSavedGame } from "@/lib/db/queries";
+import {
+  getBestTimeForDifficulty,
+  getPuzzleById,
+  getSavedGame,
+} from "@/lib/db/queries";
 import { getCurrentUser } from "@/lib/supabase/server";
+import { pbRibbon } from "@/lib/flags";
 import { PlayClient } from "./play-client";
 
 // Each puzzle page hits the DB and reads the user session.
@@ -22,6 +27,16 @@ export default async function PuzzlePage({
 
   const user = await getCurrentUser();
   const saved = user ? await getSavedGame(user.id, puzzle.id) : null;
+
+  // RAZ-22 / pb-ribbon flag: only fetch the previous best when both the
+  // flag is on AND the user is signed in (anonymous players have no
+  // history to beat). When the flag is off we pass null and the modal
+  // simply doesn't render the ribbon.
+  const showPbRibbon = user ? await pbRibbon() : false;
+  const previousBestMs =
+    showPbRibbon && user
+      ? await getBestTimeForDifficulty(user.id, puzzle.difficultyBucket)
+      : null;
 
   return (
     <PlayClient
@@ -46,6 +61,7 @@ export default async function PuzzlePage({
       }
       isSignedIn={!!user}
       mode="random"
+      previousBestMs={previousBestMs}
     />
   );
 }

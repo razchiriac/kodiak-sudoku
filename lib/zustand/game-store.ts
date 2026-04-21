@@ -201,9 +201,19 @@ function triggerHapticFeedback(isConflict: boolean) {
   };
   if (typeof nav.vibrate !== "function") return;
   try {
-    // Conflict = a double-pulse pattern so a mistake feels distinct
-    // from a normal placement. Pattern is [on, off, on] ms.
-    const pattern: number | number[] = isConflict ? [25, 30, 25] : 5;
+    // Durations tuned for Chrome Android (Pixel and similar). The web
+    // Vibration API passes through to VibrationEffect.createOneShot,
+    // and most Android haptic motors can't render pulses shorter than
+    // ~15-20ms reliably - many reports of 5ms being completely
+    // imperceptible on modern Pixels, even though the call returns
+    // true. We therefore use:
+    //   - 20ms single pulse for a legal placement (subtle tick)
+    //   - [40, 60, 40] double pulse for a conflict (clearly longer +
+    //     two bumps, distinguishable by feel alone)
+    // Both are passed as arrays because a couple of Chromium versions
+    // have been flaky with the scalar overload even though the spec
+    // allows it.
+    const pattern: number[] = isConflict ? [40, 60, 40] : [20];
     nav.vibrate(pattern);
   } catch {
     // Intentionally ignored - see note above.

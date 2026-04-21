@@ -99,6 +99,29 @@ export async function listRecentCompletions(userId: string, limit = 20) {
     .limit(limit);
 }
 
+// Single-difficulty best time for a user. Used by the personal-best
+// ribbon on the completion modal (RAZ-22) so we can compare the current
+// finish against history. Returns null if the user has no completions
+// in this bucket yet. Cheap query; covered by (user_id, difficulty_bucket).
+export async function getBestTimeForDifficulty(
+  userId: string,
+  bucket: number,
+): Promise<number | null> {
+  const rows = await db
+    .select({
+      bestTimeMs: sql<number | null>`min(${completedGames.timeMs})`,
+    })
+    .from(completedGames)
+    .where(
+      and(
+        eq(completedGames.userId, userId),
+        eq(completedGames.difficultyBucket, bucket),
+      ),
+    )
+    .limit(1);
+  return rows[0]?.bestTimeMs ?? null;
+}
+
 // Per-difficulty stats for a user. Computed on the fly because the row
 // counts per user are small; we'll add a denormalized table later if the
 // query becomes a bottleneck.

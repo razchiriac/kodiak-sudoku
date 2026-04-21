@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Trophy } from "lucide-react";
+import { Sparkles, Trophy } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -22,11 +22,19 @@ export function CompletionModal({
   onOpenChange,
   submitting,
   submitError,
+  previousBestMs,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   submitting: boolean;
   submitError: string | null;
+  // RAZ-22 / pb-ribbon: previous best time (ms) for this user in this
+  // difficulty, or null when the flag is off / the user is anonymous /
+  // they have no prior completions in this bucket. When non-null AND
+  // strictly greater than the current `elapsedMs`, we render the "New
+  // best!" ribbon. We keep the conditional inside the modal so the
+  // parent can be dumb about flag state.
+  previousBestMs: number | null;
 }) {
   const elapsedMs = useGameStore((s) => s.elapsedMs);
   const mistakes = useGameStore((s) => s.mistakes);
@@ -35,6 +43,14 @@ export function CompletionModal({
   const router = useRouter();
 
   if (!meta) return null;
+
+  // A "personal best" for this session means: we have a previous best
+  // AND the current solve beat it. We deliberately do not require zero
+  // mistakes or hints for v1 - a faster messy solve is still a faster
+  // solve. We can tighten this later by adding a `pureOnly` flag.
+  const isNewBest =
+    previousBestMs !== null && elapsedMs < previousBestMs;
+  const deltaMs = previousBestMs !== null ? previousBestMs - elapsedMs : 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -50,6 +66,19 @@ export function CompletionModal({
               : `${DIFFICULTY_LABEL[meta.difficultyBucket]} puzzle complete.`}
           </DialogDescription>
         </DialogHeader>
+
+        {isNewBest && (
+          <div
+            className="mx-auto flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary"
+            role="status"
+            aria-live="polite"
+          >
+            <Sparkles className="h-4 w-4" aria-hidden />
+            <span>
+              New personal best! -{formatTime(deltaMs)} vs {formatTime(previousBestMs!)}
+            </span>
+          </div>
+        )}
 
         <dl className="grid grid-cols-3 gap-4 py-2 text-center">
           <Stat label="Time" value={formatTime(elapsedMs)} />

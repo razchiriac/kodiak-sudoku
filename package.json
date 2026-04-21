@@ -16,7 +16,8 @@
     "db:studio": "drizzle-kit studio",
     "puzzles:import": "tsx --env-file=.env scripts/import-puzzles.ts",
     "puzzles:seed-local": "tsx --env-file=.env scripts/seed-local-puzzles.ts",
-    "puzzles:seed-daily": "tsx --env-file=.env scripts/seed-daily.ts"
+    "puzzles:seed-daily": "tsx --env-file=.env scripts/seed-daily.ts",
+    "flags:sync": "tsx --env-file=.env.local scripts/sync-flags.ts"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.4",

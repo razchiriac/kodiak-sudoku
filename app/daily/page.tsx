@@ -5,7 +5,7 @@ import {
   getDailyPuzzle,
   getSavedGame,
 } from "@/lib/db/queries";
-import { pbRibbon } from "@/lib/flags";
+import { haptics, pbRibbon } from "@/lib/flags";
 import { PlayClient } from "../play/[puzzleId]/play-client";
 
 // Daily must be dynamic: it depends on the current UTC date and the
@@ -33,6 +33,10 @@ export default async function DailyPage() {
       ? await getBestTimeForDifficulty(user.id, daily.puzzle.difficultyBucket)
       : null;
 
+  // RAZ-19 / haptics: resolved server-side and forwarded. Available to
+  // anonymous players the same as the random page.
+  const hapticsEnabled = await haptics();
+
   return (
     <PlayClient
       puzzle={{
@@ -59,6 +63,7 @@ export default async function DailyPage() {
       mode="daily"
       dailyDate={daily.date as string}
       previousBestMs={previousBestMs}
+      hapticsEnabled={hapticsEnabled}
     />
   );
 }

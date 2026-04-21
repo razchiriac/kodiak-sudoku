@@ -5,7 +5,7 @@ import {
   getSavedGame,
 } from "@/lib/db/queries";
 import { getCurrentUser } from "@/lib/supabase/server";
-import { pbRibbon } from "@/lib/flags";
+import { haptics, pbRibbon } from "@/lib/flags";
 import { PlayClient } from "./play-client";
 
 // Each puzzle page hits the DB and reads the user session.
@@ -38,6 +38,11 @@ export default async function PuzzlePage({
       ? await getBestTimeForDifficulty(user.id, puzzle.difficultyBucket)
       : null;
 
+  // RAZ-19 / haptics flag: resolved server-side (Edge Config then env
+  // fallback) and forwarded as a plain bool. Available to anonymous
+  // players too — haptics is pure UX polish, no DB side effects.
+  const hapticsEnabled = await haptics();
+
   return (
     <PlayClient
       puzzle={{
@@ -62,6 +67,7 @@ export default async function PuzzlePage({
       isSignedIn={!!user}
       mode="random"
       previousBestMs={previousBestMs}
+      hapticsEnabled={hapticsEnabled}
     />
   );
 }

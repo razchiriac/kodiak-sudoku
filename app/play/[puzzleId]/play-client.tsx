@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Keyboard } from "lucide-react";
+import { Keyboard, Settings as SettingsIcon } from "lucide-react";
 import { readPersistedSnapshot, useGameStore } from "@/lib/zustand/game-store";
 import { SudokuGrid } from "@/components/game/sudoku-grid";
 import { NumberPad } from "@/components/game/number-pad";
@@ -10,6 +10,7 @@ import { Timer } from "@/components/game/timer";
 import { KeyboardListener } from "@/components/game/keyboard-listener";
 import { CompletionModal } from "@/components/game/completion-modal";
 import { ShortcutsOverlay } from "@/components/game/shortcuts-overlay";
+import { SettingsDialog } from "@/components/game/settings-dialog";
 import { Button } from "@/components/ui/button";
 import { saveGameAction, submitCompletionAction, hintAction } from "@/lib/server/actions";
 import { DIFFICULTY_LABEL } from "@/lib/utils";
@@ -41,6 +42,7 @@ export function PlayClient({
   mode,
   dailyDate,
   previousBestMs,
+  hapticsEnabled,
 }: {
   puzzle: PuzzleProp;
   savedGame: SavedProp;
@@ -52,10 +54,15 @@ export function PlayClient({
   // they have no completions in this bucket. Forwarded to the
   // CompletionModal which decides whether to render the ribbon.
   previousBestMs: number | null;
+  // RAZ-19: server-resolved value of the `haptics` flag. We mirror it
+  // into the Zustand store on mount so the gameplay reducer (inputDigit)
+  // can decide whether to call navigator.vibrate without prop-drilling.
+  hapticsEnabled: boolean;
 }) {
   const startGame = useGameStore((s) => s.startGame);
   const resumeFromSnapshot = useGameStore((s) => s.resumeFromSnapshot);
   const setRemoteHintFetcher = useGameStore((s) => s.setRemoteHintFetcher);
+  const setFeatureFlag = useGameStore((s) => s.setFeatureFlag);
   const isComplete = useGameStore((s) => s.isComplete);
   const meta = useGameStore((s) => s.meta);
 
@@ -150,6 +157,14 @@ export function PlayClient({
     });
   }, [puzzle.id, setRemoteHintFetcher]);
 
+  // Mirror the server-resolved haptics flag into the store. Runs on
+  // every value change so the flag can be flipped in Edge Config and
+  // take effect on the next page load without a redeploy. Cheap -
+  // setFeatureFlag no-ops when the value is unchanged.
+  useEffect(() => {
+    setFeatureFlag("haptics", hapticsEnabled);
+  }, [hapticsEnabled, setFeatureFlag]);
+
   // Autosave: every time the relevant slice of state changes, debounce a
   // server action call. Only signed-in users autosave to the server;
   // anonymous players rely on the Zustand persist middleware.
@@ -217,6 +232,7 @@ export function PlayClient({
   }, [isComplete, meta, isSignedIn, snapshot, dailyDate]);
 
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   if (!meta) return null; // first render before startGame() runs
 
@@ -248,6 +264,18 @@ export function PlayClient({
           >
             <Keyboard />
           </Button>
+          {/* Settings dialog. Shown on all viewports because it owns
+              the RAZ-19 haptics toggle (a mobile-only setting) plus any
+              future per-device prefs. Icon-only keeps the header
+              compact next to the timer. */}
+          <Button
+            size="icon"
+            variant="ghost"
+            aria-label="Settings"
+            onClick={() => setSettingsOpen(true)}
+          >
+            <SettingsIcon />
+          </Button>
         </div>
       </div>
 
@@ -270,6 +298,7 @@ export function PlayClient({
         previousBestMs={previousBestMs}
       />
       <ShortcutsOverlay open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
     </div>
   );
 }

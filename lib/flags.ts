@@ -56,3 +56,21 @@ export const pbRibbon = flag<boolean>({
   ],
   decide: () => resolveBool("pb-ribbon", "FLAG_PB_RIBBON"),
 });
+
+// RAZ-19 - Haptic feedback on value placements (mobile / PWA polish).
+// When on, the game store fires `navigator.vibrate(...)` after each
+// value placement - short pulse on a legal move, longer pulse on a
+// conflict. The user can still opt out via the in-app settings dialog
+// (settings.haptics); the flag controls whether the feature exists at
+// all (rendering the settings entry, gating the vibrate call). Safe on
+// desktop because the feature is also feature-detected on the client.
+export const haptics = flag<boolean>({
+  key: "haptics",
+  description: "RAZ-19: vibrate on value placements (mobile only).",
+  defaultValue: false,
+  options: [
+    { value: false, label: "Off" },
+    { value: true, label: "On" },
+  ],
+  decide: () => resolveBool("haptics", "FLAG_HAPTICS"),
+});

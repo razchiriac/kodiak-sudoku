@@ -85,6 +85,21 @@ type GameState = {
   settings: {
     strict: boolean;
     highlightSameDigit: boolean;
+    // RAZ-19: vibrate on value placements. Feature-detected at runtime
+    // (navigator.vibrate) so desktop browsers silently skip it. Default
+    // on so the PWA feels native out of the box; a player can still
+    // mute it from the settings dialog.
+    haptics: boolean;
+  };
+  // Feature-flag mirror. The *source* of truth is the server
+  // (lib/flags.ts → Edge Config), which PlayClient evaluates server-
+  // side and then forwards to `setFeatureFlag` on mount. We mirror the
+  // resolved value in the store so gameplay reducers (inputDigit) can
+  // cheaply read it without prop-drilling. Not persisted - we always
+  // want the fresh server value on each page load, never a stale
+  // localStorage copy.
+  featureFlags: {
+    haptics: boolean;
   };
 };
 
@@ -127,6 +142,14 @@ type GameActions = {
     value: GameState["settings"][K],
   ) => void;
 
+  // Mirror a resolved server-side feature flag into the store. Called
+  // once on mount from PlayClient with the value PlayClient received
+  // from the Server Component. No-op if the value is unchanged.
+  setFeatureFlag: <K extends keyof GameState["featureFlags"]>(
+    key: K,
+    value: GameState["featureFlags"][K],
+  ) => void;
+
   // Returns counts for digits 1..9 currently placed on the board. Used by
   // the number pad to show "remaining" badges.
   getDigitCounts: () => number[];
@@ -151,8 +174,41 @@ const INITIAL: GameState = {
   settings: {
     strict: false,
     highlightSameDigit: true,
+    // Haptics default ON because the whole feature is flag-gated anyway;
+    // if the flag is off we never vibrate regardless of this bool.
+    haptics: true,
+  },
+  featureFlags: {
+    haptics: false,
   },
 };
+
+// Fire a short haptic pulse on a successful placement, a longer one
+// when the placement creates a conflict. Everything here is best-effort:
+// feature-detected (navigator.vibrate only exists on mobile Chrome-ish
+// browsers), gated by the feature flag AND the user setting, and
+// wrapped in try/catch because some browsers throw if called from an
+// un-engaged page (no prior user gesture). Any error is swallowed —
+// haptics failing should never break a placement.
+function triggerHapticFeedback(isConflict: boolean) {
+  if (typeof navigator === "undefined") return;
+  // Older iOS Safari and all desktop browsers lack vibrate; feature-
+  // detecting keeps the call safe on those. We narrow with a typeof
+  // check and then bind the method so TypeScript picks up the right
+  // overload (calling via `.call` confuses the union argument type).
+  const nav = navigator as Navigator & {
+    vibrate?: (pattern: number | number[]) => boolean;
+  };
+  if (typeof nav.vibrate !== "function") return;
+  try {
+    // Conflict = a double-pulse pattern so a mistake feels distinct
+    // from a normal placement. Pattern is [on, off, on] ms.
+    const pattern: number | number[] = isConflict ? [25, 30, 25] : 5;
+    nav.vibrate(pattern);
+  } catch {
+    // Intentionally ignored - see note above.
+  }
+}
 
 let remoteHintFetcher:
   | ((board: string, selected: number | null) => Promise<{ index: number; digit: number }>)
@@ -178,6 +234,11 @@ export const useGameStore = create<GameState & GameActions>()(
           conflicts: new Set(),
           startedAt: Date.now(),
           settings: get().settings, // preserve user prefs across games
+          // Feature flags are server-driven and re-applied on mount, but
+          // preserving them avoids a one-frame flicker where a flag
+          // briefly resets to its INITIAL value between startGame() and
+          // the PlayClient effect that re-injects it.
+          featureFlags: get().featureFlags,
         });
       },
 
@@ -199,6 +260,7 @@ export const useGameStore = create<GameState & GameActions>()(
           isComplete: snapshot.isComplete,
           startedAt: snapshot.startedAt,
           settings: get().settings,
+          featureFlags: get().featureFlags,
         });
         set((s) => ({ ...s, conflicts: findConflicts(s.board) }));
       },
@@ -282,8 +344,24 @@ export const useGameStore = create<GameState & GameActions>()(
         // Increment mistakes if the placement creates a conflict. We use
         // the local validator because it's instant and the server check
         // at completion is the source of truth for correctness.
+        const isConflict = !isLegalPlacement(s.board, idx, digit);
         let mistakes = s.mistakes;
-        if (!isLegalPlacement(s.board, idx, digit)) mistakes++;
+        if (isConflict) mistakes++;
+
+        // RAZ-19 haptics. Gated by BOTH the server-driven feature flag
+        // AND the user's setting so a player can opt out even when the
+        // feature is rolled out. Feature-detection for navigator.vibrate
+        // happens inside triggerHapticFeedback. Fired before set() so
+        // the perceptual "feel" of placing lines up with the visual
+        // update (vibrate is async anyway — the UI doesn't wait).
+        //
+        // `!== false` rather than `=== true` so existing players whose
+        // persisted settings blob predates this field (no `haptics`
+        // key → value is undefined after rehydrate) get the default-on
+        // behavior without needing a persist version migration.
+        if (s.featureFlags.haptics && s.settings.haptics !== false) {
+          triggerHapticFeedback(isConflict);
+        }
 
         const entry: HistoryEntry = {
           kind: "value",
@@ -503,6 +581,13 @@ export const useGameStore = create<GameState & GameActions>()(
 
       setSetting: (key, value) =>
         set((s) => ({ settings: { ...s.settings, [key]: value } })),
+
+      setFeatureFlag: (key, value) =>
+        set((s) =>
+          s.featureFlags[key] === value
+            ? s
+            : { featureFlags: { ...s.featureFlags, [key]: value } },
+        ),
 
       getDigitCounts: () => digitCounts(get().board),
     }),

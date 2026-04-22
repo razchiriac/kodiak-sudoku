@@ -92,6 +92,60 @@
   }
 }
 
+/* RAZ-25: Colorblind-safe palette overrides. When <html> carries
+ * `data-palette="okabe-ito"` or `data-palette="high-contrast"`, we
+ * swap the sudoku cell CSS variables only. Everything else (buttons,
+ * text) keeps its default chroma so we're touching the smallest
+ * surface that actually collapses under deuteranopia: the four
+ * highlight shades (selected, peer, same-digit, conflict).
+ *
+ * Okabe-Ito (https://jfly.uni-koeln.de/color/) is the canonical
+ * research-backed palette for distinguishability across the three
+ * common CVDs plus typical trichromats. We pick its hues and drop
+ * them to a background-shade lightness so the digits on top stay
+ * readable. Light and dark themes both get overrides because the
+ * dark theme otherwise inherits the default-dark blues.
+ *
+ * High-contrast is NOT a CVD palette — it's a separate tool for
+ * low-vision users and bright-sunlight play. Saturation is pushed
+ * high and the cell base stays close to white/near-black so contrast
+ * with the digits is maximal. */
+html[data-palette="okabe-ito"] {
+  /* Light theme: use mid-lightness, near-pastel shades of the
+   * Okabe-Ito hues so the digits on top (primary/foreground) have
+   * AA-level contrast. */
+  --cell-selected: 201 90% 82%; /* sky blue  #56B4E9 family */
+  --cell-peer: 55 89% 88%; /* yellow   #F0E442 family */
+  --cell-same: 165 74% 78%; /* bluish green #009E73 family */
+  --cell-conflict: 21 88% 85%; /* vermillion #D55E00 family */
+}
+html.dark[data-palette="okabe-ito"] {
+  /* Dark theme: drop lightness so the tints read as subtle washes
+   * rather than glow. Hue stays the same so the Okabe-Ito identity
+   * is preserved. */
+  --cell-selected: 201 70% 32%;
+  --cell-peer: 55 55% 30%;
+  --cell-same: 165 55% 26%;
+  --cell-conflict: 21 70% 30%;
+}
+
+html[data-palette="high-contrast"] {
+  /* Light theme: push every tint toward full saturation. Digits use
+   * text-destructive on conflict which still reads against the deep
+   * red. Peer gets a near-black pattern-like shade so it stands far
+   * from selected/same/conflict even in monochrome. */
+  --cell-selected: 212 100% 74%;
+  --cell-peer: 0 0% 82%;
+  --cell-same: 55 100% 66%;
+  --cell-conflict: 0 100% 72%;
+}
+html.dark[data-palette="high-contrast"] {
+  --cell-selected: 212 100% 42%;
+  --cell-peer: 0 0% 38%;
+  --cell-same: 55 100% 40%;
+  --cell-conflict: 0 100% 42%;
+}
+
 /* RAZ-26: When the root <html> element carries `data-font="opendyslexic"`
  * we override the font-family stack on every text surface so the swap
  * is truly global. The sudoku grid digits still use tabular numerals

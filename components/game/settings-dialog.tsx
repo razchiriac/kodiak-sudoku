@@ -1,7 +1,7 @@
 "use client";
 
 import { toast } from "sonner";
-import { useGameStore } from "@/lib/zustand/game-store";
+import { PALETTES, type Palette, useGameStore } from "@/lib/zustand/game-store";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -23,6 +23,16 @@ import {
 type SettingsDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+};
+
+// RAZ-25: human-readable labels for each palette. Kept as a record
+// keyed on Palette so the compiler flags new palette options that
+// don't have a label. Project rule is "avoid enums, use maps" — this
+// is the map equivalent to what an enum would give us.
+const PALETTE_LABEL: Record<Palette, string> = {
+  default: "Default",
+  "okabe-ito": "Colorblind-safe",
+  "high-contrast": "High contrast",
 };
 
 // Fire a deliberately-long 200ms pulse from inside a click handler. We
@@ -85,6 +95,13 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const mistakesFlag = useGameStore((s) => s.featureFlags.showMistakes);
   const mistakesOn = useGameStore((s) => s.settings.showMistakes === true);
   const hasSolution = useGameStore((s) => s.meta?.solution != null);
+  // RAZ-25: colorblind-safe palette picker. Flag-gated exactly like
+  // the other optional rows. The selected value is persisted in the
+  // store and applied to <html data-palette> by PaletteLoader.
+  const paletteFlag = useGameStore((s) => s.featureFlags.colorPalette);
+  const palette = useGameStore(
+    (s) => (s.settings.palette ?? "default") as Palette,
+  );
   const setSetting = useGameStore((s) => s.setSetting);
 
   const handleTestHaptic = () => {
@@ -258,13 +275,50 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             </label>
           )}
 
+          {/* RAZ-25 palette picker. Small select rather than a radio
+              group so we can add a fourth palette later without blowing
+              up the layout. Helper text explains which option helps
+              which vision condition so users don't have to guess. */}
+          {paletteFlag && (
+            <div className="flex items-start justify-between gap-4 text-sm">
+              <span className="flex flex-col">
+                <span className="font-medium text-foreground">
+                  Color palette
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  Swap the cell highlight colors.{" "}
+                  {palette === "okabe-ito"
+                    ? "Okabe-Ito stays distinguishable for red/green-colorblind players."
+                    : palette === "high-contrast"
+                      ? "High-contrast is best in bright sunlight or for low vision."
+                      : "Default uses the original blue/red theme."}
+                </span>
+              </span>
+              <select
+                value={palette}
+                onChange={(e) =>
+                  setSetting("palette", e.target.value as Palette)
+                }
+                className="mt-1 h-8 rounded-md border border-input bg-background px-2 text-xs"
+                aria-label="Color palette"
+              >
+                {PALETTES.map((p) => (
+                  <option key={p} value={p}>
+                    {PALETTE_LABEL[p]}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* Empty state shown only when every flag is off. Keeps the
               dialog from looking broken. */}
           {!hapticsFlag &&
             !compactFlag &&
             !dyslexiaFlag &&
             !jumpFlag &&
-            !mistakesFlag && (
+            !mistakesFlag &&
+            !paletteFlag && (
               <p className="text-sm text-muted-foreground">
                 No user-configurable options yet.
               </p>

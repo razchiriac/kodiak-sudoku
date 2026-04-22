@@ -141,6 +141,21 @@ export const FLAG_REGISTRY: readonly FlagSpec[] = [
     linearId: "RAZ-26",
   },
   {
+    // RAZ-25: Colorblind-safe palette. Exposes a settings dropdown
+    // with three options — default, Okabe-Ito (red/green-safe), and
+    // high-contrast. The selected palette maps to the `data-palette`
+    // attribute on <html>; CSS variable overrides in globals.css
+    // swap the sudoku cell token set. The flag controls whether the
+    // picker is rendered at all; when off, the default palette is
+    // used regardless of any previously-persisted user preference.
+    key: "color-palette",
+    envKey: "FLAG_COLOR_PALETTE",
+    defaultValue: true,
+    description:
+      "Expose a settings picker that swaps the sudoku cell palette between default, Okabe-Ito (colorblind-safe), and high-contrast variants.",
+    linearId: "RAZ-25",
+  },
+  {
     // RAZ-15: Per-cell mistake indicator. When the user opts in and the
     // client has the puzzle solution (random non-daily puzzles only),
     // any cell whose placed value doesn't match the solution tints red

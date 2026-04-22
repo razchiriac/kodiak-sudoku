@@ -164,6 +164,15 @@ export const longPressNote = declareFlag("long-press-note");
 // user never flips the toggle, there is zero perceptible cost.
 export const dyslexiaFont = declareFlag("dyslexia-font");
 
+// RAZ-25 - Colorblind-safe palette picker. When on, the settings dialog
+// surfaces a small dropdown that swaps `html[data-palette]` between the
+// default theme, the Okabe-Ito red/green-safe palette, and a
+// high-contrast variant. All swaps happen through CSS variable
+// overrides in globals.css; no component logic changes. The flag is
+// the kill switch — flipping it off forces every user back to the
+// default palette even if they previously opted into another.
+export const colorPalette = declareFlag("color-palette");
+
 // RAZ-15 - Per-cell mistake indicator. When on, the settings dialog
 // exposes a "Show mistakes" toggle; if the user enables it AND the
 // client has the puzzle solution (i.e. random non-daily puzzles where

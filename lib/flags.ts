@@ -163,3 +163,14 @@ export const longPressNote = declareFlag("long-press-note");
 // Gate: flag hides the toggle entirely if off; if flag is on but the
 // user never flips the toggle, there is zero perceptible cost.
 export const dyslexiaFont = declareFlag("dyslexia-font");
+
+// RAZ-15 - Per-cell mistake indicator. When on, the settings dialog
+// exposes a "Show mistakes" toggle; if the user enables it AND the
+// client has the puzzle solution (i.e. random non-daily puzzles where
+// meta.solution is populated), wrongly-placed cells tint red in real
+// time. Conflicts already tint red; this extends the treatment to
+// wrong values that happen not to duplicate a peer. The flag gates
+// only the UI toggle — when off, the feature is hidden and the store
+// behaves as before. Daily puzzles never show mistake tint because
+// the solution is kept server-side (otherwise we'd leak it).
+export const showMistakes = declareFlag("show-mistakes");

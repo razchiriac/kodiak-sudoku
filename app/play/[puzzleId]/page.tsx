@@ -15,6 +15,7 @@ import {
   longPressNote,
   pbRibbon,
   shareResult,
+  showMistakes,
 } from "@/lib/flags";
 import { buildShareOgMetadata } from "@/lib/share/og-metadata";
 import { PlayClient } from "./play-client";
@@ -87,6 +88,10 @@ export default async function PuzzlePage({
   const longPressNoteEnabled = await longPressNote();
   // RAZ-17 / jump-on-place flag.
   const jumpOnPlaceEnabled = await jumpOnPlace();
+  // RAZ-15 / show-mistakes flag. Resolved once server-side and
+  // mirrored into the store; actual tint also requires the user
+  // opt-in and meta.solution being present (random puzzles only).
+  const showMistakesEnabled = await showMistakes();
 
   return (
     <PlayClient
@@ -119,6 +124,7 @@ export default async function PuzzlePage({
       compactControlsEnabled={compactControlsEnabled}
       longPressNoteEnabled={longPressNoteEnabled}
       jumpOnPlaceEnabled={jumpOnPlaceEnabled}
+      showMistakesEnabled={showMistakesEnabled}
     />
   );
 }

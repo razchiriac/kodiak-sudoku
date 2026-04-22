@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildFixedMask,
   clearCellNotes,
+  computeMistakes,
   digitCounts,
   emptyNotes,
   hasNote,
@@ -102,5 +103,62 @@ describe("digitCounts", () => {
     let total = 0;
     for (let d = 0; d <= 9; d++) total += counts[d];
     expect(total).toBe(81);
+  });
+});
+
+// RAZ-15: mistake derivation. We solve the sample puzzle at test
+// setup time rather than hardcoding a solution string so the test
+// can't silently drift out of sync with the sample.
+import { solve } from "./solver";
+const SAMPLE_SOLUTION = (() => {
+  const solved = solve(parseBoard(SAMPLE_PUZZLE));
+  if (!solved) throw new Error("sample puzzle failed to solve");
+  return serializeBoard(solved);
+})();
+
+describe("computeMistakes", () => {
+  it("returns an empty set when the board matches the solution", () => {
+    const board = parseBoard(SAMPLE_SOLUTION);
+    const fixed = buildFixedMask(SAMPLE_PUZZLE);
+    expect(computeMistakes(board, fixed, SAMPLE_SOLUTION).size).toBe(0);
+  });
+
+  it("flags a non-fixed cell whose value disagrees with the solution", () => {
+    const board = parseBoard(SAMPLE_PUZZLE);
+    const fixed = buildFixedMask(SAMPLE_PUZZLE);
+    // Cell 2 is empty in the puzzle ('0') but should be '4' in the
+    // solution. Place a deliberate wrong digit and expect it flagged.
+    board[2] = 9;
+    const mistakes = computeMistakes(board, fixed, SAMPLE_SOLUTION);
+    expect(mistakes.has(2)).toBe(true);
+    expect(mistakes.size).toBe(1);
+  });
+
+  it("never flags fixed clue cells even if they somehow disagree", () => {
+    // Defensive: clues by construction match the solution, but we
+    // still want the helper to skip them so a corrupted store can't
+    // red-tint a clue the user can't even edit.
+    const board = parseBoard(SAMPLE_PUZZLE);
+    const fixed = buildFixedMask(SAMPLE_PUZZLE);
+    // Cell 0 is a clue ('5'). Corrupt the solution so cell 0 expects
+    // a different digit — the helper should still ignore it.
+    const badSolution = "1" + SAMPLE_SOLUTION.slice(1);
+    expect(computeMistakes(board, fixed, badSolution).has(0)).toBe(false);
+  });
+
+  it("never flags empty cells", () => {
+    const board = parseBoard(SAMPLE_PUZZLE);
+    const fixed = buildFixedMask(SAMPLE_PUZZLE);
+    // The puzzle has 51 zeros; none of them should be flagged as
+    // mistakes because "no value" isn't wrong.
+    expect(computeMistakes(board, fixed, SAMPLE_SOLUTION).size).toBe(0);
+  });
+
+  it("returns an empty set when no solution is available (daily puzzles)", () => {
+    const board = parseBoard(SAMPLE_PUZZLE);
+    board[2] = 9; // would be a mistake if we had the solution
+    const fixed = buildFixedMask(SAMPLE_PUZZLE);
+    expect(computeMistakes(board, fixed, null).size).toBe(0);
+    expect(computeMistakes(board, fixed, "").size).toBe(0);
   });
 });

@@ -17,6 +17,7 @@ import {
   haptics,
   pbRibbon,
   shareResult,
+  showMistakes,
 } from "@/lib/flags";
 import { ArchiveNav } from "@/components/game/archive-nav";
 import { buildShareOgMetadata } from "@/lib/share/og-metadata";
@@ -80,6 +81,11 @@ export default async function DailyPage() {
   const longPressNoteEnabled = await longPressNote();
   // RAZ-17 / jump-on-place flag.
   const jumpOnPlaceEnabled = await jumpOnPlace();
+  // RAZ-15 / show-mistakes flag. Mirrored into the store but note the
+  // mistake tint itself is a no-op on daily puzzles because the
+  // solution is kept server-side — SudokuGrid guards on solution
+  // presence so flipping the toggle here has no visible effect.
+  const showMistakesEnabled = await showMistakes();
 
   // RAZ-5 / daily-archive flag. When on, surface a "Previous day" link
   // above the board so players can reach the archive from anywhere.
@@ -127,6 +133,7 @@ export default async function DailyPage() {
         compactControlsEnabled={compactControlsEnabled}
         longPressNoteEnabled={longPressNoteEnabled}
         jumpOnPlaceEnabled={jumpOnPlaceEnabled}
+        showMistakesEnabled={showMistakesEnabled}
       />
     </>
   );

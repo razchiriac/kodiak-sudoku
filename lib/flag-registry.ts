@@ -140,4 +140,20 @@ export const FLAG_REGISTRY: readonly FlagSpec[] = [
       "Expose a settings toggle that swaps the UI font to OpenDyslexic for readers who prefer it.",
     linearId: "RAZ-26",
   },
+  {
+    // RAZ-15: Per-cell mistake indicator. When the user opts in and the
+    // client has the puzzle solution (random non-daily puzzles only),
+    // any cell whose placed value doesn't match the solution tints red
+    // immediately — a superset of conflict highlighting. Default off in
+    // the per-user setting so purists keep the "find your own errors"
+    // experience; the flag just governs whether the toggle row is
+    // rendered in the settings dialog. Daily puzzles never surface
+    // mistake tinting client-side because the solution is server-only.
+    key: "show-mistakes",
+    envKey: "FLAG_SHOW_MISTAKES",
+    defaultValue: true,
+    description:
+      "Expose a settings toggle that tints wrong placements red in real time (random puzzles only — daily solutions stay server-side).",
+    linearId: "RAZ-15",
+  },
 ];

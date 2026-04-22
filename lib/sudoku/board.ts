@@ -153,6 +153,35 @@ export function digitCounts(board: Board): number[] {
   return counts;
 }
 
+// RAZ-15: derive the set of indices whose current value disagrees with
+// the puzzle solution. A "mistake" is any non-fixed cell that has a
+// value AND the value doesn't match the corresponding character of the
+// solution string. Returns an empty set when `solution` is null/empty
+// so callers can unconditionally call this helper even when the
+// solution isn't available (e.g. daily puzzles). Pure and
+// framework-free so it's trivially unit-testable.
+//
+// The solution is expected as an 81-char string of '1'..'9'. We decode
+// each char as a digit via charCodeAt - 48 rather than parseInt for
+// speed — this runs on every board mutation while mistake highlighting
+// is on, and the hot path should stay allocation-free.
+export function computeMistakes(
+  board: Board,
+  fixed: FixedMask,
+  solution: string | null,
+): Set<CellIndex> {
+  const out = new Set<CellIndex>();
+  if (!solution || solution.length < BOARD_SIZE) return out;
+  for (let i = 0; i < BOARD_SIZE; i++) {
+    if (fixed[i]) continue; // clues can't be "wrong"
+    const v = board[i];
+    if (v === 0) continue; // empty cells are neither right nor wrong
+    const expected = solution.charCodeAt(i) - 48;
+    if (v !== expected) out.add(i);
+  }
+  return out;
+}
+
 // Compute the full set of legal candidate digits for every empty cell.
 // For each empty cell, we start with all nine bits set and turn off any
 // digit that already appears in the cell's row, column, or 3x3 box.

@@ -110,6 +110,14 @@ type GameState = {
     // own for players who haven't opted in. Gated behind the
     // jump-on-place feature flag at runtime.
     jumpOnPlace: boolean;
+    // RAZ-15: when on, cells whose placed value does not match the
+    // puzzle solution tint red in real time (a superset of conflict
+    // highlighting — wrong values that don't happen to duplicate a
+    // peer still show up). Default off so "find your own errors"
+    // purists aren't nannied. Only meaningful when meta.solution is
+    // populated (random puzzles); daily puzzles keep the solution
+    // server-side so the flag has no visible effect there.
+    showMistakes: boolean;
   };
   // Feature-flag mirror. The *source* of truth is the server
   // (lib/flags.ts → Edge Config), which PlayClient evaluates server-
@@ -147,6 +155,14 @@ type GameState = {
     // players aren't surprised by a caret that moves on its own; a
     // power user opts in from the settings dialog.
     jumpOnPlace: boolean;
+    // RAZ-15: when on, the settings dialog renders the "Show mistakes"
+    // toggle. Whether mistakes are actually tinted at render time
+    // ALSO depends on this flag — flipping the flag off via Edge
+    // Config instantly hides the red tint for already-opted-in users
+    // (the setting stays persisted, it just does nothing). Gives us a
+    // clean kill switch if the derived-mistake computation ever
+    // misbehaves.
+    showMistakes: boolean;
   };
   // RAZ-16: the digit most recently placed by a value-mode `inputDigit`
   // call, or null if no value has been placed yet (or the feature flag
@@ -253,6 +269,10 @@ const INITIAL: GameState = {
     // change. Opt in via the settings dialog. The feature only runs
     // when both the user setting AND the feature flag are true.
     jumpOnPlace: false,
+    // RAZ-15: default off — the "purist" experience is the canonical
+    // Sudoku one where the player hunts their own errors. Opting in
+    // via the settings dialog turns on the red tint for wrong values.
+    showMistakes: false,
   },
   featureFlags: {
     haptics: false,
@@ -261,6 +281,7 @@ const INITIAL: GameState = {
     dyslexiaFont: false,
     longPressNote: false,
     jumpOnPlace: false,
+    showMistakes: false,
   },
   activeDigit: null,
 };

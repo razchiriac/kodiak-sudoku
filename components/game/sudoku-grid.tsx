@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo } from "react";
 import { useGameStore } from "@/lib/zustand/game-store";
-import { peers } from "@/lib/sudoku/board";
+import { computeMistakes, peers } from "@/lib/sudoku/board";
 import { Cell } from "./cell";
 
 // The 9x9 grid. Subscribes to the slice of state needed for layout-level
@@ -18,6 +18,19 @@ export function SudokuGrid() {
   const isPaused = useGameStore((s) => s.isPaused);
   const highlightSameDigit = useGameStore((s) => s.settings.highlightSameDigit);
   const selectCell = useGameStore((s) => s.selectCell);
+  // RAZ-15: derive the set of "mistake" cells — any non-fixed cell
+  // whose current value disagrees with the puzzle solution. Only
+  // active when (a) the feature flag is on, (b) the user has opted in
+  // via settings.showMistakes, and (c) the solution is actually
+  // present on the client (random puzzles only — dailies keep the
+  // solution server-side to avoid leaking it through dev tools).
+  const solution = useGameStore((s) => s.meta?.solution ?? null);
+  const showMistakesFlag = useGameStore((s) => s.featureFlags.showMistakes);
+  const showMistakesSetting = useGameStore(
+    (s) => s.settings.showMistakes === true,
+  );
+  const showMistakes =
+    showMistakesFlag && showMistakesSetting && solution !== null;
 
   const handleSelect = useCallback((i: number) => selectCell(i), [selectCell]);
 
@@ -27,6 +40,18 @@ export function SudokuGrid() {
     if (selection == null) return new Set<number>();
     return new Set(peers(selection));
   }, [selection]);
+
+  // Build the mistake set once per render. Wraps the pure helper so
+  // the result is memoized against board / fixed / solution references
+  // — since the store swaps typed arrays on mutation, a new reference
+  // reliably triggers a recompute. When mistakes are disabled (flag
+  // off, setting off, or solution unavailable) we hand an empty string
+  // to the helper so it early-returns an empty Set, keeping the
+  // per-cell membership check free.
+  const mistakeSet = useMemo(
+    () => computeMistakes(board, fixed, showMistakes ? solution : null),
+    [showMistakes, solution, board, fixed],
+  );
 
   const selectedDigit = selection != null ? board[selection] : 0;
 
@@ -80,6 +105,7 @@ export function SudokuGrid() {
             highlightSameDigit && selectedDigit > 0 && board[i] === selectedDigit && selection !== i
           }
           isConflict={conflicts.has(i)}
+          isMistake={mistakeSet.has(i)}
           // When a filled cell is selected, tell every empty cell
           // to highlight the matching note (if any) so the player
           // can see exactly where that digit is a candidate.

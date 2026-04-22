@@ -146,6 +146,9 @@ type GameActions = {
   ) => void;
 
   togglePause: () => void;
+  // Set the paused state directly. Used by the auto-pause listener
+  // (RAZ-21) which needs idempotent pause/resume rather than a toggle.
+  setPaused: (value: boolean) => void;
   tick: (ms: number) => void;
 
   setSetting: <K extends keyof GameState["settings"]>(
@@ -626,10 +629,22 @@ export const useGameStore = create<GameState & GameActions>()(
         });
       },
 
-      togglePause: () =>
-        set((s) => ({
-          isPaused: !s.isPaused && !s.isComplete ? true : false,
-        })),
+  togglePause: () =>
+    set((s) => ({
+      isPaused: !s.isPaused && !s.isComplete ? true : false,
+    })),
+
+  // Direct pause setter for programmatic callers (RAZ-21 auto-pause).
+  // Mirrors togglePause's invariant that a completed game can never be
+  // re-entered into a paused state. No-ops when the current value already
+  // matches so we don't trip subscribers with a redundant `set`.
+  setPaused: (value: boolean) =>
+    set((s) => {
+      if (s.isComplete) return s;
+      const next = value === true;
+      if (s.isPaused === next) return s;
+      return { isPaused: next };
+    }),
 
       tick: (ms) => {
         const s = get();

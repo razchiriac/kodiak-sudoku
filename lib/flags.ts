@@ -95,3 +95,15 @@ export const solveTimeSanity = declareFlag("solve-time-sanity");
 // unchanged. Helps power users see at a glance which digit to chase
 // next without scanning remaining-count subscripts.
 export const autoSwitchDigit = declareFlag("auto-switch-digit");
+
+// RAZ-21 - Auto-pause on tab hidden or input idle. When on, the play
+// page mounts a VisibilityListener that:
+//   - pauses the game when `document.visibilitychange` fires with
+//     `document.hidden === true`.
+//   - after 90s of no pointer/keyboard input, auto-pauses as well.
+//   - on return (tab re-focused), shows a sonner toast explaining the
+//     pause and auto-resumes so the user doesn't have to tap pause.
+// Leaderboard integrity: a player can no longer alt-tab away and let
+// the timer run. Manual pause/unpause via the header button or Space
+// is unaffected.
+export const autoPause = declareFlag("auto-pause");

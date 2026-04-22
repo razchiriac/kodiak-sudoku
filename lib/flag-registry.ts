@@ -68,4 +68,12 @@ export const FLAG_REGISTRY: readonly FlagSpec[] = [
       "Highlight the last-placed digit on the number pad and auto-advance to the next incomplete digit when one is fully placed.",
     linearId: "RAZ-16",
   },
+  {
+    key: "auto-pause",
+    envKey: "FLAG_AUTO_PAUSE",
+    defaultValue: true,
+    description:
+      "Pause the game when the tab is hidden or after 90s of input idle; toast on resume.",
+    linearId: "RAZ-21",
+  },
 ];

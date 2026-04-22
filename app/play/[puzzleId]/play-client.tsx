@@ -46,6 +46,7 @@ export function PlayClient({
   hapticsEnabled,
   autoSwitchDigitEnabled,
   autoPauseEnabled,
+  shareEnabled = false,
   isArchive = false,
 }: {
   puzzle: PuzzleProp;
@@ -74,6 +75,9 @@ export function PlayClient({
   // to <VisibilityListener> (no store mirror needed — the component
   // only reads it on mount).
   autoPauseEnabled: boolean;
+  // RAZ-11: server-resolved value of `share-result`. Controls whether
+  // the completion modal renders its Share button.
+  shareEnabled?: boolean;
 }) {
   const startGame = useGameStore((s) => s.startGame);
   const resumeFromSnapshot = useGameStore((s) => s.resumeFromSnapshot);
@@ -335,6 +339,8 @@ export function PlayClient({
         submitting={submitting}
         submitError={submitError}
         previousBestMs={previousBestMs}
+        shareEnabled={shareEnabled}
+        dailyDate={dailyDate}
       />
       <ShortcutsOverlay open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />

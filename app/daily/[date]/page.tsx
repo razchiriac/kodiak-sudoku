@@ -1,5 +1,5 @@
+import type { Metadata, Route } from "next";
 import { notFound } from "next/navigation";
-import type { Route } from "next";
 import { getCurrentUser } from "@/lib/supabase/server";
 import {
   getAdjacentDailyDates,
@@ -13,9 +13,24 @@ import {
   dailyArchive,
   haptics,
   pbRibbon,
+  shareResult,
 } from "@/lib/flags";
 import { ArchiveNav } from "@/components/game/archive-nav";
+import { buildShareOgMetadata } from "@/lib/share/og-metadata";
 import { PlayClient } from "../../play/[puzzleId]/play-client";
+
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+
+// RAZ-11 / share-result: dynamic OG image for shared archive links.
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}): Promise<Metadata> {
+  const sp = await searchParams;
+  const og = buildShareOgMetadata(sp, { baseUrl: SITE_URL });
+  return og ?? {};
+}
 
 // RAZ-5 / daily-archive: play any past daily puzzle that still exists
 // in `daily_puzzles`. Behaviour differs from the today route in one
@@ -87,6 +102,7 @@ export default async function DailyArchivePage({
   const hapticsEnabled = await haptics();
   const autoSwitchDigitEnabled = await autoSwitchDigit();
   const autoPauseEnabled = await autoPause();
+  const shareEnabled = await shareResult();
   const adjacent = await getAdjacentDailyDates(date);
 
   return (
@@ -124,6 +140,7 @@ export default async function DailyArchivePage({
         hapticsEnabled={hapticsEnabled}
         autoSwitchDigitEnabled={autoSwitchDigitEnabled}
         autoPauseEnabled={autoPauseEnabled}
+        shareEnabled={shareEnabled}
         isArchive
       />
     </>

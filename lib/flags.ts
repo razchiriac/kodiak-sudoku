@@ -115,3 +115,12 @@ export const autoPause = declareFlag("auto-pause");
 // submitted to completed_games (avoids retroactive leaderboard farming).
 // Today's /daily and its leaderboard stay fully scored.
 export const dailyArchive = declareFlag("daily-archive");
+
+// RAZ-11 - Wordle-style share card. When on, the CompletionModal
+// renders a "Share" button that builds a short text summary (mode,
+// difficulty, time, mistakes, hints) + URL and copies it to the
+// clipboard (or invokes navigator.share on mobile). The URL carries
+// share-params so the puzzle and daily pages can request a dynamic
+// OG image at /og/completion, producing rich previews on X / Discord
+// / iMessage.
+export const shareResult = declareFlag("share-result");

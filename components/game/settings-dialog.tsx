@@ -76,6 +76,15 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   // "stay in place" behavior without a persist migration.
   const jumpFlag = useGameStore((s) => s.featureFlags.jumpOnPlace);
   const jumpOn = useGameStore((s) => s.settings.jumpOnPlace === true);
+  // RAZ-15: show-mistakes toggle. Mirrors the same flag-gated pattern:
+  // the row only appears when the feature flag is on. The actual tint
+  // ALSO checks that the client has the puzzle solution (random
+  // puzzles only), so on a daily puzzle the toggle is technically
+  // available but has no visible effect. We note the limitation in
+  // the helper text so players aren't confused.
+  const mistakesFlag = useGameStore((s) => s.featureFlags.showMistakes);
+  const mistakesOn = useGameStore((s) => s.settings.showMistakes === true);
+  const hasSolution = useGameStore((s) => s.meta?.solution != null);
   const setSetting = useGameStore((s) => s.setSetting);
 
   const handleTestHaptic = () => {
@@ -224,13 +233,42 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             </label>
           )}
 
+          {/* RAZ-15 show-mistakes toggle. Rendered only when the flag
+              is on. The helper text calls out the daily-puzzle
+              limitation so a player who flips the toggle on and sees
+              no effect doesn't think the setting is broken. */}
+          {mistakesFlag && (
+            <label className="flex items-start justify-between gap-4 text-sm">
+              <span className="flex flex-col">
+                <span className="font-medium text-foreground">Show mistakes</span>
+                <span className="text-xs text-muted-foreground">
+                  Tint wrong placements red as you type.
+                  {!hasSolution && mistakesOn
+                    ? " Disabled on daily puzzles — the solution stays server-side."
+                    : ""}
+                </span>
+              </span>
+              <input
+                type="checkbox"
+                checked={mistakesOn}
+                onChange={(e) => setSetting("showMistakes", e.target.checked)}
+                className="mt-1 h-4 w-4 accent-foreground"
+                aria-label="Show mistakes as you type"
+              />
+            </label>
+          )}
+
           {/* Empty state shown only when every flag is off. Keeps the
               dialog from looking broken. */}
-          {!hapticsFlag && !compactFlag && !dyslexiaFlag && !jumpFlag && (
-            <p className="text-sm text-muted-foreground">
-              No user-configurable options yet.
-            </p>
-          )}
+          {!hapticsFlag &&
+            !compactFlag &&
+            !dyslexiaFlag &&
+            !jumpFlag &&
+            !mistakesFlag && (
+              <p className="text-sm text-muted-foreground">
+                No user-configurable options yet.
+              </p>
+            )}
         </div>
       </DialogContent>
     </Dialog>

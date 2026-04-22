@@ -20,6 +20,14 @@ type CellProps = {
   isPeer: boolean;
   isSameDigit: boolean;
   isConflict: boolean;
+  // RAZ-15: true when the player has opted into real-time mistake
+  // highlighting AND the cell's current value does not match the
+  // puzzle solution. Visually treated the same as `isConflict`
+  // (red background + destructive text) because both mean
+  // "something is wrong here"; semantically we keep the flag
+  // separate so aria-invalid only fires on actual conflicts —
+  // mistakes are not a formal ARIA validity concept.
+  isMistake: boolean;
   // Digit (1..9) that should be highlighted inside the notes grid
   // when this cell is empty and contains that digit as a pencil
   // mark. 0 means "no highlight". Populated by the parent when a
@@ -38,6 +46,7 @@ function CellInner({
   isPeer,
   isSameDigit,
   isConflict,
+  isMistake,
   highlightNoteDigit,
   onSelect,
 }: CellProps) {
@@ -51,10 +60,15 @@ function CellInner({
   const rowIndex = row + 1;
   const colIndex = col + 1;
 
-  // Background priority is conflict > selected > sameDigit > peer > base.
-  // The order matters: a cell can be both selected and conflicting, and
-  // we want the conflict to dominate so the player notices it.
-  const bg = isConflict
+  // Background priority: wrong (conflict or mistake) > selected >
+  // sameDigit > peer > base. The order matters: a cell can be both
+  // selected and wrong, and we want "wrong" to dominate so the player
+  // notices it. RAZ-15 extends this: a wrong value that isn't also a
+  // conflict (e.g. the user typed "5" where the solution wants "3" and
+  // no peer has a 5) gets the same red tint when the player has opted
+  // into `showMistakes` — `isWrong` collapses both into one visual.
+  const isWrong = isConflict || isMistake;
+  const bg = isWrong
     ? "bg-cell-conflict"
     : isSelected
       ? "bg-cell-selected"
@@ -85,7 +99,7 @@ function CellInner({
       aria-invalid={isConflict || undefined}
       aria-label={`row ${rowIndex}, column ${colIndex}, ${
         value > 0 ? `value ${value}${isFixed ? " (clue)" : ""}` : "empty"
-      }${isConflict ? ", conflict" : ""}`}
+      }${isConflict ? ", conflict" : isMistake ? ", incorrect" : ""}`}
       tabIndex={-1}
       onMouseDown={(e) => {
         e.preventDefault();
@@ -99,7 +113,11 @@ function CellInner({
         "relative flex aspect-square select-none items-center justify-center text-[clamp(1.25rem,5vw,1.875rem)] font-medium transition-colors",
         bg,
         isFixed ? "text-foreground" : "text-primary",
-        isConflict && "text-destructive",
+        // RAZ-15: mistake text color mirrors conflict — a wrong digit
+        // should look wrong, period. We reuse text-destructive for
+        // both branches so the theme stays cohesive (dark mode,
+        // colorblind palette, etc. all benefit from a single token).
+        isWrong && "text-destructive",
         // Thick borders on the 3x3 box edges. We rely on row/col mod 3
         // rather than passing borders from the parent so cells own their
         // visual identity.
@@ -171,6 +189,7 @@ export const Cell = memo(CellInner, (a, b) => {
     a.isPeer === b.isPeer &&
     a.isSameDigit === b.isSameDigit &&
     a.isConflict === b.isConflict &&
+    a.isMistake === b.isMistake &&
     a.highlightNoteDigit === b.highlightNoteDigit &&
     a.onSelect === b.onSelect &&
     a.index === b.index

@@ -51,6 +51,7 @@ export function PlayClient({
   compactControlsEnabled = false,
   longPressNoteEnabled = false,
   jumpOnPlaceEnabled = false,
+  showMistakesEnabled = false,
   isArchive = false,
 }: {
   puzzle: PuzzleProp;
@@ -94,6 +95,11 @@ export function PlayClient({
   // the next empty peer after a placement. Off = selection never moves
   // automatically regardless of the persisted user setting.
   jumpOnPlaceEnabled?: boolean;
+  // RAZ-15: server-resolved value of `show-mistakes`. Mirrored into the
+  // store so <SudokuGrid> derives the mistake set and <SettingsDialog>
+  // renders the toggle. Off = the feature is hidden; even a user who
+  // previously opted in sees no red tint.
+  showMistakesEnabled?: boolean;
 }) {
   const startGame = useGameStore((s) => s.startGame);
   const resumeFromSnapshot = useGameStore((s) => s.resumeFromSnapshot);
@@ -222,6 +228,13 @@ export function PlayClient({
   useEffect(() => {
     setFeatureFlag("jumpOnPlace", jumpOnPlaceEnabled);
   }, [jumpOnPlaceEnabled, setFeatureFlag]);
+
+  // RAZ-15 show-mistakes mirror. <SudokuGrid> reads this (plus the
+  // per-user setting and meta.solution availability) when deriving
+  // which cells get the red "wrong value" tint.
+  useEffect(() => {
+    setFeatureFlag("showMistakes", showMistakesEnabled);
+  }, [showMistakesEnabled, setFeatureFlag]);
 
   // Autosave: every time the relevant slice of state changes, debounce a
   // server action call. Only signed-in users autosave to the server;

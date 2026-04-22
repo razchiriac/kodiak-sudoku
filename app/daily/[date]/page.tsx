@@ -17,6 +17,7 @@ import {
   haptics,
   pbRibbon,
   shareResult,
+  showMistakes,
 } from "@/lib/flags";
 import { ArchiveNav } from "@/components/game/archive-nav";
 import { buildShareOgMetadata } from "@/lib/share/og-metadata";
@@ -111,6 +112,11 @@ export default async function DailyArchivePage({
   const longPressNoteEnabled = await longPressNote();
   // RAZ-17 / jump-on-place flag.
   const jumpOnPlaceEnabled = await jumpOnPlace();
+  // RAZ-15 / show-mistakes flag. No-op on archive dailies for the same
+  // reason as today's daily — the solution is kept server-side — but
+  // we still mirror the flag so the settings dialog renders the
+  // toggle consistently.
+  const showMistakesEnabled = await showMistakes();
   const adjacent = await getAdjacentDailyDates(date);
 
   return (
@@ -152,6 +158,7 @@ export default async function DailyArchivePage({
         compactControlsEnabled={compactControlsEnabled}
         longPressNoteEnabled={longPressNoteEnabled}
         jumpOnPlaceEnabled={jumpOnPlaceEnabled}
+        showMistakesEnabled={showMistakesEnabled}
         isArchive
       />
     </>

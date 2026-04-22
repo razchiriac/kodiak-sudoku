@@ -135,6 +135,15 @@ export const shareResult = declareFlag("share-result");
 // device class.
 export const compactControls = declareFlag("compact-controls");
 
+// RAZ-20 - Long-press a number-pad button to toggle a note. The pad
+// button starts a 400ms timer on pointerdown; if it elapses before
+// pointerup, the digit is toggled as a note on the currently-selected
+// empty cell and the normal "place a value" click is suppressed. Lets
+// mobile players add a single pencil mark without round-tripping
+// through notes mode. Flag keeps a kill switch if the gesture ends
+// up conflicting with something device-specific we haven't thought of.
+export const longPressNote = declareFlag("long-press-note");
+
 // RAZ-26 - Dyslexia-friendly font option. When on, the settings dialog
 // exposes a toggle that swaps the global UI font to OpenDyslexic. The
 // font is self-hosted via @fontsource/opendyslexic so it's served from

@@ -128,6 +128,13 @@ type GameState = {
     // hidden and the default Geist font is used regardless of the
     // persisted per-user setting.
     dyslexiaFont: boolean;
+    // RAZ-20: when on, holding a number-pad button for 400ms toggles
+    // that digit as a note on the currently-selected empty cell
+    // regardless of current mode. Flag off makes the pad button behave
+    // as a plain tap (no timer, no suppression) — kill switch in case
+    // the gesture conflicts with something we didn't anticipate on a
+    // specific device.
+    longPressNote: boolean;
   };
   // RAZ-16: the digit most recently placed by a value-mode `inputDigit`
   // call, or null if no value has been placed yet (or the feature flag
@@ -152,6 +159,15 @@ type GameActions = {
   toggleMode: () => void;
 
   inputDigit: (digit: number) => void;
+  // RAZ-20: unconditionally toggle `digit` as a note on the currently
+  // selected empty cell. Unlike inputDigit in notes mode, this never
+  // mutates the cell's value and never depends on the current mode -
+  // called from long-press while the user is in value mode so a single
+  // pencil mark can be added without a mode round-trip. No-ops if
+  // there is no selection, the selection is a fixed clue, or the cell
+  // already has a value (placing a value removes notes, so an existing
+  // value means notes would be meaningless).
+  toggleNoteOnSelection: (digit: number) => void;
   eraseSelection: () => void;
   // Replace every empty cell's notes with the full set of legal
   // candidates (1..9 minus peers' values). Pushes a single bulk
@@ -227,6 +243,7 @@ const INITIAL: GameState = {
     autoSwitchDigit: false,
     compactControls: false,
     dyslexiaFont: false,
+    longPressNote: false,
   },
   activeDigit: null,
 };
@@ -471,6 +488,36 @@ export const useGameStore = create<GameState & GameActions>()(
           conflicts: findConflicts(next.board),
           isComplete: isComplete(next.board),
         });
+      },
+
+      toggleNoteOnSelection: (digit) => {
+        const s = get();
+        if (s.isComplete || s.isPaused) return;
+        const idx = s.selection;
+        if (idx == null) return;
+        if (s.fixed[idx]) return;
+        // Long-press on a pad button while the selected cell already
+        // has a value is a no-op: placing a value clears notes on that
+        // cell by design, so toggling a note there would be both
+        // meaningless and inconsistent with the rest of the notes API.
+        // The caller (pad button) is responsible for any UI affordance
+        // in this case (e.g. a subtle "no-op" hint); the store keeps
+        // quiet.
+        if (s.board[idx] !== 0) return;
+        if (digit < 1 || digit > 9) return;
+
+        // Same structure as the notes branch of inputDigit so undo/redo
+        // sees a uniform shape: a `note` history entry whose prev/next
+        // masks capture exactly the bit that flipped.
+        const prevMask = s.notes[idx];
+        const nextNotes = toggleNote(s.notes, idx, digit);
+        const entry: HistoryEntry = {
+          kind: "note",
+          index: idx,
+          prevMask,
+          nextMask: nextNotes[idx],
+        };
+        set({ notes: nextNotes, history: pushEntry(s.history, entry) });
       },
 
       eraseSelection: () => {

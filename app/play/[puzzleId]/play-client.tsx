@@ -48,6 +48,7 @@ export function PlayClient({
   autoPauseEnabled,
   shareEnabled = false,
   compactControlsEnabled = false,
+  longPressNoteEnabled = false,
   isArchive = false,
 }: {
   puzzle: PuzzleProp;
@@ -82,6 +83,10 @@ export function PlayClient({
   // RAZ-23: server-resolved value of `compact-controls`. Mirrored into
   // the store so <NumberPad> and <SettingsDialog> can both gate on it.
   compactControlsEnabled?: boolean;
+  // RAZ-20: server-resolved value of `long-press-note`. Mirrored into
+  // the store so <NumberPad> can conditionally arm its 400ms long-press
+  // timer. Off = the feature is a no-op; buttons act as plain taps.
+  longPressNoteEnabled?: boolean;
 }) {
   const startGame = useGameStore((s) => s.startGame);
   const resumeFromSnapshot = useGameStore((s) => s.resumeFromSnapshot);
@@ -198,6 +203,12 @@ export function PlayClient({
   useEffect(() => {
     setFeatureFlag("compactControls", compactControlsEnabled);
   }, [compactControlsEnabled, setFeatureFlag]);
+
+  // RAZ-20 long-press-note mirror. NumberPad reads this directly to
+  // decide whether to start the 400ms timer on pointerdown.
+  useEffect(() => {
+    setFeatureFlag("longPressNote", longPressNoteEnabled);
+  }, [longPressNoteEnabled, setFeatureFlag]);
 
   // Autosave: every time the relevant slice of state changes, debounce a
   // server action call. Only signed-in users autosave to the server;

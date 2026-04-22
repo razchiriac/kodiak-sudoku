@@ -84,4 +84,12 @@ export const FLAG_REGISTRY: readonly FlagSpec[] = [
       "Expose past daily puzzles via /daily/[date] and per-date leaderboards with prev/next nav. Archive completions are practice-only (not scored).",
     linearId: "RAZ-5",
   },
+  {
+    key: "share-result",
+    envKey: "FLAG_SHARE_RESULT",
+    defaultValue: true,
+    description:
+      "Render a Share button in the completion modal (navigator.share + clipboard fallback) and emit dynamic OG images for completion links.",
+    linearId: "RAZ-11",
+  },
 ];

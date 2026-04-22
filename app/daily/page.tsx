@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getCurrentUser } from "@/lib/supabase/server";
 import {
@@ -12,9 +13,25 @@ import {
   dailyArchive,
   haptics,
   pbRibbon,
+  shareResult,
 } from "@/lib/flags";
 import { ArchiveNav } from "@/components/game/archive-nav";
+import { buildShareOgMetadata } from "@/lib/share/og-metadata";
 import { PlayClient } from "../play/[puzzleId]/play-client";
+
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+
+// RAZ-11 / share-result: swap in dynamic OG image when a shared link
+// drops us here. Same pattern as /play/[puzzleId]/page.tsx.
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}): Promise<Metadata> {
+  const sp = await searchParams;
+  const og = buildShareOgMetadata(sp, { baseUrl: SITE_URL });
+  return og ?? {};
+}
 
 // Daily must be dynamic: it depends on the current UTC date and the
 // caller's session.
@@ -50,6 +67,9 @@ export default async function DailyPage() {
 
   // RAZ-21 / auto-pause flag.
   const autoPauseEnabled = await autoPause();
+
+  // RAZ-11 / share-result flag.
+  const shareEnabled = await shareResult();
 
   // RAZ-5 / daily-archive flag. When on, surface a "Previous day" link
   // above the board so players can reach the archive from anywhere.
@@ -93,6 +113,7 @@ export default async function DailyPage() {
         hapticsEnabled={hapticsEnabled}
         autoSwitchDigitEnabled={autoSwitchDigitEnabled}
         autoPauseEnabled={autoPauseEnabled}
+        shareEnabled={shareEnabled}
       />
     </>
   );

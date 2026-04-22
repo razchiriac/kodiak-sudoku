@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import {
   getBestTimeForDifficulty,
@@ -5,8 +6,31 @@ import {
   getSavedGame,
 } from "@/lib/db/queries";
 import { getCurrentUser } from "@/lib/supabase/server";
-import { autoPause, autoSwitchDigit, haptics, pbRibbon } from "@/lib/flags";
+import {
+  autoPause,
+  autoSwitchDigit,
+  haptics,
+  pbRibbon,
+  shareResult,
+} from "@/lib/flags";
+import { buildShareOgMetadata } from "@/lib/share/og-metadata";
 import { PlayClient } from "./play-client";
+
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+
+// RAZ-11 / share-result: when a visitor follows a shared link we swap
+// in a dynamic OG image populated with the original player's stats.
+// When no share params are present, fall through to the default site
+// metadata defined in app/layout.tsx.
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}): Promise<Metadata> {
+  const sp = await searchParams;
+  const og = buildShareOgMetadata(sp, { baseUrl: SITE_URL });
+  return og ?? {};
+}
 
 // Each puzzle page hits the DB and reads the user session.
 export const dynamic = "force-dynamic";
@@ -49,6 +73,10 @@ export default async function PuzzlePage({
   // RAZ-21 / auto-pause flag: same pattern.
   const autoPauseEnabled = await autoPause();
 
+  // RAZ-11 / share-result flag: same pattern, forwarded to the
+  // completion modal which decides whether to render the Share button.
+  const shareEnabled = await shareResult();
+
   return (
     <PlayClient
       puzzle={{
@@ -76,6 +104,7 @@ export default async function PuzzlePage({
       hapticsEnabled={hapticsEnabled}
       autoSwitchDigitEnabled={autoSwitchDigitEnabled}
       autoPauseEnabled={autoPauseEnabled}
+      shareEnabled={shareEnabled}
     />
   );
 }

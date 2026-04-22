@@ -1,6 +1,8 @@
 "use client";
 
+import { toast } from "sonner";
 import { useGameStore } from "@/lib/zustand/game-store";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -23,6 +25,35 @@ type SettingsDialogProps = {
   onOpenChange: (open: boolean) => void;
 };
 
+// Fire a deliberately-long 200ms pulse from inside a click handler. We
+// keep this OUT of the Zustand store on purpose: the Web Vibration API
+// requires sticky user activation, and routing the call through a store
+// action is one more hop where a buggy Chromium version could decide
+// the activation has lapsed. Doing it inline in onClick is the most
+// permissive path we have.
+//
+// Returns a tri-state so the caller can render a specific hint:
+//   "unsupported" - no navigator.vibrate on this device
+//                   (desktop, Safari, locked-down embeds)
+//   "blocked"     - vibrate returned false; browser refused
+//                   (usually Chrome site-settings)
+//   "fired"       - vibrate returned true; if the user still feels
+//                   nothing, the Android system setting is the
+//                   likely culprit, NOT the browser
+function fireTestPulse(): "unsupported" | "blocked" | "fired" {
+  if (typeof navigator === "undefined") return "unsupported";
+  const nav = navigator as Navigator & {
+    vibrate?: (pattern: number | number[]) => boolean;
+  };
+  if (typeof nav.vibrate !== "function") return "unsupported";
+  try {
+    const ok = nav.vibrate([200]);
+    return ok ? "fired" : "blocked";
+  } catch {
+    return "blocked";
+  }
+}
+
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const hapticsFlag = useGameStore((s) => s.featureFlags.haptics);
   // Default-on semantics: see game-store comment on `settings.haptics`.
@@ -31,6 +62,31 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   // doesn't accidentally get the toggle rendered as off on first paint.
   const hapticsOn = useGameStore((s) => s.settings.haptics !== false);
   const setSetting = useGameStore((s) => s.setSetting);
+
+  const handleTestHaptic = () => {
+    const result = fireTestPulse();
+    if (result === "unsupported") {
+      toast("Vibration is not supported on this device.", {
+        description: "Desktop and iOS browsers don't expose the Web Vibration API.",
+      });
+      return;
+    }
+    if (result === "blocked") {
+      toast("The browser blocked the vibration.", {
+        description:
+          "Chrome → ⋮ → Site settings → Vibration should be set to Allowed.",
+      });
+      return;
+    }
+    // Fired successfully. We can't know if the user felt it, so the
+    // toast doubles as the "didn't feel anything? try this" hint. The
+    // Android Touch feedback setting is by far the most common cause
+    // on Pixel devices, so we lead with it.
+    toast("Sent a 200 ms pulse.", {
+      description:
+        "If you didn't feel it, enable Settings → Sound & vibration → Vibration & haptics → Touch feedback.",
+    });
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -45,21 +101,37 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
               feature flag is on; anonymous and signed-in users both see
               it because the feature has no DB side effects. */}
           {hapticsFlag && (
-            <label className="flex items-start justify-between gap-4 text-sm">
-              <span className="flex flex-col">
-                <span className="font-medium text-foreground">Haptic feedback</span>
-                <span className="text-xs text-muted-foreground">
-                  Vibrate on placements. Mobile only — desktop browsers ignore it.
+            <div className="flex flex-col gap-2">
+              <label className="flex items-start justify-between gap-4 text-sm">
+                <span className="flex flex-col">
+                  <span className="font-medium text-foreground">Haptic feedback</span>
+                  <span className="text-xs text-muted-foreground">
+                    Vibrate on placements. Mobile only — desktop browsers ignore it.
+                  </span>
                 </span>
-              </span>
-              <input
-                type="checkbox"
-                checked={hapticsOn}
-                onChange={(e) => setSetting("haptics", e.target.checked)}
-                className="mt-1 h-4 w-4 accent-foreground"
-                aria-label="Haptic feedback"
-              />
-            </label>
+                <input
+                  type="checkbox"
+                  checked={hapticsOn}
+                  onChange={(e) => setSetting("haptics", e.target.checked)}
+                  className="mt-1 h-4 w-4 accent-foreground"
+                  aria-label="Haptic feedback"
+                />
+              </label>
+              {/* Self-test row. Kept visible even when the toggle is
+                  off so a player can verify their device before turning
+                  the feature on. onClick calls navigator.vibrate
+                  directly so the click's user-activation window is
+                  unambiguous — see fireTestPulse() comment above. */}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleTestHaptic}
+                className="self-start"
+              >
+                Test vibration
+              </Button>
+            </div>
           )}
 
           {/* Nothing else to configure yet — show a subtle empty state

@@ -23,8 +23,10 @@ export type FlagSpec = {
   // throughout .env.example / Vercel env vars.
   envKey: string;
   // Initial value the sync script writes into Edge Config when the
-  // key is missing. Kept false for every new flag so features
-  // default to dark.
+  // key is missing. Project policy: default new flags to TRUE so CI
+  // previews exercise the real path; if a flag needs a dark rollout
+  // flip it after it lands in Edge Config (the sync script never
+  // overwrites existing values).
   defaultValue: boolean;
   // Human-readable description, mirrored into Edge Config and shown
   // in the Vercel Flags Overview dashboard.
@@ -49,5 +51,13 @@ export const FLAG_REGISTRY: readonly FlagSpec[] = [
     defaultValue: false,
     description: "Vibrate on value placements (mobile only).",
     linearId: "RAZ-19",
+  },
+  {
+    key: "solve-time-sanity",
+    envKey: "FLAG_SOLVE_TIME_SANITY",
+    defaultValue: true,
+    description:
+      "Reject leaderboard submissions whose client timer exceeds wall-clock since saved_games.started_at by >10%.",
+    linearId: "RAZ-27",
   },
 ];

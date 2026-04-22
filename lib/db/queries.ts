@@ -58,6 +58,27 @@ export async function getDailyPuzzle(date: string): Promise<{ puzzle: Puzzle; da
   return rows[0] ?? null;
 }
 
+// RAZ-5 / daily-archive: find the previous and next dates present in
+// daily_puzzles relative to `date`. We only consider rows that are NOT
+// in the future (so today's page never advertises a "next" link that
+// leaks tomorrow's puzzle). The single SQL round-trip uses two
+// conditional aggregates so the index on puzzle_date is enough and we
+// avoid two separate queries from the caller.
+export async function getAdjacentDailyDates(
+  date: string,
+): Promise<{ prev: string | null; next: string | null }> {
+  const today = new Date().toISOString().slice(0, 10);
+  const rows = await db.execute<{ prev: string | null; next: string | null }>(
+    sql`select
+          max(puzzle_date)::text filter (where puzzle_date < ${date}) as prev,
+          min(puzzle_date)::text filter (where puzzle_date > ${date} and puzzle_date <= ${today}) as next
+        from ${dailyPuzzles}`,
+  );
+  const row = (rows as unknown as { rows: { prev: string | null; next: string | null }[] })
+    .rows?.[0];
+  return { prev: row?.prev ?? null, next: row?.next ?? null };
+}
+
 // User's saved game for a specific puzzle (if any). Used by the resume
 // flow on the dashboard and the play page.
 export async function getSavedGame(userId: string, puzzleId: number) {

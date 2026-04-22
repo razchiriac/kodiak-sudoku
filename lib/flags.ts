@@ -85,3 +85,13 @@ export const haptics = declareFlag("haptics");
 // first autosave), the check is a no-op and the per-difficulty floor
 // in TIME_FLOOR_MS still guards the leaderboard.
 export const solveTimeSanity = declareFlag("solve-time-sanity");
+
+// RAZ-16 - Auto-switch the "active" digit on the number pad after a
+// placement exhausts the current digit. The pad tracks which digit was
+// most recently placed and highlights it; when placing pushes that
+// digit's on-board count to 9 (all placements made), the active-digit
+// highlight auto-advances to the next digit that still has cells
+// missing. Purely visual: input semantics (tap cell, tap digit) are
+// unchanged. Helps power users see at a glance which digit to chase
+// next without scanning remaining-count subscripts.
+export const autoSwitchDigit = declareFlag("auto-switch-digit");

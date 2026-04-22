@@ -100,7 +100,18 @@ type GameState = {
   // localStorage copy.
   featureFlags: {
     haptics: boolean;
+    // RAZ-16: when on, `inputDigit` maintains `activeDigit` and
+    // auto-advances it once the placed digit is fully on the board.
+    // When off, `activeDigit` stays null and the pad renders as before.
+    autoSwitchDigit: boolean;
   };
+  // RAZ-16: the digit most recently placed by a value-mode `inputDigit`
+  // call, or null if no value has been placed yet (or the feature flag
+  // is off). Number pad highlights the matching button. Auto-advances
+  // to the next still-incomplete digit once placement exhausts the
+  // current one (all 9 copies on the board). Not persisted - always
+  // starts null on a page load.
+  activeDigit: number | null;
 };
 
 type GameActions = {
@@ -180,8 +191,28 @@ const INITIAL: GameState = {
   },
   featureFlags: {
     haptics: false,
+    autoSwitchDigit: false,
   },
+  activeDigit: null,
 };
+
+// RAZ-16 helper. Given the digit that was just placed and the post-
+// placement digit counts (index 1..9 = how many of that digit are on
+// the board), return the digit the number pad should highlight next.
+// Rules:
+//   - If the placed digit still has slots remaining, stay on it.
+//   - If the placed digit is now fully placed (9-on-board), advance to
+//     the smallest higher-numbered digit that is still incomplete.
+//     Wrap around to 1..(placed-1) so 9 → 1..8.
+//   - If every digit is complete (game finished), return null.
+function nextActiveDigit(placed: number, counts: number[]): number | null {
+  if (counts[placed] < 9) return placed;
+  for (let offset = 1; offset <= 9; offset++) {
+    const d = ((placed - 1 + offset) % 9) + 1;
+    if (counts[d] < 9) return d;
+  }
+  return null;
+}
 
 // Fire a short haptic pulse on a successful placement, a longer one
 // when the placement creates a conflict. Everything here is best-effort:
@@ -373,6 +404,15 @@ export const useGameStore = create<GameState & GameActions>()(
           triggerHapticFeedback(isConflict);
         }
 
+        // RAZ-16: compute the next active digit for the number pad. We
+        // do this after `board` has been updated so the post-placement
+        // counts are correct. The flag-off case short-circuits to null
+        // so turning the feature off at runtime cleanly removes the
+        // highlight.
+        const activeDigit = s.featureFlags.autoSwitchDigit
+          ? nextActiveDigit(digit, digitCounts(board))
+          : null;
+
         const entry: HistoryEntry = {
           kind: "value",
           index: idx,
@@ -388,6 +428,7 @@ export const useGameStore = create<GameState & GameActions>()(
           board,
           notes,
           mistakes,
+          activeDigit,
           history: pushEntry(s.history, entry),
         };
         set({
@@ -567,11 +608,18 @@ export const useGameStore = create<GameState & GameActions>()(
           prevNotes,
           nextNotes: notes,
         };
+        // RAZ-16: hints count as value placements for the pad
+        // highlight (they mutate the board the same way user placements
+        // do). Flag-gated identically to `inputDigit`.
+        const activeDigit = s.featureFlags.autoSwitchDigit
+          ? nextActiveDigit(suggestion.digit, digitCounts(board))
+          : null;
         set({
           board,
           notes,
           selection: idx,
           hintsUsed: s.hintsUsed + 1,
+          activeDigit,
           history: pushEntry(s.history, entry),
           conflicts: findConflicts(board),
           isComplete: isComplete(board),

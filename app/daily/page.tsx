@@ -5,7 +5,7 @@ import {
   getDailyPuzzle,
   getSavedGame,
 } from "@/lib/db/queries";
-import { haptics, pbRibbon } from "@/lib/flags";
+import { autoSwitchDigit, haptics, pbRibbon } from "@/lib/flags";
 import { PlayClient } from "../play/[puzzleId]/play-client";
 
 // Daily must be dynamic: it depends on the current UTC date and the
@@ -37,6 +37,9 @@ export default async function DailyPage() {
   // anonymous players the same as the random page.
   const hapticsEnabled = await haptics();
 
+  // RAZ-16 / auto-switch-digit flag.
+  const autoSwitchDigitEnabled = await autoSwitchDigit();
+
   return (
     <PlayClient
       puzzle={{
@@ -64,6 +67,7 @@ export default async function DailyPage() {
       dailyDate={daily.date as string}
       previousBestMs={previousBestMs}
       hapticsEnabled={hapticsEnabled}
+      autoSwitchDigitEnabled={autoSwitchDigitEnabled}
     />
   );
 }

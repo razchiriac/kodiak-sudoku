@@ -43,6 +43,7 @@ export function PlayClient({
   dailyDate,
   previousBestMs,
   hapticsEnabled,
+  autoSwitchDigitEnabled,
 }: {
   puzzle: PuzzleProp;
   savedGame: SavedProp;
@@ -58,6 +59,10 @@ export function PlayClient({
   // into the Zustand store on mount so the gameplay reducer (inputDigit)
   // can decide whether to call navigator.vibrate without prop-drilling.
   hapticsEnabled: boolean;
+  // RAZ-16: server-resolved value of `auto-switch-digit`. Same mirror
+  // pattern as `hapticsEnabled` — gameplay reducer reads it from the
+  // store when it computes the next pad-highlighted digit.
+  autoSwitchDigitEnabled: boolean;
 }) {
   const startGame = useGameStore((s) => s.startGame);
   const resumeFromSnapshot = useGameStore((s) => s.resumeFromSnapshot);
@@ -164,6 +169,11 @@ export function PlayClient({
   useEffect(() => {
     setFeatureFlag("haptics", hapticsEnabled);
   }, [hapticsEnabled, setFeatureFlag]);
+
+  // Same mirror pattern for RAZ-16 auto-switch-digit.
+  useEffect(() => {
+    setFeatureFlag("autoSwitchDigit", autoSwitchDigitEnabled);
+  }, [autoSwitchDigitEnabled, setFeatureFlag]);
 
   // Autosave: every time the relevant slice of state changes, debounce a
   // server action call. Only signed-in users autosave to the server;

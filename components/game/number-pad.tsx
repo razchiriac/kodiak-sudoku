@@ -24,6 +24,10 @@ export function NumberPad() {
   const mode = useGameStore((s) => s.mode);
   const selection = useGameStore((s) => s.selection);
   const notes = useGameStore((s) => s.notes);
+  // RAZ-16: the digit most recently placed (or auto-advanced to when
+  // the previous one exhausted). The store keeps this null when the
+  // feature flag is off, so no extra gating is needed here.
+  const activeDigit = useGameStore((s) => s.activeDigit);
 
   // Live digit counts. Recomputed on every render but cheap (single
   // 81 pass) so we avoid the complexity of a memoized selector.
@@ -49,6 +53,12 @@ export function NumberPad() {
         const remaining = 9 - counts[digit];
         const exhausted = remaining === 0;
         const isNoted = (notesMask & (1 << (digit - 1))) !== 0;
+        // RAZ-16: highlight the "active" digit (last placed / auto-
+        // advanced target). In notes mode the per-cell noted state
+        // (`isNoted`) already owns the primary highlight styling, so
+        // the active-digit ring only renders in value mode to avoid
+        // the two signals clashing.
+        const isActive = activeDigit === digit && mode === "value";
         return (
           <button
             key={digit}
@@ -79,11 +89,17 @@ export function NumberPad() {
               // indicator. Filled background + primary text so it
               // reads clearly even without the ring.
               isNoted && "bg-primary/20 text-primary ring-primary",
+              // RAZ-16 active-digit highlight. Subtle background tint +
+              // ring so the ring is visible against both the default
+              // and hover backgrounds. Only rendered in value mode
+              // (see isActive above); in notes mode isNoted drives the
+              // primary visual.
+              isActive && "bg-primary/15 ring-2 ring-primary/70",
             )}
             aria-label={`${mode === "notes" ? "Toggle note" : "Place"} ${digit}${
               exhausted && mode === "value" ? " (none remaining)" : ""
-            }${isNoted ? " (currently noted)" : ""}`}
-            aria-pressed={mode === "notes" ? isNoted : undefined}
+            }${isNoted ? " (currently noted)" : ""}${isActive ? " (active)" : ""}`}
+            aria-pressed={mode === "notes" ? isNoted : isActive ? true : undefined}
           >
             <span>{digit}</span>
             {/* Remaining-count subscript. We used to hide this below

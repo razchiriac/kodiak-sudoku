@@ -60,4 +60,12 @@ export const FLAG_REGISTRY: readonly FlagSpec[] = [
       "Reject leaderboard submissions whose client timer exceeds wall-clock since saved_games.started_at by >10%.",
     linearId: "RAZ-27",
   },
+  {
+    key: "auto-switch-digit",
+    envKey: "FLAG_AUTO_SWITCH_DIGIT",
+    defaultValue: true,
+    description:
+      "Highlight the last-placed digit on the number pad and auto-advance to the next incomplete digit when one is fully placed.",
+    linearId: "RAZ-16",
+  },
 ];

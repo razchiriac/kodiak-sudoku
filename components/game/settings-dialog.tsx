@@ -65,6 +65,11 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   // defaults to false so existing players see no layout change.
   const compactFlag = useGameStore((s) => s.featureFlags.compactControls);
   const compactOn = useGameStore((s) => s.settings.compactControls === true);
+  // RAZ-26: dyslexia-friendly font toggle. Same flag-gated pattern as
+  // haptics/compact; the actual font swap is done by the
+  // DyslexiaFontLoader effect reading the same store keys.
+  const dyslexiaFlag = useGameStore((s) => s.featureFlags.dyslexiaFont);
+  const dyslexiaOn = useGameStore((s) => s.settings.dyslexiaFont === true);
   const setSetting = useGameStore((s) => s.setSetting);
 
   const handleTestHaptic = () => {
@@ -162,9 +167,34 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             </label>
           )}
 
+          {/* RAZ-26 dyslexia-friendly font toggle. Flag-gated; the font
+              itself is @font-face-registered in globals.css so enabling
+              the toggle is instant (the browser downloads the font file
+              on first use, not on page load). */}
+          {dyslexiaFlag && (
+            <label className="flex items-start justify-between gap-4 text-sm">
+              <span className="flex flex-col">
+                <span className="font-medium text-foreground">
+                  Dyslexia-friendly font
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  Swap the UI to OpenDyslexic. Applies everywhere on this
+                  device.
+                </span>
+              </span>
+              <input
+                type="checkbox"
+                checked={dyslexiaOn}
+                onChange={(e) => setSetting("dyslexiaFont", e.target.checked)}
+                className="mt-1 h-4 w-4 accent-foreground"
+                aria-label="Dyslexia-friendly font"
+              />
+            </label>
+          )}
+
           {/* Empty state shown only when every flag is off. Keeps the
               dialog from looking broken. */}
-          {!hapticsFlag && !compactFlag && (
+          {!hapticsFlag && !compactFlag && !dyslexiaFlag && (
             <p className="text-sm text-muted-foreground">
               No user-configurable options yet.
             </p>

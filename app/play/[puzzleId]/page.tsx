@@ -5,7 +5,7 @@ import {
   getSavedGame,
 } from "@/lib/db/queries";
 import { getCurrentUser } from "@/lib/supabase/server";
-import { autoSwitchDigit, haptics, pbRibbon } from "@/lib/flags";
+import { autoPause, autoSwitchDigit, haptics, pbRibbon } from "@/lib/flags";
 import { PlayClient } from "./play-client";
 
 // Each puzzle page hits the DB and reads the user session.
@@ -46,6 +46,9 @@ export default async function PuzzlePage({
   // RAZ-16 / auto-switch-digit flag: same pattern as haptics.
   const autoSwitchDigitEnabled = await autoSwitchDigit();
 
+  // RAZ-21 / auto-pause flag: same pattern.
+  const autoPauseEnabled = await autoPause();
+
   return (
     <PlayClient
       puzzle={{
@@ -72,6 +75,7 @@ export default async function PuzzlePage({
       previousBestMs={previousBestMs}
       hapticsEnabled={hapticsEnabled}
       autoSwitchDigitEnabled={autoSwitchDigitEnabled}
+      autoPauseEnabled={autoPauseEnabled}
     />
   );
 }

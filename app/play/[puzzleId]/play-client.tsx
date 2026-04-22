@@ -8,6 +8,7 @@ import { NumberPad } from "@/components/game/number-pad";
 import { ControlPanel } from "@/components/game/control-panel";
 import { Timer } from "@/components/game/timer";
 import { KeyboardListener } from "@/components/game/keyboard-listener";
+import { VisibilityListener } from "@/components/game/visibility-listener";
 import { CompletionModal } from "@/components/game/completion-modal";
 import { ShortcutsOverlay } from "@/components/game/shortcuts-overlay";
 import { SettingsDialog } from "@/components/game/settings-dialog";
@@ -44,6 +45,7 @@ export function PlayClient({
   previousBestMs,
   hapticsEnabled,
   autoSwitchDigitEnabled,
+  autoPauseEnabled,
 }: {
   puzzle: PuzzleProp;
   savedGame: SavedProp;
@@ -63,6 +65,10 @@ export function PlayClient({
   // pattern as `hapticsEnabled` — gameplay reducer reads it from the
   // store when it computes the next pad-highlighted digit.
   autoSwitchDigitEnabled: boolean;
+  // RAZ-21: server-resolved value of `auto-pause`. Forwarded directly
+  // to <VisibilityListener> (no store mirror needed — the component
+  // only reads it on mount).
+  autoPauseEnabled: boolean;
 }) {
   const startGame = useGameStore((s) => s.startGame);
   const resumeFromSnapshot = useGameStore((s) => s.resumeFromSnapshot);
@@ -254,6 +260,7 @@ export function PlayClient({
     // generous container + py-10.
     <div className="mx-auto flex w-full max-w-screen-sm flex-col items-center gap-3 px-2 py-3 sm:container sm:gap-4 sm:py-10">
       <KeyboardListener onShortcuts={() => setShortcutsOpen(true)} />
+      <VisibilityListener enabled={autoPauseEnabled} />
       <div className="flex w-full max-w-[560px] items-center justify-between">
         <div className="text-sm text-muted-foreground">
           {mode === "daily"

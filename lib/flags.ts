@@ -124,3 +124,13 @@ export const dailyArchive = declareFlag("daily-archive");
 // OG image at /og/completion, producing rich previews on X / Discord
 // / iMessage.
 export const shareResult = declareFlag("share-result");
+
+// RAZ-23 - Compact controls mode. When on, the settings dialog surfaces
+// a "Compact controls" toggle that shrinks the number pad + control
+// stacks to a uniform h-14 on mobile (instead of the default aspect-
+// square which produces ~100px tall buttons on short viewports). The
+// flag only gates the SETTING; users who leave the toggle off see the
+// default layout. Low risk, but flagging keeps the option reversible
+// from Edge Config in case the compact layout misbehaves on some
+// device class.
+export const compactControls = declareFlag("compact-controls");

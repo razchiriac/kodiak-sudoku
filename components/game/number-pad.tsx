@@ -28,6 +28,11 @@ export function NumberPad() {
   // the previous one exhausted). The store keeps this null when the
   // feature flag is off, so no extra gating is needed here.
   const activeDigit = useGameStore((s) => s.activeDigit);
+  // RAZ-23: compact controls. Both the feature flag AND the user
+  // setting must be on for compact to apply — gives us a kill switch
+  // from Edge Config without stomping the user's preference.
+  const compact =
+    useGameStore((s) => s.featureFlags.compactControls && s.settings.compactControls);
 
   // Live digit counts. Recomputed on every render but cheap (single
   // 81 pass) so we avoid the complexity of a memoized selector.
@@ -81,7 +86,15 @@ export function NumberPad() {
               //     balloon to 3×112=336px tall at the 560px max
               //     width, which would squeeze the board on a
               //     short laptop viewport.
-              "flex aspect-square min-h-12 flex-col items-center justify-center gap-0.5 rounded-md border bg-card text-2xl font-semibold leading-none transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-30 sm:aspect-auto sm:h-16",
+              // RAZ-23: when compact is on we drop the mobile
+              // aspect-square (which produces ~100px buttons on a
+              // 374px viewport) and lock in a uniform h-14 at every
+              // breakpoint above the min-h floor. Buttons stay thumb-
+              // reachable (56px > Apple's 44pt HIG minimum) while
+              // giving the board ~50% more vertical room.
+              compact
+                ? "flex h-14 min-h-12 flex-col items-center justify-center gap-0.5 rounded-md border bg-card text-2xl font-semibold leading-none transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-30 sm:h-16"
+                : "flex aspect-square min-h-12 flex-col items-center justify-center gap-0.5 rounded-md border bg-card text-2xl font-semibold leading-none transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-30 sm:aspect-auto sm:h-16",
               // Notes mode: a soft ring on every button telegraphs
               // the mode.
               mode === "notes" && "ring-2 ring-primary/40",

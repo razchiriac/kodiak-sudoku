@@ -96,6 +96,13 @@ type GameState = {
     // false so existing players don't see a surprise layout change.
     // Gated behind the compact-controls feature flag at render time.
     compactControls: boolean;
+    // RAZ-26: swap the global UI font to OpenDyslexic. Default off so
+    // existing players see no visual change; the toggle is opt-in and
+    // only surfaced when the feature flag is on. The @font-face rule
+    // is always registered in globals.css but the actual font file is
+    // only downloaded when an element using the family renders, so
+    // the no-op cost for users who never flip the toggle is zero.
+    dyslexiaFont: boolean;
   };
   // Feature-flag mirror. The *source* of truth is the server
   // (lib/flags.ts → Edge Config), which PlayClient evaluates server-
@@ -115,6 +122,12 @@ type GameState = {
     // user who turned compact ON can't be left with a broken layout if
     // we flip the flag off via Edge Config — it falls back to default.
     compactControls: boolean;
+    // RAZ-26: when on, the settings dialog renders a "Dyslexia-friendly
+    // font" toggle AND the DyslexiaFontLoader client component swaps
+    // the UI font when the user opts in. Flag off means the toggle is
+    // hidden and the default Geist font is used regardless of the
+    // persisted per-user setting.
+    dyslexiaFont: boolean;
   };
   // RAZ-16: the digit most recently placed by a value-mode `inputDigit`
   // call, or null if no value has been placed yet (or the feature flag
@@ -205,11 +218,15 @@ const INITIAL: GameState = {
     // RAZ-23: default off so we don't surprise existing players with a
     // smaller pad; the setting is fully opt-in via the settings dialog.
     compactControls: false,
+    // RAZ-26: default off so the default Geist font stays the stock
+    // experience. Dyslexia-readers opt in once via the settings dialog.
+    dyslexiaFont: false,
   },
   featureFlags: {
     haptics: false,
     autoSwitchDigit: false,
     compactControls: false,
+    dyslexiaFont: false,
   },
   activeDigit: null,
 };

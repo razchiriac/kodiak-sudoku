@@ -2,6 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
+/* RAZ-26: Register OpenDyslexic as an available UI font. Importing the
+ * stylesheet only defines @font-face rules - the browser does NOT
+ * download the font file until an element actually renders with the
+ * family. That gives us "lazy load" for free: users who never enable
+ * the dyslexia-font setting pay zero bytes. We pull in the 400 + 700
+ * weights because our UI uses both regular and semi-bold weights. */
+@import "@fontsource/opendyslexic/400.css";
+@import "@fontsource/opendyslexic/700.css";
+
 /* Design tokens. We expose every theme color as a CSS variable so light/dark
  * theme switching is instant and we never need to recompile Tailwind.
  * The Sudoku-specific cell tokens live next to the shadcn ones to keep
@@ -81,6 +90,19 @@
       "rlig" 1,
       "calt" 1;
   }
+}
+
+/* RAZ-26: When the root <html> element carries `data-font="opendyslexic"`
+ * we override the font-family stack on every text surface so the swap
+ * is truly global. The sudoku grid digits still use tabular numerals
+ * via font-variant-numeric where applied, which OpenDyslexic supports.
+ * The class is toggled from the DyslexiaFontLoader client component
+ * based on both the feature flag AND the user setting. */
+html[data-font="opendyslexic"],
+html[data-font="opendyslexic"] body {
+  font-family:
+    "OpenDyslexic", var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", sans-serif;
 }
 
 /* Respect reduced-motion users. We set a hard cap on animation duration

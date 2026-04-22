@@ -100,4 +100,16 @@ export const FLAG_REGISTRY: readonly FlagSpec[] = [
       "Expose a settings toggle that forces a compact (h-14) 3x3 number pad on mobile so the board has more breathing room on ultra-tall phones.",
     linearId: "RAZ-23",
   },
+  {
+    // RAZ-26: OpenDyslexic font option. The flag controls whether the
+    // settings toggle is even rendered; the per-user setting controls
+    // whether the font is applied on a given device. Self-hosted via
+    // @fontsource/opendyslexic so there is no external CDN dependency.
+    key: "dyslexia-font",
+    envKey: "FLAG_DYSLEXIA_FONT",
+    defaultValue: true,
+    description:
+      "Expose a settings toggle that swaps the UI font to OpenDyslexic for readers who prefer it.",
+    linearId: "RAZ-26",
+  },
 ];

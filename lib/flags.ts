@@ -134,3 +134,14 @@ export const shareResult = declareFlag("share-result");
 // from Edge Config in case the compact layout misbehaves on some
 // device class.
 export const compactControls = declareFlag("compact-controls");
+
+// RAZ-26 - Dyslexia-friendly font option. When on, the settings dialog
+// exposes a toggle that swaps the global UI font to OpenDyslexic. The
+// font is self-hosted via @fontsource/opendyslexic so it's served from
+// the same origin as the app (no CDN dependency, no extra CORS setup).
+// The @font-face rule is always registered in globals.css so turning
+// the setting on and off is instant - the browser only downloads the
+// font file the first time an element that uses the family renders.
+// Gate: flag hides the toggle entirely if off; if flag is on but the
+// user never flips the toggle, there is zero perceptible cost.
+export const dyslexiaFont = declareFlag("dyslexia-font");

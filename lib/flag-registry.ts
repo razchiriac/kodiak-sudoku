@@ -171,6 +171,22 @@ export const FLAG_REGISTRY: readonly FlagSpec[] = [
     linearId: "RAZ-25",
   },
   {
+    // RAZ-6: Per-difficulty all-time leaderboards. Exposes a new family
+    // of routes at /leaderboard/difficulty/[bucket] ranked by best
+    // single time per user within that difficulty bucket, scoped to
+    // `mode='random'` (daily solves have their own boards). Each board
+    // supports a 7-day window in addition to all-time, and the same
+    // pure/all hints split the daily board uses. Flag gates both the
+    // tab on /leaderboard and the difficulty routes, so a soft rollback
+    // hides the feature entirely.
+    key: "difficulty-leaderboards",
+    envKey: "FLAG_DIFFICULTY_LEADERBOARDS",
+    defaultValue: true,
+    description:
+      "Expose per-difficulty leaderboards (/leaderboard/difficulty/[bucket]) with all-time and last-7-days windows, pure/all tabs.",
+    linearId: "RAZ-6",
+  },
+  {
     // RAZ-15: Per-cell mistake indicator. When the user opts in and the
     // client has the puzzle solution (random non-daily puzzles only),
     // any cell whose placed value doesn't match the solution tints red

@@ -5,7 +5,7 @@ import {
   getDailyLeaderboard,
   getDailyPuzzle,
 } from "@/lib/db/queries";
-import { dailyArchive } from "@/lib/flags";
+import { dailyArchive, difficultyLeaderboards } from "@/lib/flags";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatTime, DIFFICULTY_LABEL } from "@/lib/utils";
 
@@ -53,6 +53,12 @@ export default async function LeaderboardPage({
   const adjacent = archiveEnabled
     ? await getAdjacentDailyDates(date)
     : { prev: null, next: null };
+
+  // RAZ-6: expose the per-difficulty boards from the daily page as a
+  // small nav strip. Fetched in parallel with the leaderboard rows via
+  // Promise.all above would be nicer; kept simple here because the
+  // flag resolve is cached.
+  const diffLeaderboardsEnabled = await difficultyLeaderboards();
 
   const isToday = date === today;
 
@@ -128,6 +134,33 @@ export default async function LeaderboardPage({
             Play this puzzle →
           </Link>
         </p>
+      ) : null}
+
+      {/* RAZ-6: cross-links to the per-difficulty leaderboards. Placed
+          above the daily board because expert grinders who come here
+          looking for an all-time board shouldn't have to scroll past
+          today's rankings to find them. Flag off = strip hidden and
+          the daily page looks exactly as it did pre-RAZ-6. */}
+      {diffLeaderboardsEnabled ? (
+        <section
+          className="mb-6 rounded-lg border bg-card p-4"
+          aria-label="All-time leaderboards"
+        >
+          <h2 className="mb-2 text-sm font-semibold text-muted-foreground">
+            All-time leaderboards
+          </h2>
+          <div className="flex flex-wrap gap-2 text-sm">
+            {[1, 2, 3, 4].map((b) => (
+              <Link
+                key={b}
+                href={`/leaderboard/difficulty/${b}`}
+                className="rounded-md border px-3 py-1 hover:bg-accent hover:text-accent-foreground"
+              >
+                {DIFFICULTY_LABEL[b]}
+              </Link>
+            ))}
+          </div>
+        </section>
       ) : null}
 
       <Tabs defaultValue="pure">

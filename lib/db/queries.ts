@@ -160,6 +160,74 @@ export async function getUserStats(userId: string) {
   return rows;
 }
 
+// RAZ-6: All-time / rolling-7-days leaderboard for a given difficulty
+// bucket. One row per user — we aggregate to their *best* single time
+// in the window, tie-broken by earliest completion. Scoped to
+// `mode='random'` so this table never double-counts daily puzzles
+// (the daily board owns those).
+//
+// `window` semantics:
+//   - 'all'  → no time filter.
+//   - 'week' → last 7 days rolling (now - 7 days < completed_at). We
+//              use a rolling window rather than ISO week boundaries
+//              so a solve on Tuesday is still visible on the
+//              following Monday; matches "hot right now" intent.
+//
+// `pure` excludes any completion that used a hint — same meaning as
+// the daily board. Kept as a separate param (not a window option) so
+// we can mix {week, all} × {pure, all} in the UI tabs cleanly.
+export async function getDifficultyLeaderboard(
+  bucket: number,
+  opts: { window?: "all" | "week"; pure?: boolean; limit?: number } = {},
+) {
+  const limit = opts.limit ?? 50;
+  const window = opts.window ?? "all";
+
+  // Build the WHERE clause from composable pieces. Always scoped to
+  // random mode + the bucket. `pure` and `window` add optional
+  // predicates.
+  const conditions = [
+    eq(completedGames.mode, "random"),
+    eq(completedGames.difficultyBucket, bucket),
+  ];
+  if (opts.pure) conditions.push(eq(completedGames.hintsUsed, 0));
+  if (window === "week") {
+    // Rolling 7 days. `now() - interval '7 days'` is computed once per
+    // query in Postgres so we don't have to pass a timestamp from Node.
+    conditions.push(
+      sql`${completedGames.completedAt} >= now() - interval '7 days'`,
+    );
+  }
+
+  // `min(time_ms)` gives the user's PB in the window; tie-break on
+  // `min(completed_at)` so the earlier PB ranks higher when two
+  // players share the same time (rare, but deterministic matters).
+  const rows = await db
+    .select({
+      userId: completedGames.userId,
+      bestTimeMs: sql<number>`min(${completedGames.timeMs})::int`,
+      firstAchievedAt: sql<Date>`min(${completedGames.completedAt})`,
+      solveCount: sql<number>`count(*)::int`,
+      username: profiles.username,
+      displayName: profiles.displayName,
+    })
+    .from(completedGames)
+    .leftJoin(profiles, eq(profiles.id, completedGames.userId))
+    .where(and(...conditions))
+    .groupBy(
+      completedGames.userId,
+      profiles.username,
+      profiles.displayName,
+    )
+    .orderBy(
+      sql`min(${completedGames.timeMs}) asc`,
+      sql`min(${completedGames.completedAt}) asc`,
+    )
+    .limit(limit);
+
+  return rows;
+}
+
 // Top N rows on the daily leaderboard for a given date. Optional `pure`
 // flag excludes any completion that used a hint.
 export async function getDailyLeaderboard(date: string, opts: { pure?: boolean; limit?: number } = {}) {

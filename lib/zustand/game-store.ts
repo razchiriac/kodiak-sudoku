@@ -37,6 +37,14 @@ import { decodeNotes, encodeNotes } from "@/lib/sudoku/notes-codec";
 
 export type GameMode = "value" | "notes";
 
+// RAZ-25: supported sudoku-cell color palettes. We use a union of
+// string literals rather than an enum (project rule: avoid enums) so
+// the value round-trips through JSON for persistence without any
+// serialization glue. Keep this list in sync with the CSS variable
+// sets declared in globals.css under `html[data-palette=...]`.
+export const PALETTES = ["default", "okabe-ito", "high-contrast"] as const;
+export type Palette = (typeof PALETTES)[number];
+
 export type GameMeta = {
   puzzleId: number;
   difficultyBucket: number;
@@ -118,6 +126,16 @@ type GameState = {
     // populated (random puzzles); daily puzzles keep the solution
     // server-side so the flag has no visible effect there.
     showMistakes: boolean;
+    // RAZ-25: which color palette to use for the sudoku cells.
+    // "default" keeps the shipped blue/red tokens. "okabe-ito" swaps
+    // to the Okabe-Ito colorblind-safe palette (sky-blue / yellow /
+    // bluish-green / vermillion) so peer / same-digit / conflict
+    // highlights stay distinguishable under deuteranopia, protanopia,
+    // and tritanopia. "high-contrast" uses strongly-saturated hues so
+    // the grid is readable in bright sunlight or for low-vision users.
+    // The selected value is applied via an attribute on <html>; see
+    // globals.css for the overrides.
+    palette: Palette;
   };
   // Feature-flag mirror. The *source* of truth is the server
   // (lib/flags.ts → Edge Config), which PlayClient evaluates server-
@@ -163,6 +181,12 @@ type GameState = {
     // clean kill switch if the derived-mistake computation ever
     // misbehaves.
     showMistakes: boolean;
+    // RAZ-25: when on, the settings dialog renders the color palette
+    // picker. The palette loader client component ALSO gates on this
+    // flag before writing the `data-palette` attribute onto <html>,
+    // so flipping the flag off forces everyone back to the default
+    // palette regardless of their persisted choice.
+    colorPalette: boolean;
   };
   // RAZ-16: the digit most recently placed by a value-mode `inputDigit`
   // call, or null if no value has been placed yet (or the feature flag
@@ -273,6 +297,10 @@ const INITIAL: GameState = {
     // Sudoku one where the player hunts their own errors. Opting in
     // via the settings dialog turns on the red tint for wrong values.
     showMistakes: false,
+    // RAZ-25: default to the shipped palette. Users opt into a
+    // colorblind-safe or high-contrast palette explicitly. Persisted
+    // so the choice survives reloads.
+    palette: "default",
   },
   featureFlags: {
     haptics: false,
@@ -282,6 +310,7 @@ const INITIAL: GameState = {
     longPressNote: false,
     jumpOnPlace: false,
     showMistakes: false,
+    colorPalette: false,
   },
   activeDigit: null,
 };

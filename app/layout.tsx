@@ -6,7 +6,7 @@ import { Providers } from "./providers";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { Analytics } from "@vercel/analytics/next";
-import { dyslexiaFont } from "@/lib/flags";
+import { colorPalette, dyslexiaFont } from "@/lib/flags";
 
 export const metadata: Metadata = {
   title: { default: "Sudoku", template: "%s · Sudoku" },
@@ -46,6 +46,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // <Providers> which mirrors it into the zustand store and toggles
   // the html[data-font] attribute when the user opts in.
   const dyslexiaFontFlag = await dyslexiaFont();
+  // RAZ-25: Same pattern for the colorblind-safe / high-contrast
+  // palette picker. Resolved at the root so any page (home, play,
+  // leaderboard) reflects a palette change immediately on reload.
+  const colorPaletteFlag = await colorPalette();
 
   return (
     // suppressHydrationWarning is required by next-themes; the html.class
@@ -58,7 +62,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       className={`${GeistSans.variable} ${GeistMono.variable}`}
     >
       <body className="min-h-dvh bg-background font-sans text-foreground antialiased">
-        <Providers dyslexiaFontFlag={dyslexiaFontFlag}>
+        <Providers
+          dyslexiaFontFlag={dyslexiaFontFlag}
+          colorPaletteFlag={colorPaletteFlag}
+        >
           <div className="flex min-h-dvh flex-col">
             <Header />
             <main className="flex-1">{children}</main>

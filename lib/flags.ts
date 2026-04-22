@@ -74,3 +74,14 @@ export const pbRibbon = declareFlag("pb-ribbon");
 // (settings.haptics); the flag controls whether the feature exists at
 // all. Feature-detected on the client so desktop is a no-op.
 export const haptics = declareFlag("haptics");
+
+// RAZ-27 - Server-side solve-time sanity check.
+// When on, `submitCompletionAction` rejects any completion whose client
+// `elapsedMs` exceeds `(now - saved_games.started_at) * 1.1 + 2s slack`.
+// Defends against a client that inflates its timer (e.g. a buggy clock
+// or a trivial spoof of the server action). The 10% + 2s slack absorbs
+// normal clock skew between client and server. When a user has no
+// saved_games row (unusually fast blitz solve that finished before the
+// first autosave), the check is a no-op and the per-difficulty floor
+// in TIME_FLOOR_MS still guards the leaderboard.
+export const solveTimeSanity = declareFlag("solve-time-sanity");

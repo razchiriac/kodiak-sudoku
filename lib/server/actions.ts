@@ -11,6 +11,7 @@ import { getPuzzleById } from "@/lib/db/queries";
 import { findConflicts, isCorrect, isFilled } from "@/lib/sudoku/validate";
 import { parseBoard } from "@/lib/sudoku/board";
 import { nextHint } from "@/lib/sudoku/solver";
+import { solveTimeSanity } from "@/lib/flags";
 
 // All mutations go through Server Actions defined in this file. Every
 // action validates inputs with Zod, derives the user from the cookie
@@ -99,6 +100,15 @@ const TIME_FLOOR_MS: Record<number, number> = {
   4: 120_000, // Expert: 2m
 };
 
+// RAZ-27: how far the client-reported `elapsedMs` may exceed the
+// wall-clock window `(now - saved_games.started_at)` before we reject
+// the completion as tampered. 10% multiplicative slack + 2s additive
+// slack. The multiplicative slack absorbs normal client/server clock
+// drift and monotonic-clock rounding; the additive floor absorbs
+// network latency on the submit round trip.
+const SOLVE_TIME_MULT_SLACK = 1.1;
+const SOLVE_TIME_ABS_SLACK_MS = 2_000;
+
 // Submit a completion. The server is the SOLE source of truth for "did
 // the user actually solve it". We compare the submitted board against the
 // stored solution before recording anything.
@@ -120,6 +130,28 @@ export async function submitCompletionAction(raw: SubmitInput) {
   // Time floor sanity check.
   if (input.elapsedMs < TIME_FLOOR_MS[puzzle.difficultyBucket]) {
     return { ok: false as const, error: "time_floor" };
+  }
+
+  // RAZ-27: cross-check the client timer against server wall-clock
+  // since the game's `started_at` (set by saved_games default on first
+  // autosave). If the flag is off we skip the lookup entirely. If the
+  // user has no saved_games row at all, this is a blitz solve that
+  // finished before the first autosave fired; the per-difficulty floor
+  // above is still protecting the leaderboard, so we don't block.
+  if (await solveTimeSanity()) {
+    const savedRow = await db
+      .select({ startedAt: savedGames.startedAt })
+      .from(savedGames)
+      .where(and(eq(savedGames.userId, user.id), eq(savedGames.puzzleId, input.puzzleId)))
+      .limit(1);
+    const startedAt = savedRow[0]?.startedAt;
+    if (startedAt) {
+      const wallClockMs = Date.now() - startedAt.getTime();
+      const maxAllowedMs = wallClockMs * SOLVE_TIME_MULT_SLACK + SOLVE_TIME_ABS_SLACK_MS;
+      if (input.elapsedMs > maxAllowedMs) {
+        return { ok: false as const, error: "solve_time_mismatch" };
+      }
+    }
   }
 
   // For daily, verify the daily_date matches what we have on file (so

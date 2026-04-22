@@ -10,6 +10,7 @@ import {
   digitCounts,
   emptyNotes,
   parseBoard,
+  peers,
   prunePeerNotes,
   toggleNote,
 } from "@/lib/sudoku/board";
@@ -103,6 +104,12 @@ type GameState = {
     // only downloaded when an element using the family renders, so
     // the no-op cost for users who never flip the toggle is zero.
     dyslexiaFont: boolean;
+    // RAZ-17: after a value placement, move the selection to the next
+    // empty peer (first empty cell in index order among the 20 peers
+    // of the placed cell). Default off so the caret never moves on its
+    // own for players who haven't opted in. Gated behind the
+    // jump-on-place feature flag at runtime.
+    jumpOnPlace: boolean;
   };
   // Feature-flag mirror. The *source* of truth is the server
   // (lib/flags.ts → Edge Config), which PlayClient evaluates server-
@@ -135,6 +142,11 @@ type GameState = {
     // the gesture conflicts with something we didn't anticipate on a
     // specific device.
     longPressNote: boolean;
+    // RAZ-17: when on, inputDigit jumps the selection to the first
+    // empty peer after placing a value. Default false so existing
+    // players aren't surprised by a caret that moves on its own; a
+    // power user opts in from the settings dialog.
+    jumpOnPlace: boolean;
   };
   // RAZ-16: the digit most recently placed by a value-mode `inputDigit`
   // call, or null if no value has been placed yet (or the feature flag
@@ -237,6 +249,10 @@ const INITIAL: GameState = {
     // RAZ-26: default off so the default Geist font stays the stock
     // experience. Dyslexia-readers opt in once via the settings dialog.
     dyslexiaFont: false,
+    // RAZ-17: default off so existing players see no caret movement
+    // change. Opt in via the settings dialog. The feature only runs
+    // when both the user setting AND the feature flag are true.
+    jumpOnPlace: false,
   },
   featureFlags: {
     haptics: false,
@@ -244,6 +260,7 @@ const INITIAL: GameState = {
     compactControls: false,
     dyslexiaFont: false,
     longPressNote: false,
+    jumpOnPlace: false,
   },
   activeDigit: null,
 };
@@ -262,6 +279,27 @@ function nextActiveDigit(placed: number, counts: number[]): number | null {
   for (let offset = 1; offset <= 9; offset++) {
     const d = ((placed - 1 + offset) % 9) + 1;
     if (counts[d] < 9) return d;
+  }
+  return null;
+}
+
+// RAZ-17 helper. Given the cell we just placed into, the post-placement
+// board, and the fixed mask, return the index of the first empty peer
+// (same row / col / box) that isn't a clue — or null if every peer is
+// either filled or fixed. We iterate in stable index order (0..80) so
+// repeated placements scan the grid in a predictable pattern and the
+// behavior is easy to reason about. The peers() helper already excludes
+// the placed cell itself, so no self-check is needed.
+function nextEmptyPeer(
+  placedIndex: number,
+  board: Uint8Array,
+  fixed: Uint8Array,
+): number | null {
+  const candidates = peers(placedIndex);
+  for (const p of candidates) {
+    if (fixed[p]) continue;
+    if (board[p] !== 0) continue;
+    return p;
   }
   return null;
 }
@@ -475,12 +513,31 @@ export const useGameStore = create<GameState & GameActions>()(
           // so we can keep the reference. The store never mutates it.
           nextNotes: notes,
         };
+        // RAZ-17: jump-on-place. If the user opted into this AND the
+        // server flag allows it, advance the selection to the first
+        // empty, non-fixed peer (scanning the 20 peers in their stable
+        // index order). We skip the jump on a conflict placement — the
+        // caret moving away from a mistake would be disorienting; the
+        // player probably wants to stay on the bad cell to fix it.
+        // We also skip when the placement is the winning move, because
+        // a selection move right as the completion modal opens is
+        // visually noisy.
+        const shouldJump =
+          s.featureFlags.jumpOnPlace &&
+          s.settings.jumpOnPlace === true &&
+          !isConflict &&
+          !isComplete(board);
+        const nextSelection = shouldJump
+          ? nextEmptyPeer(idx, board, s.fixed) ?? s.selection
+          : s.selection;
+
         const next = {
           ...s,
           board,
           notes,
           mistakes,
           activeDigit,
+          selection: nextSelection,
           history: pushEntry(s.history, entry),
         };
         set({

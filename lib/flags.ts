@@ -135,6 +135,15 @@ export const shareResult = declareFlag("share-result");
 // device class.
 export const compactControls = declareFlag("compact-controls");
 
+// RAZ-17 - Jump-on-place. When on, the settings dialog exposes a
+// "Jump to next empty peer" toggle; if the user enables it, inputDigit
+// updates `selection` to the first empty peer (row/col/box, in index
+// order) of the cell it just filled. Speeds keyboard solves by
+// matching the natural "where else does this digit go?" scan.
+// No-op on conflict placements (we don't want to drag the caret
+// somewhere else if the user was correcting a mistake).
+export const jumpOnPlace = declareFlag("jump-on-place");
+
 // RAZ-20 - Long-press a number-pad button to toggle a note. The pad
 // button starts a 400ms timer on pointerdown; if it elapses before
 // pointerup, the digit is toggled as a note on the currently-selected

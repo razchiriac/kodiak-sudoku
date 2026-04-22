@@ -97,6 +97,66 @@ describe("game-store: peer-note pruning on value placement", () => {
     expect(useGameStore.getState().board[target]).toBe(0);
   });
 
+  it("RAZ-17: jump-on-place advances selection to next empty peer when flag+setting are on", () => {
+    // Simulate the server having mirrored the feature flag ON and the
+    // user having opted into the setting. A placement on `target` with
+    // a LEGAL, non-winning value should leave `selection` pointing at
+    // the first empty, non-fixed peer of `target` (lowest index in
+    // peers(target) that's still empty).
+    const target = 2;
+    const { selectCell, setSetting, setFeatureFlag, inputDigit, fixed, board } =
+      useGameStore.getState();
+
+    // Pick a digit that's legal at `target` for this puzzle. Row 0 of
+    // PUZZLE is "530070000", so column 2 is empty and 1 is legal
+    // (values present in row are 5, 3, 7).
+    const legalDigit = 1;
+
+    setFeatureFlag("jumpOnPlace", true);
+    setSetting("jumpOnPlace", true);
+    selectCell(target);
+    inputDigit(legalDigit);
+
+    const after = useGameStore.getState();
+    expect(after.board[target]).toBe(legalDigit);
+    expect(after.selection).not.toBe(target);
+    // Whatever cell we landed on must itself be empty (and not a clue).
+    expect(after.selection).not.toBeNull();
+    expect(fixed[after.selection!]).toBe(0);
+    expect(board[after.selection!]).toBe(0);
+  });
+
+  it("RAZ-17: jump-on-place is a no-op when the setting is off", () => {
+    // Feature flag on but the per-user setting is off → selection must
+    // stay on `target` after placement.
+    const target = 2;
+    const { selectCell, setSetting, setFeatureFlag, inputDigit } =
+      useGameStore.getState();
+
+    setFeatureFlag("jumpOnPlace", true);
+    setSetting("jumpOnPlace", false);
+    selectCell(target);
+    inputDigit(1);
+
+    expect(useGameStore.getState().selection).toBe(target);
+  });
+
+  it("RAZ-17: jump-on-place is a no-op when the flag is off", () => {
+    // Belt-and-braces: user opted in but the server flag went off.
+    // Selection must stay put so we never ship a setting whose behavior
+    // isn't kill-switchable from Edge Config.
+    const target = 2;
+    const { selectCell, setSetting, setFeatureFlag, inputDigit } =
+      useGameStore.getState();
+
+    setFeatureFlag("jumpOnPlace", false);
+    setSetting("jumpOnPlace", true);
+    selectCell(target);
+    inputDigit(1);
+
+    expect(useGameStore.getState().selection).toBe(target);
+  });
+
   it("toggleNoteOnSelection toggles a note while staying in value mode", () => {
     // RAZ-20: long-press path. We simulate the gesture by leaving the
     // store in value mode (the default after startGame) and calling

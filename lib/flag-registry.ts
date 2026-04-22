@@ -101,6 +101,21 @@ export const FLAG_REGISTRY: readonly FlagSpec[] = [
     linearId: "RAZ-23",
   },
   {
+    // RAZ-17: after a value placement, jump selection to the next
+    // empty peer (same row / col / box) so the player can keep
+    // placing the same digit without manually moving the caret. The
+    // flag controls whether the setting row is rendered at all; the
+    // actual behavior is opt-in via the per-user setting. Default the
+    // flag ON so CI previews exercise the branch; default the user
+    // setting OFF so existing players see no surprise jumps.
+    key: "jump-on-place",
+    envKey: "FLAG_JUMP_ON_PLACE",
+    defaultValue: true,
+    description:
+      "Expose a settings toggle that jumps the selection to the next empty row/col/box peer after placing a value.",
+    linearId: "RAZ-17",
+  },
+  {
     // RAZ-20: long-press a number-pad button to toggle that digit as a
     // note on the selected cell without leaving value mode. Matches the
     // convention used by most mobile sudoku apps. Additive on desktop

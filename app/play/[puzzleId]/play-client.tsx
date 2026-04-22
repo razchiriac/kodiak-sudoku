@@ -49,6 +49,7 @@ export function PlayClient({
   shareEnabled = false,
   compactControlsEnabled = false,
   longPressNoteEnabled = false,
+  jumpOnPlaceEnabled = false,
   isArchive = false,
 }: {
   puzzle: PuzzleProp;
@@ -87,6 +88,11 @@ export function PlayClient({
   // the store so <NumberPad> can conditionally arm its 400ms long-press
   // timer. Off = the feature is a no-op; buttons act as plain taps.
   longPressNoteEnabled?: boolean;
+  // RAZ-17: server-resolved value of `jump-on-place`. Mirrored into the
+  // store so inputDigit can decide whether to advance the selection to
+  // the next empty peer after a placement. Off = selection never moves
+  // automatically regardless of the persisted user setting.
+  jumpOnPlaceEnabled?: boolean;
 }) {
   const startGame = useGameStore((s) => s.startGame);
   const resumeFromSnapshot = useGameStore((s) => s.resumeFromSnapshot);
@@ -209,6 +215,12 @@ export function PlayClient({
   useEffect(() => {
     setFeatureFlag("longPressNote", longPressNoteEnabled);
   }, [longPressNoteEnabled, setFeatureFlag]);
+
+  // RAZ-17 jump-on-place mirror. inputDigit reads this alongside the
+  // per-user setting when deciding whether to advance the selection.
+  useEffect(() => {
+    setFeatureFlag("jumpOnPlace", jumpOnPlaceEnabled);
+  }, [jumpOnPlaceEnabled, setFeatureFlag]);
 
   // Autosave: every time the relevant slice of state changes, debounce a
   // server action call. Only signed-in users autosave to the server;

@@ -11,6 +11,7 @@ import {
   autoSwitchDigit,
   compactControls,
   haptics,
+  jumpOnPlace,
   longPressNote,
   pbRibbon,
   shareResult,
@@ -84,6 +85,8 @@ export default async function PuzzlePage({
   // RAZ-20 / long-press-note flag: same pattern. Resolved once here
   // so the client only has to mirror it into the zustand store.
   const longPressNoteEnabled = await longPressNote();
+  // RAZ-17 / jump-on-place flag.
+  const jumpOnPlaceEnabled = await jumpOnPlace();
 
   return (
     <PlayClient
@@ -115,6 +118,7 @@ export default async function PuzzlePage({
       shareEnabled={shareEnabled}
       compactControlsEnabled={compactControlsEnabled}
       longPressNoteEnabled={longPressNoteEnabled}
+      jumpOnPlaceEnabled={jumpOnPlaceEnabled}
     />
   );
 }

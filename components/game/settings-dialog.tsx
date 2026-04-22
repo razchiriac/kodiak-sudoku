@@ -70,6 +70,12 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   // DyslexiaFontLoader effect reading the same store keys.
   const dyslexiaFlag = useGameStore((s) => s.featureFlags.dyslexiaFont);
   const dyslexiaOn = useGameStore((s) => s.settings.dyslexiaFont === true);
+  // RAZ-17: jump-on-place toggle. Feature flag gates whether the row is
+  // even shown; the actual caret jump in inputDigit also gates on the
+  // flag so turning it off in Edge Config reverts to the previous
+  // "stay in place" behavior without a persist migration.
+  const jumpFlag = useGameStore((s) => s.featureFlags.jumpOnPlace);
+  const jumpOn = useGameStore((s) => s.settings.jumpOnPlace === true);
   const setSetting = useGameStore((s) => s.setSetting);
 
   const handleTestHaptic = () => {
@@ -192,9 +198,35 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             </label>
           )}
 
+          {/* RAZ-17 jump-on-place toggle. When on, placing a value
+              moves the selection to the first empty peer (row/col/box)
+              so you can chain same-digit placements without mousing
+              around. Off by default to keep the default caret behavior
+              stable for existing players. */}
+          {jumpFlag && (
+            <label className="flex items-start justify-between gap-4 text-sm">
+              <span className="flex flex-col">
+                <span className="font-medium text-foreground">
+                  Jump to next empty peer
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  After placing a digit, move the selection to the next
+                  empty cell in the same row, column, or box.
+                </span>
+              </span>
+              <input
+                type="checkbox"
+                checked={jumpOn}
+                onChange={(e) => setSetting("jumpOnPlace", e.target.checked)}
+                className="mt-1 h-4 w-4 accent-foreground"
+                aria-label="Jump to next empty peer after placing a value"
+              />
+            </label>
+          )}
+
           {/* Empty state shown only when every flag is off. Keeps the
               dialog from looking broken. */}
-          {!hapticsFlag && !compactFlag && !dyslexiaFlag && (
+          {!hapticsFlag && !compactFlag && !dyslexiaFlag && !jumpFlag && (
             <p className="text-sm text-muted-foreground">
               No user-configurable options yet.
             </p>

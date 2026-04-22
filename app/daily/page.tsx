@@ -12,6 +12,7 @@ import {
   autoSwitchDigit,
   compactControls,
   dailyArchive,
+  jumpOnPlace,
   longPressNote,
   haptics,
   pbRibbon,
@@ -77,6 +78,8 @@ export default async function DailyPage() {
   const compactControlsEnabled = await compactControls();
   // RAZ-20 / long-press-note flag.
   const longPressNoteEnabled = await longPressNote();
+  // RAZ-17 / jump-on-place flag.
+  const jumpOnPlaceEnabled = await jumpOnPlace();
 
   // RAZ-5 / daily-archive flag. When on, surface a "Previous day" link
   // above the board so players can reach the archive from anywhere.
@@ -123,6 +126,7 @@ export default async function DailyPage() {
         shareEnabled={shareEnabled}
         compactControlsEnabled={compactControlsEnabled}
         longPressNoteEnabled={longPressNoteEnabled}
+        jumpOnPlaceEnabled={jumpOnPlaceEnabled}
       />
     </>
   );

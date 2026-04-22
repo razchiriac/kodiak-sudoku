@@ -34,6 +34,12 @@ export function SudokuGrid() {
     <div
       role="grid"
       aria-label="Sudoku puzzle"
+      // RAZ-24: aria-rowcount/colcount anchor the per-cell rowindex and
+      // colindex hints for the screen reader grid pattern. Without
+      // these, some AT compute the count from the DOM and can get
+      // confused by the flat (no row wrappers) layout.
+      aria-rowcount={9}
+      aria-colcount={9}
       // Width budget: on mobile we drop the old 90vw cap and let the
       // grid fill the page wrapper (which is `px-2`), so a 390px
       // viewport gets a ~374px board with no wasted gutter.

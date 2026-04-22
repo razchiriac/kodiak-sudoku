@@ -43,6 +43,13 @@ function CellInner({
 }: CellProps) {
   const row = Math.floor(index / 9);
   const col = index % 9;
+  // RAZ-24: screen readers that implement the grid pattern expect
+  // 1-indexed row/col hints on every gridcell so the virtual cursor
+  // announces position (e.g. "row 3, column 5") as the user navigates.
+  // Without these, VoiceOver in particular falls back to linear
+  // reading which is useless on a 9x9 board.
+  const rowIndex = row + 1;
+  const colIndex = col + 1;
 
   // Background priority is conflict > selected > sameDigit > peer > base.
   // The order matters: a cell can be both selected and conflicting, and
@@ -63,9 +70,22 @@ function CellInner({
     <button
       type="button"
       role="gridcell"
-      aria-label={`row ${row + 1}, column ${col + 1}, ${
+      aria-rowindex={rowIndex}
+      aria-colindex={colIndex}
+      // RAZ-24: aria-selected mirrors the visual "this is the active
+      // cell" state so screen readers can announce the selection when
+      // it changes (e.g. arrow-key navigation) without relying on the
+      // label alone. aria-readonly signals that clue cells can't be
+      // edited — saves the user a bump-into-wall attempt.
+      aria-selected={isSelected}
+      aria-readonly={isFixed || undefined}
+      // aria-invalid telegraphs the current conflict state to the
+      // screen reader so "cell is currently conflicting" shows up as a
+      // standard error signal rather than baked into the label text.
+      aria-invalid={isConflict || undefined}
+      aria-label={`row ${rowIndex}, column ${colIndex}, ${
         value > 0 ? `value ${value}${isFixed ? " (clue)" : ""}` : "empty"
-      }`}
+      }${isConflict ? ", conflict" : ""}`}
       tabIndex={-1}
       onMouseDown={(e) => {
         e.preventDefault();

@@ -9,6 +9,7 @@ import { ControlPanel } from "@/components/game/control-panel";
 import { Timer } from "@/components/game/timer";
 import { KeyboardListener } from "@/components/game/keyboard-listener";
 import { VisibilityListener } from "@/components/game/visibility-listener";
+import { LiveRegion } from "@/components/game/live-region";
 import { CompletionModal } from "@/components/game/completion-modal";
 import { ShortcutsOverlay } from "@/components/game/shortcuts-overlay";
 import { SettingsDialog } from "@/components/game/settings-dialog";
@@ -308,6 +309,10 @@ export function PlayClient({
     <div className="mx-auto flex w-full max-w-screen-sm flex-col items-center gap-3 px-2 py-3 sm:container sm:gap-4 sm:py-10">
       <KeyboardListener onShortcuts={() => setShortcutsOpen(true)} />
       <VisibilityListener enabled={autoPauseEnabled} />
+      {/* RAZ-24: polite ARIA live region that announces mistake count
+          changes and conflict onset/resolution. Zero visible DOM; the
+          element reads as sr-only. Sighted users get no layout impact. */}
+      <LiveRegion />
       <div className="flex w-full max-w-[560px] items-center justify-between">
         <div className="flex flex-col text-sm text-muted-foreground">
           <span>

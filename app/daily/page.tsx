@@ -10,6 +10,7 @@ import {
 import {
   autoPause,
   autoSwitchDigit,
+  compactControls,
   dailyArchive,
   haptics,
   pbRibbon,
@@ -71,6 +72,9 @@ export default async function DailyPage() {
   // RAZ-11 / share-result flag.
   const shareEnabled = await shareResult();
 
+  // RAZ-23 / compact-controls flag.
+  const compactControlsEnabled = await compactControls();
+
   // RAZ-5 / daily-archive flag. When on, surface a "Previous day" link
   // above the board so players can reach the archive from anywhere.
   // `next` is always null on today's page because we never advertise
@@ -114,6 +118,7 @@ export default async function DailyPage() {
         autoSwitchDigitEnabled={autoSwitchDigitEnabled}
         autoPauseEnabled={autoPauseEnabled}
         shareEnabled={shareEnabled}
+        compactControlsEnabled={compactControlsEnabled}
       />
     </>
   );

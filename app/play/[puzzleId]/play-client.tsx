@@ -47,6 +47,7 @@ export function PlayClient({
   autoSwitchDigitEnabled,
   autoPauseEnabled,
   shareEnabled = false,
+  compactControlsEnabled = false,
   isArchive = false,
 }: {
   puzzle: PuzzleProp;
@@ -78,6 +79,9 @@ export function PlayClient({
   // RAZ-11: server-resolved value of `share-result`. Controls whether
   // the completion modal renders its Share button.
   shareEnabled?: boolean;
+  // RAZ-23: server-resolved value of `compact-controls`. Mirrored into
+  // the store so <NumberPad> and <SettingsDialog> can both gate on it.
+  compactControlsEnabled?: boolean;
 }) {
   const startGame = useGameStore((s) => s.startGame);
   const resumeFromSnapshot = useGameStore((s) => s.resumeFromSnapshot);
@@ -189,6 +193,11 @@ export function PlayClient({
   useEffect(() => {
     setFeatureFlag("autoSwitchDigit", autoSwitchDigitEnabled);
   }, [autoSwitchDigitEnabled, setFeatureFlag]);
+
+  // Same mirror pattern for RAZ-23 compact-controls.
+  useEffect(() => {
+    setFeatureFlag("compactControls", compactControlsEnabled);
+  }, [compactControlsEnabled, setFeatureFlag]);
 
   // Autosave: every time the relevant slice of state changes, debounce a
   // server action call. Only signed-in users autosave to the server;

@@ -9,6 +9,7 @@ import { getCurrentUser } from "@/lib/supabase/server";
 import {
   autoPause,
   autoSwitchDigit,
+  compactControls,
   haptics,
   pbRibbon,
   shareResult,
@@ -77,6 +78,9 @@ export default async function PuzzlePage({
   // completion modal which decides whether to render the Share button.
   const shareEnabled = await shareResult();
 
+  // RAZ-23 / compact-controls flag: same pattern.
+  const compactControlsEnabled = await compactControls();
+
   return (
     <PlayClient
       puzzle={{
@@ -105,6 +109,7 @@ export default async function PuzzlePage({
       autoSwitchDigitEnabled={autoSwitchDigitEnabled}
       autoPauseEnabled={autoPauseEnabled}
       shareEnabled={shareEnabled}
+      compactControlsEnabled={compactControlsEnabled}
     />
   );
 }

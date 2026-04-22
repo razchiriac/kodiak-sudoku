@@ -10,6 +10,7 @@ import {
 import {
   autoPause,
   autoSwitchDigit,
+  compactControls,
   dailyArchive,
   haptics,
   pbRibbon,
@@ -103,6 +104,7 @@ export default async function DailyArchivePage({
   const autoSwitchDigitEnabled = await autoSwitchDigit();
   const autoPauseEnabled = await autoPause();
   const shareEnabled = await shareResult();
+  const compactControlsEnabled = await compactControls();
   const adjacent = await getAdjacentDailyDates(date);
 
   return (
@@ -141,6 +143,7 @@ export default async function DailyArchivePage({
         autoSwitchDigitEnabled={autoSwitchDigitEnabled}
         autoPauseEnabled={autoPauseEnabled}
         shareEnabled={shareEnabled}
+        compactControlsEnabled={compactControlsEnabled}
         isArchive
       />
     </>

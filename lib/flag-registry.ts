@@ -92,4 +92,12 @@ export const FLAG_REGISTRY: readonly FlagSpec[] = [
       "Render a Share button in the completion modal (navigator.share + clipboard fallback) and emit dynamic OG images for completion links.",
     linearId: "RAZ-11",
   },
+  {
+    key: "compact-controls",
+    envKey: "FLAG_COMPACT_CONTROLS",
+    defaultValue: true,
+    description:
+      "Expose a settings toggle that forces a compact (h-14) 3x3 number pad on mobile so the board has more breathing room on ultra-tall phones.",
+    linearId: "RAZ-23",
+  },
 ];

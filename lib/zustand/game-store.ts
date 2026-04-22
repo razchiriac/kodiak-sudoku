@@ -90,6 +90,12 @@ type GameState = {
     // on so the PWA feels native out of the box; a player can still
     // mute it from the settings dialog.
     haptics: boolean;
+    // RAZ-23: compact controls. When true, the number pad uses a
+    // uniform h-14 instead of the default aspect-square on mobile, so
+    // the board gets more vertical room on ultra-tall phones. Default
+    // false so existing players don't see a surprise layout change.
+    // Gated behind the compact-controls feature flag at render time.
+    compactControls: boolean;
   };
   // Feature-flag mirror. The *source* of truth is the server
   // (lib/flags.ts → Edge Config), which PlayClient evaluates server-
@@ -104,6 +110,11 @@ type GameState = {
     // auto-advances it once the placed digit is fully on the board.
     // When off, `activeDigit` stays null and the pad renders as before.
     autoSwitchDigit: boolean;
+    // RAZ-23: when on, the settings dialog renders a "Compact controls"
+    // toggle. The layout change itself also gates on this flag so a
+    // user who turned compact ON can't be left with a broken layout if
+    // we flip the flag off via Edge Config — it falls back to default.
+    compactControls: boolean;
   };
   // RAZ-16: the digit most recently placed by a value-mode `inputDigit`
   // call, or null if no value has been placed yet (or the feature flag
@@ -191,10 +202,14 @@ const INITIAL: GameState = {
     // Haptics default ON because the whole feature is flag-gated anyway;
     // if the flag is off we never vibrate regardless of this bool.
     haptics: true,
+    // RAZ-23: default off so we don't surprise existing players with a
+    // smaller pad; the setting is fully opt-in via the settings dialog.
+    compactControls: false,
   },
   featureFlags: {
     haptics: false,
     autoSwitchDigit: false,
+    compactControls: false,
   },
   activeDigit: null,
 };

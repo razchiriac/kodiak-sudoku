@@ -61,6 +61,10 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   // a user who already has localStorage from before this release
   // doesn't accidentally get the toggle rendered as off on first paint.
   const hapticsOn = useGameStore((s) => s.settings.haptics !== false);
+  // RAZ-23: compact controls toggle. Only rendered when the flag is on;
+  // defaults to false so existing players see no layout change.
+  const compactFlag = useGameStore((s) => s.featureFlags.compactControls);
+  const compactOn = useGameStore((s) => s.settings.compactControls === true);
   const setSetting = useGameStore((s) => s.setSetting);
 
   const handleTestHaptic = () => {
@@ -134,10 +138,33 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             </div>
           )}
 
-          {/* Nothing else to configure yet — show a subtle empty state
-              so the dialog isn't awkwardly blank if the flag is off.
-              Once more settings land, this can be removed. */}
-          {!hapticsFlag && (
+          {/* RAZ-23 compact controls toggle. Same flag-gated pattern
+              as haptics: the row only appears when the feature flag
+              is on, so if we flip it off in Edge Config the setting
+              is hidden (and the number pad falls back to its default
+              layout regardless of the persisted user pref). */}
+          {compactFlag && (
+            <label className="flex items-start justify-between gap-4 text-sm">
+              <span className="flex flex-col">
+                <span className="font-medium text-foreground">Compact controls</span>
+                <span className="text-xs text-muted-foreground">
+                  Smaller number pad and buttons. Good for tall phones
+                  where the board feels cramped.
+                </span>
+              </span>
+              <input
+                type="checkbox"
+                checked={compactOn}
+                onChange={(e) => setSetting("compactControls", e.target.checked)}
+                className="mt-1 h-4 w-4 accent-foreground"
+                aria-label="Compact controls"
+              />
+            </label>
+          )}
+
+          {/* Empty state shown only when every flag is off. Keeps the
+              dialog from looking broken. */}
+          {!hapticsFlag && !compactFlag && (
             <p className="text-sm text-muted-foreground">
               No user-configurable options yet.
             </p>

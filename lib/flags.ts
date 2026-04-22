@@ -182,6 +182,15 @@ export const quickPlay = declareFlag("quick-play");
 // default palette even if they previously opted into another.
 export const colorPalette = declareFlag("color-palette");
 
+// RAZ-6 - Per-difficulty all-time leaderboards. When on, the
+// /leaderboard/difficulty/[bucket] routes are reachable and a link
+// cluster on /leaderboard surfaces them alongside the daily board.
+// Each difficulty page shows best single time per user within the
+// bucket (mode='random' only), with windows for all-time and the
+// trailing 7 days, and pure/all-hints tabs. Flag off = routes 404
+// and the cross-links disappear; daily board is untouched.
+export const difficultyLeaderboards = declareFlag("difficulty-leaderboards");
+
 // RAZ-15 - Per-cell mistake indicator. When on, the settings dialog
 // exposes a "Show mistakes" toggle; if the user enables it AND the
 // client has the puzzle solution (i.e. random non-daily puzzles where

@@ -141,6 +141,21 @@ export const FLAG_REGISTRY: readonly FlagSpec[] = [
     linearId: "RAZ-26",
   },
   {
+    // RAZ-34: Quick-play sub-2-min Easy mode. When on, /play/quick
+    // picks a random Easy puzzle and the completion modal offers a
+    // one-click "Next puzzle" CTA so players can chain solves. The
+    // weekly leaderboard at /leaderboard/quick ranks by completion
+    // count per ISO week (not single best time). Flag gates both the
+    // /play/quick entry and the /leaderboard/quick page so we can
+    // roll the mode back if the engagement hypothesis doesn't pan out.
+    key: "quick-play",
+    envKey: "FLAG_QUICK_PLAY",
+    defaultValue: true,
+    description:
+      "Expose /play/quick (auto-new-puzzle Easy mode) and /leaderboard/quick (weekly solve-count leaderboard).",
+    linearId: "RAZ-34",
+  },
+  {
     // RAZ-25: Colorblind-safe palette. Exposes a settings dropdown
     // with three options — default, Okabe-Ito (red/green-safe), and
     // high-contrast. The selected palette maps to the `data-palette`

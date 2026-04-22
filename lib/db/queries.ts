@@ -192,6 +192,58 @@ export async function getDailyLeaderboard(date: string, opts: { pure?: boolean; 
   return rows;
 }
 
+// RAZ-34: weekly Quick-play leaderboard. Counts completions of Easy
+// (difficulty_bucket = 1) random puzzles, grouped by user, for the
+// current ISO week boundaries. ISO weeks start on Monday and contain
+// whichever Thursday falls within them, so we use Postgres's
+// `date_trunc('week', ...)` which follows the same convention. Ties
+// broken by most-recent completion so a player who solved first today
+// still ranks above a player with the same count from yesterday.
+//
+// We deliberately aggregate from the existing `completed_games`
+// ledger rather than introducing a new table — quick-play is a
+// different social angle on the same underlying events. If we ever
+// need to distinguish quick-play completions from regular Easy solves
+// (e.g. to count only those that started from /play/quick), we can
+// add a tag column later without breaking this query's shape.
+export async function getQuickLeaderboardWeekly(
+  opts: { limit?: number } = {},
+) {
+  const limit = opts.limit ?? 50;
+  // `mode = 'random'` + `difficulty_bucket = 1` scope us to Easy
+  // random completions. We tie-break on `max(completed_at) desc` so
+  // someone with the same count but a more recent solve ranks higher.
+  const rows = await db
+    .select({
+      userId: completedGames.userId,
+      count: sql<number>`count(*)::int`,
+      lastCompletedAt: sql<Date>`max(${completedGames.completedAt})`,
+      bestTimeMs: sql<number>`min(${completedGames.timeMs})`,
+      username: profiles.username,
+      displayName: profiles.displayName,
+    })
+    .from(completedGames)
+    .leftJoin(profiles, eq(profiles.id, completedGames.userId))
+    .where(
+      and(
+        eq(completedGames.mode, "random"),
+        eq(completedGames.difficultyBucket, 1),
+        sql`${completedGames.completedAt} >= date_trunc('week', now())`,
+      ),
+    )
+    .groupBy(
+      completedGames.userId,
+      profiles.username,
+      profiles.displayName,
+    )
+    .orderBy(
+      sql`count(*) desc`,
+      sql`max(${completedGames.completedAt}) desc`,
+    )
+    .limit(limit);
+  return rows;
+}
+
 // Resolve a profile by username. Used by /profile/[username].
 export async function getProfileByUsername(username: string) {
   const rows = await db.select().from(profiles).where(eq(profiles.username, username)).limit(1);

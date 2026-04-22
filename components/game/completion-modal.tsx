@@ -28,6 +28,7 @@ export function CompletionModal({
   previousBestMs,
   shareEnabled = false,
   dailyDate,
+  isQuickPlay = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -47,6 +48,11 @@ export function CompletionModal({
   // The daily date for the finished solve (YYYY-MM-DD), forwarded so
   // the share URL can deep-link to /daily/<date>. Unused for random.
   dailyDate?: string;
+  // RAZ-34: true when this session was launched via /play/quick. We
+  // swap the modal's action buttons so the player can chain another
+  // Easy puzzle with a single tap and jump straight to the weekly
+  // quick-play leaderboard.
+  isQuickPlay?: boolean;
 }) {
   const elapsedMs = useGameStore((s) => s.elapsedMs);
   const mistakes = useGameStore((s) => s.mistakes);
@@ -175,7 +181,23 @@ export function CompletionModal({
               Share
             </Button>
           ) : null}
-          {meta.mode === "daily" ? (
+          {/* RAZ-34: in quick-play we override both the primary CTA
+              (loops back to /play/quick for a fresh random Easy) and
+              expose a dedicated link to the weekly quick leaderboard.
+              Daily mode keeps its original leaderboard-only footer. */}
+          {isQuickPlay ? (
+            <>
+              <Button
+                variant="outline"
+                onClick={() => router.push("/leaderboard/quick")}
+              >
+                Weekly board
+              </Button>
+              <Button onClick={() => router.push("/play/quick")}>
+                Next puzzle
+              </Button>
+            </>
+          ) : meta.mode === "daily" ? (
             <Button onClick={() => router.push("/leaderboard")}>View leaderboard</Button>
           ) : (
             <Button onClick={() => router.push("/play")}>New puzzle</Button>

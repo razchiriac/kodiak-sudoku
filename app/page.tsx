@@ -1,11 +1,19 @@
 import Link from "next/link";
-import { Calendar, Keyboard, Trophy } from "lucide-react";
+import type { Route } from "next";
+import { Calendar, Keyboard, Trophy, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { quickPlay } from "@/lib/flags";
 
 // Landing page. Server Component; the only interactive bits are the CTA
 // links. We deliberately keep this page tiny so first-paint is fast and
 // the user can be on a puzzle in one click.
-export default function HomePage() {
+//
+// RAZ-34: when the `quick-play` flag is on we surface a third CTA that
+// deep-links into /play/quick (auto-new-random Easy loop) and a matching
+// feature card pointing at the weekly count-based leaderboard. Flag off
+// = zero visual change, so we can ship safely.
+export default async function HomePage() {
+  const quickPlayFlag = await quickPlay();
   return (
     <div className="container flex flex-col items-center gap-12 py-16">
       <section className="flex max-w-2xl flex-col items-center gap-6 text-center">
@@ -26,10 +34,21 @@ export default function HomePage() {
           <Button asChild size="lg" variant="outline">
             <Link href="/daily">Today's daily</Link>
           </Button>
+          {quickPlayFlag ? (
+            <Button asChild size="lg" variant="outline">
+              <Link href="/play/quick">Quick play</Link>
+            </Button>
+          ) : null}
         </div>
       </section>
 
-      <section className="grid w-full max-w-4xl grid-cols-1 gap-6 sm:grid-cols-3">
+      <section
+        className={
+          quickPlayFlag
+            ? "grid w-full max-w-4xl grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4"
+            : "grid w-full max-w-4xl grid-cols-1 gap-6 sm:grid-cols-3"
+        }
+      >
         <Feature
           icon={<Keyboard className="h-5 w-5" />}
           title="Keyboard first"
@@ -45,19 +64,53 @@ export default function HomePage() {
           title="Honest leaderboards"
           body="Pure runs (no hints) ranked separately so the board is fair without disabling help."
         />
+        {/* RAZ-34: quick-play feature card. Linked so the whole card
+            becomes a CTA for players who scroll past the hero buttons. */}
+        {quickPlayFlag ? (
+          <Feature
+            icon={<Zap className="h-5 w-5" />}
+            title="Quick play"
+            body="Chained Easy puzzles for short sessions. Weekly board ranks by solves."
+            href="/leaderboard/quick"
+          />
+        ) : null}
       </section>
     </div>
   );
 }
 
-function Feature({ icon, title, body }: { icon: React.ReactNode; title: string; body: string }) {
-  return (
-    <div className="rounded-lg border bg-card p-5">
+function Feature({
+  icon,
+  title,
+  body,
+  href,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  body: string;
+  // Optional deep-link. When present the whole card becomes a Link; we
+  // keep the non-link variant because most feature cards are
+  // informational, not navigational.
+  href?: Route;
+}) {
+  const inner = (
+    <>
       <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 text-primary">
         {icon}
       </div>
       <h3 className="mb-1 font-semibold">{title}</h3>
       <p className="text-sm text-muted-foreground">{body}</p>
-    </div>
+    </>
   );
+  if (href) {
+    return (
+      <Link
+        href={href}
+        className="rounded-lg border bg-card p-5 transition-colors hover:bg-accent"
+      >
+        {inner}
+      </Link>
+    );
+  }
+  return <div className="rounded-lg border bg-card p-5">{inner}</div>;
 }

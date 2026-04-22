@@ -52,6 +52,7 @@ export function PlayClient({
   longPressNoteEnabled = false,
   jumpOnPlaceEnabled = false,
   showMistakesEnabled = false,
+  isQuickPlay = false,
   isArchive = false,
 }: {
   puzzle: PuzzleProp;
@@ -100,6 +101,12 @@ export function PlayClient({
   // renders the toggle. Off = the feature is hidden; even a user who
   // previously opted in sees no red tint.
   showMistakesEnabled?: boolean;
+  // RAZ-34: true when this session was entered via /play/quick (i.e.
+  // the URL carries `?quick=1`). Tells the completion modal to swap
+  // its "New puzzle" CTA for "Next puzzle" which loops back to
+  // /play/quick for another random Easy, and to link the leaderboard
+  // button at /leaderboard/quick rather than the daily board.
+  isQuickPlay?: boolean;
 }) {
   const startGame = useGameStore((s) => s.startGame);
   const resumeFromSnapshot = useGameStore((s) => s.resumeFromSnapshot);
@@ -391,6 +398,7 @@ export function PlayClient({
         previousBestMs={previousBestMs}
         shareEnabled={shareEnabled}
         dailyDate={dailyDate}
+        isQuickPlay={isQuickPlay}
       />
       <ShortcutsOverlay open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />

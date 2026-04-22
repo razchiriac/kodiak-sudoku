@@ -164,6 +164,15 @@ export const longPressNote = declareFlag("long-press-note");
 // user never flips the toggle, there is zero perceptible cost.
 export const dyslexiaFont = declareFlag("dyslexia-font");
 
+// RAZ-34 - Quick-play sub-2-min Easy mode. When on, /play/quick is
+// reachable and picks a random Easy puzzle (bucket 1), redirecting to
+// /play/[id]?quick=1. The completion modal in quick mode offers a
+// "Next puzzle" CTA that loops back to /play/quick for a fresh random.
+// /leaderboard/quick ranks by count of Easy completions in the current
+// ISO week rather than single fastest time. Flag gates both routes; a
+// player who already discovered the URLs gets a 404 when it's off.
+export const quickPlay = declareFlag("quick-play");
+
 // RAZ-25 - Colorblind-safe palette picker. When on, the settings dialog
 // surfaces a small dropdown that swaps `html[data-palette]` between the
 // default theme, the Okabe-Ito red/green-safe palette, and a

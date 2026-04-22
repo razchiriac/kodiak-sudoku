@@ -14,6 +14,7 @@ import {
   jumpOnPlace,
   longPressNote,
   pbRibbon,
+  quickPlay,
   shareResult,
   showMistakes,
 } from "@/lib/flags";
@@ -41,12 +42,22 @@ export const dynamic = "force-dynamic";
 
 // Puzzle page. Server Component that resolves the puzzle and any saved
 // state, then hands off to the interactive client.
+//
+// RAZ-34: accepts a `?quick=1` search param set by /play/quick. When
+// present (and the quick-play flag is on), we render the session in
+// quick mode so the completion modal's "Next puzzle" CTA loops back
+// to /play/quick for a fresh random pick. We accept the search param
+// even if the flag is off and just silently ignore it so stale links
+// degrade gracefully.
 export default async function PuzzlePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ puzzleId: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { puzzleId } = await params;
+  const sp = await searchParams;
   const id = Number(puzzleId);
   if (!Number.isFinite(id)) notFound();
 
@@ -92,6 +103,11 @@ export default async function PuzzlePage({
   // mirrored into the store; actual tint also requires the user
   // opt-in and meta.solution being present (random puzzles only).
   const showMistakesEnabled = await showMistakes();
+  // RAZ-34 / quick-play: render this session in quick mode when the
+  // URL carries ?quick=1 AND the feature flag is on. Stale links from
+  // a disabled flag just render the normal random-play flow.
+  const quickPlayFlag = await quickPlay();
+  const isQuickPlay = quickPlayFlag && sp.quick === "1";
 
   return (
     <PlayClient
@@ -125,6 +141,7 @@ export default async function PuzzlePage({
       longPressNoteEnabled={longPressNoteEnabled}
       jumpOnPlaceEnabled={jumpOnPlaceEnabled}
       showMistakesEnabled={showMistakesEnabled}
+      isQuickPlay={isQuickPlay}
     />
   );
 }

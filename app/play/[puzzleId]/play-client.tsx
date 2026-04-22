@@ -46,12 +46,17 @@ export function PlayClient({
   hapticsEnabled,
   autoSwitchDigitEnabled,
   autoPauseEnabled,
+  isArchive = false,
 }: {
   puzzle: PuzzleProp;
   savedGame: SavedProp;
   isSignedIn: boolean;
   mode: "random" | "daily";
   dailyDate?: string;
+  // RAZ-5: when true, this is an archive daily (past date). Render a
+  // "practice only, not scored" badge and skip submitCompletionAction
+  // on finish. Today's daily keeps its normal scored behaviour.
+  isArchive?: boolean;
   // Previous best time (ms) for this user in this difficulty, or null
   // when the pb-ribbon flag (RAZ-22) is off, the user is anonymous, or
   // they have no completions in this bucket. Forwarded to the
@@ -225,6 +230,12 @@ export function PlayClient({
     setCompletionOpen(true);
     if (submitted.current) return;
     if (!isSignedIn) return; // anonymous completions are not recorded
+    // RAZ-5 / daily-archive: archive completions are practice-only so we
+    // skip the scored submit path entirely. Completion modal still shows.
+    if (isArchive) {
+      submitted.current = true;
+      return;
+    }
     submitted.current = true;
     setSubmitting(true);
     void (async () => {
@@ -245,7 +256,7 @@ export function PlayClient({
       setSubmitting(false);
       if (!res.ok) setSubmitError(res.error);
     })();
-  }, [isComplete, meta, isSignedIn, snapshot, dailyDate]);
+  }, [isComplete, meta, isSignedIn, snapshot, dailyDate, isArchive]);
 
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -262,10 +273,21 @@ export function PlayClient({
       <KeyboardListener onShortcuts={() => setShortcutsOpen(true)} />
       <VisibilityListener enabled={autoPauseEnabled} />
       <div className="flex w-full max-w-[560px] items-center justify-between">
-        <div className="text-sm text-muted-foreground">
-          {mode === "daily"
-            ? "Daily puzzle"
-            : `${DIFFICULTY_LABEL[puzzle.difficultyBucket]} puzzle`}
+        <div className="flex flex-col text-sm text-muted-foreground">
+          <span>
+            {mode === "daily"
+              ? "Daily puzzle"
+              : `${DIFFICULTY_LABEL[puzzle.difficultyBucket]} puzzle`}
+            {mode === "daily" && dailyDate ? ` · ${dailyDate}` : ""}
+          </span>
+          {/* RAZ-5: make it obvious an archive daily won't be scored so
+              the player doesn't wonder why their leaderboard entry never
+              appeared. */}
+          {isArchive ? (
+            <span className="text-xs text-muted-foreground/80">
+              Archive · practice only (not scored)
+            </span>
+          ) : null}
         </div>
         <div className="flex items-center gap-2">
           <Timer />

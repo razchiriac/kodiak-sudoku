@@ -76,4 +76,12 @@ export const FLAG_REGISTRY: readonly FlagSpec[] = [
       "Pause the game when the tab is hidden or after 90s of input idle; toast on resume.",
     linearId: "RAZ-21",
   },
+  {
+    key: "daily-archive",
+    envKey: "FLAG_DAILY_ARCHIVE",
+    defaultValue: true,
+    description:
+      "Expose past daily puzzles via /daily/[date] and per-date leaderboards with prev/next nav. Archive completions are practice-only (not scored).",
+    linearId: "RAZ-5",
+  },
 ];

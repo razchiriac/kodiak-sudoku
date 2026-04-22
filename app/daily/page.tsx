@@ -1,11 +1,19 @@
 import { notFound } from "next/navigation";
 import { getCurrentUser } from "@/lib/supabase/server";
 import {
+  getAdjacentDailyDates,
   getBestTimeForDifficulty,
   getDailyPuzzle,
   getSavedGame,
 } from "@/lib/db/queries";
-import { autoPause, autoSwitchDigit, haptics, pbRibbon } from "@/lib/flags";
+import {
+  autoPause,
+  autoSwitchDigit,
+  dailyArchive,
+  haptics,
+  pbRibbon,
+} from "@/lib/flags";
+import { ArchiveNav } from "@/components/game/archive-nav";
 import { PlayClient } from "../play/[puzzleId]/play-client";
 
 // Daily must be dynamic: it depends on the current UTC date and the
@@ -43,35 +51,49 @@ export default async function DailyPage() {
   // RAZ-21 / auto-pause flag.
   const autoPauseEnabled = await autoPause();
 
+  // RAZ-5 / daily-archive flag. When on, surface a "Previous day" link
+  // above the board so players can reach the archive from anywhere.
+  // `next` is always null on today's page because we never advertise
+  // tomorrow's puzzle. When the flag is off, both links are hidden.
+  const archiveEnabled = await dailyArchive();
+  const adjacent = archiveEnabled
+    ? await getAdjacentDailyDates(today)
+    : { prev: null, next: null };
+
   return (
-    <PlayClient
-      puzzle={{
-        id: daily.puzzle.id,
-        puzzle: daily.puzzle.puzzle.trim(),
-        // Empty string here; the client never receives the daily solution.
-        solution: "",
-        difficultyBucket: daily.puzzle.difficultyBucket,
-      }}
-      savedGame={
-        saved
-          ? {
-              board: saved.board.trim(),
-              notesB64: saved.notesB64,
-              elapsedMs: saved.elapsedMs,
-              mistakes: saved.mistakes,
-              hintsUsed: saved.hintsUsed,
-              isPaused: saved.isPaused,
-              startedAt: new Date(saved.startedAt).getTime(),
-            }
-          : null
-      }
-      isSignedIn={!!user}
-      mode="daily"
-      dailyDate={daily.date as string}
-      previousBestMs={previousBestMs}
-      hapticsEnabled={hapticsEnabled}
-      autoSwitchDigitEnabled={autoSwitchDigitEnabled}
-      autoPauseEnabled={autoPauseEnabled}
-    />
+    <>
+      {archiveEnabled ? (
+        <ArchiveNav current={today} prev={adjacent.prev} next={null} />
+      ) : null}
+      <PlayClient
+        puzzle={{
+          id: daily.puzzle.id,
+          puzzle: daily.puzzle.puzzle.trim(),
+          // Empty string here; the client never receives the daily solution.
+          solution: "",
+          difficultyBucket: daily.puzzle.difficultyBucket,
+        }}
+        savedGame={
+          saved
+            ? {
+                board: saved.board.trim(),
+                notesB64: saved.notesB64,
+                elapsedMs: saved.elapsedMs,
+                mistakes: saved.mistakes,
+                hintsUsed: saved.hintsUsed,
+                isPaused: saved.isPaused,
+                startedAt: new Date(saved.startedAt).getTime(),
+              }
+            : null
+        }
+        isSignedIn={!!user}
+        mode="daily"
+        dailyDate={daily.date as string}
+        previousBestMs={previousBestMs}
+        hapticsEnabled={hapticsEnabled}
+        autoSwitchDigitEnabled={autoSwitchDigitEnabled}
+        autoPauseEnabled={autoPauseEnabled}
+      />
+    </>
   );
 }

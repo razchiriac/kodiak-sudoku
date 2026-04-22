@@ -107,3 +107,11 @@ export const autoSwitchDigit = declareFlag("auto-switch-digit");
 // the timer run. Manual pause/unpause via the header button or Space
 // is unaffected.
 export const autoPause = declareFlag("auto-pause");
+
+// RAZ-5 - Daily archive. When on, the router exposes /daily/[date] for
+// any past date that exists in daily_puzzles, and the leaderboard page
+// accepts a ?date=YYYY-MM-DD search param with prev/next navigation.
+// Archive puzzles are playable for practice but completions are NOT
+// submitted to completed_games (avoids retroactive leaderboard farming).
+// Today's /daily and its leaderboard stay fully scored.
+export const dailyArchive = declareFlag("daily-archive");

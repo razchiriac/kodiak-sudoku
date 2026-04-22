@@ -97,6 +97,57 @@ describe("game-store: peer-note pruning on value placement", () => {
     expect(useGameStore.getState().board[target]).toBe(0);
   });
 
+  it("toggleNoteOnSelection toggles a note while staying in value mode", () => {
+    // RAZ-20: long-press path. We simulate the gesture by leaving the
+    // store in value mode (the default after startGame) and calling
+    // the store action directly — the NumberPad component invokes
+    // this exact action from its long-press timer.
+    const target = 2;
+    const { selectCell, toggleNoteOnSelection, undo } = useGameStore.getState();
+
+    selectCell(target);
+    // Mode stays "value" the whole time; toggleNoteOnSelection must
+    // not require notes mode.
+    expect(useGameStore.getState().mode).toBe("value");
+
+    toggleNoteOnSelection(5);
+    let n = useGameStore.getState().notes;
+    expect(hasNote(n, target, 5)).toBe(true);
+    expect(useGameStore.getState().board[target]).toBe(0);
+
+    // Second call with the same digit toggles the note off again.
+    toggleNoteOnSelection(5);
+    n = useGameStore.getState().notes;
+    expect(hasNote(n, target, 5)).toBe(false);
+
+    // And the history entries are undoable: rolling back once brings
+    // the note back; a second undo clears it.
+    undo();
+    n = useGameStore.getState().notes;
+    expect(hasNote(n, target, 5)).toBe(true);
+    undo();
+    n = useGameStore.getState().notes;
+    expect(hasNote(n, target, 5)).toBe(false);
+  });
+
+  it("toggleNoteOnSelection is a no-op on cells with a value", () => {
+    // If the selected cell already has a digit placed, long-pressing a
+    // pad button must NOT silently write notes to a filled cell. The
+    // board state and the notes mask for that cell stay untouched.
+    const target = 2;
+    const { selectCell, inputDigit, toggleNoteOnSelection } =
+      useGameStore.getState();
+
+    selectCell(target);
+    inputDigit(5); // place a value
+    const before = useGameStore.getState().notes[target];
+
+    toggleNoteOnSelection(3);
+    const after = useGameStore.getState().notes[target];
+    expect(after).toBe(before);
+    expect(useGameStore.getState().board[target]).toBe(5);
+  });
+
   it("redo re-prunes peers after an undo", () => {
     const target = 2;
     const samplePeers = emptyPeersOf(target).slice(0, 3);

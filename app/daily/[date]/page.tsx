@@ -12,6 +12,7 @@ import {
   autoSwitchDigit,
   compactControls,
   dailyArchive,
+  longPressNote,
   haptics,
   pbRibbon,
   shareResult,
@@ -105,6 +106,8 @@ export default async function DailyArchivePage({
   const autoPauseEnabled = await autoPause();
   const shareEnabled = await shareResult();
   const compactControlsEnabled = await compactControls();
+  // RAZ-20 / long-press-note flag.
+  const longPressNoteEnabled = await longPressNote();
   const adjacent = await getAdjacentDailyDates(date);
 
   return (
@@ -144,6 +147,7 @@ export default async function DailyArchivePage({
         autoPauseEnabled={autoPauseEnabled}
         shareEnabled={shareEnabled}
         compactControlsEnabled={compactControlsEnabled}
+        longPressNoteEnabled={longPressNoteEnabled}
         isArchive
       />
     </>

@@ -101,6 +101,19 @@ export const FLAG_REGISTRY: readonly FlagSpec[] = [
     linearId: "RAZ-23",
   },
   {
+    // RAZ-20: long-press a number-pad button to toggle that digit as a
+    // note on the selected cell without leaving value mode. Matches the
+    // convention used by most mobile sudoku apps. Additive on desktop
+    // too (a click-and-hold also triggers it) but the primary win is
+    // mobile, where a notes-mode round-trip is otherwise required.
+    key: "long-press-note",
+    envKey: "FLAG_LONG_PRESS_NOTE",
+    defaultValue: true,
+    description:
+      "Holding a number-pad button for 400ms toggles that digit as a note on the selected empty cell, regardless of current mode.",
+    linearId: "RAZ-20",
+  },
+  {
     // RAZ-26: OpenDyslexic font option. The flag controls whether the
     // settings toggle is even rendered; the per-user setting controls
     // whether the font is applied on a given device. Self-hosted via

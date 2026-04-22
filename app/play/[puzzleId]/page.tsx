@@ -11,6 +11,7 @@ import {
   autoSwitchDigit,
   compactControls,
   haptics,
+  longPressNote,
   pbRibbon,
   shareResult,
 } from "@/lib/flags";
@@ -80,6 +81,9 @@ export default async function PuzzlePage({
 
   // RAZ-23 / compact-controls flag: same pattern.
   const compactControlsEnabled = await compactControls();
+  // RAZ-20 / long-press-note flag: same pattern. Resolved once here
+  // so the client only has to mirror it into the zustand store.
+  const longPressNoteEnabled = await longPressNote();
 
   return (
     <PlayClient
@@ -110,6 +114,7 @@ export default async function PuzzlePage({
       autoPauseEnabled={autoPauseEnabled}
       shareEnabled={shareEnabled}
       compactControlsEnabled={compactControlsEnabled}
+      longPressNoteEnabled={longPressNoteEnabled}
     />
   );
 }

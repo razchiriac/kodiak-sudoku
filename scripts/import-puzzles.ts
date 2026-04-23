@@ -7,6 +7,11 @@ import { parse } from "csv-parse";
 import copy from "pg-copy-streams";
 import { findConflicts, isFilled } from "../lib/sudoku/validate";
 import { parseBoard } from "../lib/sudoku/board";
+import {
+  CLUE_TARGETS,
+  augmentToClueCount,
+  countClues,
+} from "../lib/sudoku/augment";
 
 // Import a curated subset of the Kaggle "3 Million Sudoku Puzzles with
 // Ratings" dataset into the puzzles table. We deliberately do NOT import
@@ -233,6 +238,22 @@ async function main() {
   for (let i = allRows.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [allRows[i], allRows[j]] = [allRows[j], allRows[i]];
+  }
+
+  // RAZ-38: Raise clue counts for Easy / Medium / Hard to the
+  // per-bucket targets defined in `lib/sudoku/augment.ts`. Without
+  // this, the Kaggle dataset's uniformly-low clue counts (~24
+  // across all ratings) make every bucket feel like Expert. We
+  // apply the augmentation here rather than post-insert so the
+  // staging COPY already carries the final clue_count values, and
+  // future imports stay consistent with the shipped seed data.
+  for (const row of allRows) {
+    const bucket = row.bucket as 1 | 2 | 3 | 4;
+    if (bucket === 4) continue;
+    const target = CLUE_TARGETS[bucket].target;
+    const augmented = augmentToClueCount(row.puzzle, row.solution, target);
+    row.puzzle = augmented;
+    row.clueCount = countClues(augmented);
   }
 
   const writer = new Transform({

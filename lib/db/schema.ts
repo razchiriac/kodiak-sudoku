@@ -252,8 +252,37 @@ export const friendships = pgTable(
   ],
 );
 
+// RAZ-7: Web Push subscriptions for daily reminders. One row per
+// (user, endpoint). Stores the full PushSubscription JSON so the
+// cron can hand it straight to web-push.sendNotification().
+export const pushSubscriptions = pgTable(
+  "push_subscriptions",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    endpoint: text("endpoint").notNull(),
+    subJson: jsonb("sub_json").notNull(),
+    notifyAt: text("notify_at").notNull().default("09:00"),
+    timezone: text("timezone").notNull().default("UTC"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("push_subs_user_endpoint_uniq").on(t.userId, t.endpoint),
+    index("push_subs_user_idx").on(t.userId),
+    index("push_subs_notify_tz_idx").on(t.notifyAt, t.timezone),
+  ],
+);
+
 export type Puzzle = typeof puzzles.$inferSelect;
 export type SavedGame = typeof savedGames.$inferSelect;
 export type CompletedGame = typeof completedGames.$inferSelect;
 export type DailyPuzzle = typeof dailyPuzzles.$inferSelect;
 export type Profile = typeof profiles.$inferSelect;
+export type PushSubscription = typeof pushSubscriptions.$inferSelect;

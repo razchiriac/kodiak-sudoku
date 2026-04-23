@@ -25,6 +25,7 @@ import {
   pbRibbon,
   postGameBreakdown,
   printPuzzle,
+  stuckRescue,
   eventLog,
   progressiveHints,
   shareResult,
@@ -127,6 +128,9 @@ export default async function DailyPage({
   // server-side ripple effects.
   const breakdownEnabled = await postGameBreakdown();
 
+  // RAZ-48 / stuck-rescue flag. Forwarded to PlayClient.
+  const stuckRescueEnabled = await stuckRescue();
+
   // RAZ-5 / daily-archive flag. When on, surface a "Previous day" link
   // above the board so players can reach the archive from anywhere.
   // `next` is always null on today's page because we never advertise
@@ -189,6 +193,7 @@ export default async function DailyPage({
         eventLogEnabled={eventLogEnabled}
         modePresetsEnabled={modePresetsEnabled}
         breakdownEnabled={breakdownEnabled}
+        stuckRescueEnabled={stuckRescueEnabled}
       />
     </>
   );

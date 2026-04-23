@@ -247,6 +247,15 @@ export const printPuzzle = declareFlag("print-puzzle");
 // stops rendering.
 export const postGameBreakdown = declareFlag("post-game-breakdown");
 
+// RAZ-48 - Stuck Detection + Smart Rescue. When on, PlayClient mounts
+// a tick-driven detector hook that watches the input-event ring
+// buffer + conflict state and surfaces a small dismissible rescue
+// chip when the player appears stuck. All detection is deterministic
+// (lib/sudoku/stuck-detection.ts) so the chip is reproducible and
+// flipping the flag off cleanly hides the chip without touching any
+// gameplay state.
+export const stuckRescue = declareFlag("stuck-rescue");
+
 // RAZ-54 - Mode Presets (Learn / Classic / Speed / Zen). When on, the
 // play home and the in-game settings dialog surface a one-tap preset
 // picker that projects a deterministic settings bundle onto the

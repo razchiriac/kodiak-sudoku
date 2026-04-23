@@ -253,6 +253,11 @@ type GameState = {
     // the feature back from Edge Config without touching persisted
     // user state.
     modePresets: boolean;
+    // RAZ-48: when on, the rescue chip is allowed to appear after a
+    // stuck-detection signal trips. When off, `useStuckDetector`
+    // short-circuits and the chip never mounts. Mirrored from
+    // Edge Config via PlayClient — see `setFeatureFlag` calls.
+    stuckRescue: boolean;
     // RAZ-14: when on, the Hint button steps through three tiers (region
     // nudge → technique + location → place the digit). When off, every
     // `hint()` call applies the placement immediately — the pre-RAZ-14
@@ -468,6 +473,10 @@ const INITIAL: GameState = {
     // the picker there). Off = picker is hidden and the persisted
     // `selectedPreset` setting is unused at the UI layer.
     modePresets: false,
+    // RAZ-48: default false — hydrated by PlayClient on mount from
+    // the resolved `stuck-rescue` Edge Config flag. Off = the rescue
+    // chip never mounts.
+    stuckRescue: false,
   },
   hintSession: null,
   events: [],

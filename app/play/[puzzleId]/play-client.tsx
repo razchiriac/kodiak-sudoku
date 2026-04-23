@@ -15,6 +15,7 @@ import { CompletionModal } from "@/components/game/completion-modal";
 import { ShortcutsOverlay } from "@/components/game/shortcuts-overlay";
 import { SettingsDialog } from "@/components/game/settings-dialog";
 import { PrintDialog } from "@/components/game/print-dialog";
+import { RescueChip } from "@/components/game/rescue-chip";
 import { Button } from "@/components/ui/button";
 import {
   flushInputEventsAction,
@@ -73,6 +74,7 @@ export function PlayClient({
   eventLogEnabled = false,
   modePresetsEnabled = false,
   breakdownEnabled = false,
+  stuckRescueEnabled = false,
 }: {
   puzzle: PuzzleProp;
   savedGame: SavedProp;
@@ -179,6 +181,10 @@ export function PlayClient({
   // panel is a one-time render at completion — no other surface
   // gates on this flag.
   breakdownEnabled?: boolean;
+  // RAZ-48: server-resolved value of `stuck-rescue`. Mirrored into
+  // the store so `useStuckDetector` can short-circuit instantly when
+  // the flag is flipped off via Edge Config.
+  stuckRescueEnabled?: boolean;
 }) {
   const startGame = useGameStore((s) => s.startGame);
   const resumeFromSnapshot = useGameStore((s) => s.resumeFromSnapshot);
@@ -358,6 +364,14 @@ export function PlayClient({
   useEffect(() => {
     setFeatureFlag("eventLog", eventLogEnabled);
   }, [eventLogEnabled, setFeatureFlag]);
+
+  // RAZ-48: mirror the `stuck-rescue` flag so `useStuckDetector`
+  // can read it from the store without a prop. Same kill-switch
+  // semantics as the other mirrors — flipping the flag off in Edge
+  // Config instantly hides the chip on the next tick.
+  useEffect(() => {
+    setFeatureFlag("stuckRescue", stuckRescueEnabled);
+  }, [stuckRescueEnabled, setFeatureFlag]);
 
   // Autosave: every time the relevant slice of state changes, debounce a
   // server action call. Only signed-in users autosave to the server;
@@ -670,6 +684,13 @@ export function PlayClient({
       </div>
 
       <SudokuGrid />
+      {/* RAZ-48: rescue chip slot — sits between the board and the
+          controls grid so it's adjacent to the player's primary
+          interaction surface but never overlays the board. The chip
+          renders nothing when no signal is active so the layout
+          doesn't reflow when it appears/disappears past the natural
+          gap-3 between siblings. */}
+      <RescueChip />
       {/* Below-board region: 5 equal columns. Left stack of 3
           control buttons, 3x3 number pad (col-span-3 internally),
           right stack of 3 control buttons. Heights line up in 3

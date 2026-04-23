@@ -23,6 +23,7 @@ import {
   haptics,
   modePresets,
   pbRibbon,
+  postGameBreakdown,
   printPuzzle,
   eventLog,
   progressiveHints,
@@ -119,6 +120,13 @@ export default async function DailyPage({
   // RAZ-54 / mode-presets flag.
   const modePresetsEnabled = await modePresets();
 
+  // RAZ-45 / post-game-breakdown flag. Forwarded straight to the
+  // CompletionModal which renders the BreakdownPanel below the
+  // existing stat grid. Pure client-side compute keeps the panel
+  // instant on cold connections and lets us toggle the flag with no
+  // server-side ripple effects.
+  const breakdownEnabled = await postGameBreakdown();
+
   // RAZ-5 / daily-archive flag. When on, surface a "Previous day" link
   // above the board so players can reach the archive from anywhere.
   // `next` is always null on today's page because we never advertise
@@ -180,6 +188,7 @@ export default async function DailyPage({
         progressiveHintsEnabled={progressiveHintsEnabled}
         eventLogEnabled={eventLogEnabled}
         modePresetsEnabled={modePresetsEnabled}
+        breakdownEnabled={breakdownEnabled}
       />
     </>
   );

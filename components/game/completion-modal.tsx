@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { BreakdownPanel } from "@/components/game/breakdown-panel";
 import { useGameStore } from "@/lib/zustand/game-store";
 import { DIFFICULTY_LABEL, formatTime } from "@/lib/utils";
 import { buildShareBlock, buildShareText, buildShareUrl } from "@/lib/share/format";
@@ -33,6 +34,7 @@ export function CompletionModal({
   challengeLinkEnabled = false,
   currentUsername = null,
   rankContext = null,
+  breakdownEnabled = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -79,6 +81,12 @@ export function CompletionModal({
   // solvers" banner. Null for random mode, archive completions,
   // anonymous users, or when the `daily-compare` flag is off.
   rankContext?: { total: number; slower: number; percentile: number } | null;
+  // RAZ-45: server-resolved value of `post-game-breakdown`. When on,
+  // we render the BreakdownPanel below the existing stat grid. The
+  // panel itself is purely client-computed from the same Zustand
+  // state already in scope here, so this prop is a simple show/hide
+  // gate — no network round trip, no extra server payload.
+  breakdownEnabled?: boolean;
 }) {
   const elapsedMs = useGameStore((s) => s.elapsedMs);
   const mistakes = useGameStore((s) => s.mistakes);
@@ -306,6 +314,21 @@ export function CompletionModal({
           <Stat label="Mistakes" value={mistakes.toString()} />
           <Stat label="Hints" value={hintsUsed.toString()} />
         </dl>
+
+        {/* RAZ-45 Post-Game Breakdown panel. Rendered below the stat
+            grid so the player sees raw numbers FIRST and then the
+            interpretive narrative. Hidden when the flag is off; if
+            the compute throws (which it shouldn't on real input),
+            BreakdownPanel returns null and the rest of the modal
+            keeps rendering normally. */}
+        {breakdownEnabled ? (
+          <BreakdownPanel
+            elapsedMs={elapsedMs}
+            mistakes={mistakes}
+            hintsUsed={hintsUsed}
+            difficultyBucket={meta.difficultyBucket}
+          />
+        ) : null}
 
         {submitError && (
           <p className="text-center text-sm text-destructive">{submitError}</p>

@@ -6,6 +6,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/lib/db/client";
 import { completedGames, puzzleAttempts, savedGames } from "@/lib/db/schema";
+import { evaluateAndAwardAchievements } from "./achievements";
 import { getCurrentUser } from "@/lib/supabase/server";
 import { getDailyRankContext, getPuzzleById } from "@/lib/db/queries";
 import { findConflicts, isCorrect, isFilled } from "@/lib/sudoku/validate";
@@ -223,7 +224,26 @@ export async function submitCompletionAction(raw: SubmitInput) {
     }
   }
 
-  return { ok: true as const, rankContext };
+  // RAZ-10: evaluate achievements AFTER the completion is recorded
+  // (and profile streak fields have been updated by the SQL
+  // trigger). Swallow errors: failing to award a badge must not
+  // mask the successful completion. We log on the server so the
+  // omission is at least observable. The returned list is the
+  // set of badges newly earned on THIS call — the client uses it
+  // to show a celebratory toast.
+  let newlyEarned: { key: string; title: string; icon: string }[] = [];
+  try {
+    const defs = await evaluateAndAwardAchievements(user.id);
+    newlyEarned = defs.map((d) => ({
+      key: d.key,
+      title: d.title,
+      icon: d.icon,
+    }));
+  } catch (err) {
+    console.error("evaluateAndAwardAchievements failed", err);
+  }
+
+  return { ok: true as const, rankContext, newlyEarned };
 }
 
 // RAZ-28 — Flush the in-memory input-event buffer to `puzzle_attempts`.

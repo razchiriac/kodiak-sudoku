@@ -425,6 +425,16 @@ export function PlayClient({
       // RAZ-32: stash the rank context so the modal can render
       // "You beat 73% of today's solvers". Null for random mode.
       if (res.rankContext) setRankContext(res.rankContext);
+      // RAZ-10: surface newly-earned achievements as a series of
+      // toasts. We fan them out one at a time (rather than a
+      // single combined toast) so the player feels the individual
+      // pop for each one. Capped at 3 to avoid spamming on the
+      // rare first-solve case that unlocks multiple at once.
+      if (res.newlyEarned && res.newlyEarned.length > 0) {
+        for (const badge of res.newlyEarned.slice(0, 3)) {
+          toast.success(`Achievement unlocked: ${badge.title}`);
+        }
+      }
     })();
   }, [isComplete, meta, isSignedIn, snapshot, dailyDate, isArchive, isCustom]);
 

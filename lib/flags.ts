@@ -191,6 +191,14 @@ export const colorPalette = declareFlag("color-palette");
 // and the cross-links disappear; daily board is untouched.
 export const difficultyLeaderboards = declareFlag("difficulty-leaderboards");
 
+// RAZ-32 - Compare-to-field on daily completion. When on,
+// `submitCompletionAction` computes a rank context for daily
+// submits (total solvers so far today + how many the user beat on
+// strict time) and returns it in the response. The CompletionModal
+// renders a "You beat 73% of today's solvers" banner. No schema
+// changes — powered entirely by the existing partial daily index.
+export const dailyCompare = declareFlag("daily-compare");
+
 // RAZ-13 - Share-a-puzzle challenge link. When on, the completion
 // modal adds a "Challenge a friend" button that copies a URL like
 // `/play/<id>?from=<username>` to the clipboard. Opening a puzzle

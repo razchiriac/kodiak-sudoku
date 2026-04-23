@@ -32,6 +32,9 @@ type PuzzleProp = {
   puzzle: string;
   solution: string;
   difficultyBucket: number;
+  // RAZ-18: Puzzle variant. Defaults to "standard" if absent (for
+  // backwards compatibility with existing callers).
+  variant?: string;
 };
 
 type SavedProp = {
@@ -246,6 +249,7 @@ export function PlayClient({
         difficultyBucket: puzzle.difficultyBucket,
         mode,
         solution: mode === "daily" ? null : puzzle.solution,
+        variant: (puzzle.variant as import("@/lib/sudoku/board").Variant) ?? "standard",
       },
       puzzle: puzzle.puzzle,
     });

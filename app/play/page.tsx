@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Calendar, Sparkles } from "lucide-react";
+import { Calendar, Sparkles, Swords } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DIFFICULTY_LABEL } from "@/lib/utils";
 import { getCurrentUser } from "@/lib/supabase/server";
@@ -52,7 +52,7 @@ export default async function PlayHomePage() {
         </div>
       </section>
 
-      <section className="mt-10 grid gap-4 sm:grid-cols-2">
+      <section className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Link
           href="/daily"
           className="flex items-center gap-3 rounded-lg border bg-card p-4 hover:bg-accent"
@@ -61,6 +61,16 @@ export default async function PlayHomePage() {
           <div>
             <div className="font-medium">Today's daily</div>
             <div className="text-sm text-muted-foreground">One puzzle, the whole world.</div>
+          </div>
+        </Link>
+        <Link
+          href="/play/diagonal"
+          className="flex items-center gap-3 rounded-lg border bg-card p-4 hover:bg-accent"
+        >
+          <Swords className="h-5 w-5 text-primary" />
+          <div>
+            <div className="font-medium">Diagonal Sudoku</div>
+            <div className="text-sm text-muted-foreground">Extra constraints, extra fun.</div>
           </div>
         </Link>
         <Link

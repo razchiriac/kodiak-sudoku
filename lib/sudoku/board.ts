@@ -20,6 +20,13 @@ export type Notes = Uint16Array;
 // 1 = clue (immutable), 0 = editable. Same shape as Board.
 export type FixedMask = Uint8Array;
 
+// RAZ-18: Puzzle variant. "standard" is the classic 9x9 Sudoku;
+// "diagonal" adds the two main diagonals as extra constraint units
+// (each must contain 1-9 exactly once). The type is a string union
+// rather than an enum per project conventions. Future variants (e.g.
+// "killer") can be added without a migration by extending this union.
+export type Variant = "standard" | "diagonal";
+
 export const BOARD_SIZE = 81;
 export const GRID_DIM = 9;
 export const BOX_DIM = 3;
@@ -48,9 +55,54 @@ const PEERS: ReadonlyArray<ReadonlyArray<CellIndex>> = (() => {
   return result;
 })();
 
+// RAZ-18: Diagonal peer table. For cells on the main diagonal
+// (row === col) we add all other main-diagonal cells; for cells on
+// the anti-diagonal (row + col === 8) we add all other anti-diagonal
+// cells. Cells on both (index 40 = center) get both sets.
+const PEERS_DIAGONAL: ReadonlyArray<ReadonlyArray<CellIndex>> = (() => {
+  // Pre-compute the two diagonals.
+  const mainDiag: CellIndex[] = [];
+  const antiDiag: CellIndex[] = [];
+  for (let k = 0; k < GRID_DIM; k++) {
+    mainDiag.push(k * GRID_DIM + k);       // (0,0),(1,1),...,(8,8)
+    antiDiag.push(k * GRID_DIM + (8 - k)); // (0,8),(1,7),...,(8,0)
+  }
+  const mainSet = new Set(mainDiag);
+  const antiSet = new Set(antiDiag);
+
+  const result: CellIndex[][] = [];
+  for (let i = 0; i < BOARD_SIZE; i++) {
+    const set = new Set<CellIndex>(PEERS[i]);
+    if (mainSet.has(i)) {
+      for (const d of mainDiag) set.add(d);
+    }
+    if (antiSet.has(i)) {
+      for (const d of antiDiag) set.add(d);
+    }
+    set.delete(i);
+    result.push([...set]);
+  }
+  return result;
+})();
+
+/** Returns true if `index` is on the main diagonal (row === col). */
+export function isMainDiag(index: CellIndex): boolean {
+  return index % GRID_DIM === Math.floor(index / GRID_DIM);
+}
+
+/** Returns true if `index` is on the anti-diagonal (row + col === 8). */
+export function isAntiDiag(index: CellIndex): boolean {
+  return Math.floor(index / GRID_DIM) + (index % GRID_DIM) === 8;
+}
+
 // Returns the static peer set for a cell. Cheap O(1) array access; do not
 // mutate the returned array.
-export function peers(index: CellIndex): ReadonlyArray<CellIndex> {
+//
+// RAZ-18: Accepts an optional `variant` parameter. When "diagonal",
+// the peer set includes cells that share a diagonal with `index`
+// (in addition to the standard row/col/box peers).
+export function peers(index: CellIndex, variant?: Variant): ReadonlyArray<CellIndex> {
+  if (variant === "diagonal") return PEERS_DIAGONAL[index];
   return PEERS[index];
 }
 
@@ -168,11 +220,11 @@ export function clearCellNotes(notes: Notes, index: CellIndex): Notes {
 // Auto-prune notes in a cell's peers when a value is placed. This is the
 // "smart notes" behavior; callers should only invoke it when the user has
 // the setting enabled.
-export function prunePeerNotes(notes: Notes, index: CellIndex, digit: Digit): Notes {
+export function prunePeerNotes(notes: Notes, index: CellIndex, digit: Digit, variant?: Variant): Notes {
   if (digit < 1 || digit > 9) return notes;
   const bit = 1 << (digit - 1);
   const next = new Uint16Array(notes);
-  for (const p of peers(index)) next[p] &= ~bit;
+  for (const p of peers(index, variant)) next[p] &= ~bit;
   return next;
 }
 
@@ -229,14 +281,14 @@ export function computeMistakes(
 // freshly-correct pencil-mark grid to start narrowing down. We always
 // return a brand new Uint16Array so the caller can pass the previous
 // notes buffer to the history stack without aliasing.
-export function computeAllCandidates(board: Board): Notes {
+export function computeAllCandidates(board: Board, variant?: Variant): Notes {
   const notes = new Uint16Array(BOARD_SIZE);
   // 0b1_1111_1111 = bits 0..8 set, i.e. digits 1..9 are all candidates.
   const ALL = 0b1_1111_1111;
   for (let i = 0; i < BOARD_SIZE; i++) {
     if (board[i] !== 0) continue;
     let mask = ALL;
-    for (const p of peers(i)) {
+    for (const p of peers(i, variant)) {
       const v = board[p];
       if (v !== 0) mask &= ~(1 << (v - 1));
     }

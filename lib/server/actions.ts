@@ -137,9 +137,11 @@ export async function submitCompletionAction(raw: SubmitInput) {
   const puzzle = await getPuzzleById(input.puzzleId);
   if (!puzzle) return { ok: false as const, error: "puzzle_not_found" };
 
-  // Verify the submitted board.
+  // Verify the submitted board. RAZ-18: use the puzzle's variant for
+  // conflict detection so diagonal puzzles are validated correctly.
+  const variant = (puzzle.variant ?? "standard") as import("@/lib/sudoku/board").Variant;
   const board = parseBoard(input.board);
-  if (!isFilled(board) || findConflicts(board).size > 0 || !isCorrect(board, puzzle.solution)) {
+  if (!isFilled(board) || findConflicts(board, variant).size > 0 || !isCorrect(board, puzzle.solution)) {
     return { ok: false as const, error: "incorrect_solution" };
   }
 

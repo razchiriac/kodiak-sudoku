@@ -24,6 +24,7 @@ const UNIT_LABEL: Record<HintUnit, string> = {
   row: "row",
   col: "column",
   box: "box",
+  diag: "diagonal",
 };
 
 const TECHNIQUE_LABEL: Record<HintSuggestion["technique"], string> = {

@@ -281,6 +281,20 @@ export const FLAG_REGISTRY: readonly FlagSpec[] = [
     linearId: "RAZ-9",
   },
   {
+    // RAZ-54: Mode Presets. When on, the play home and the in-game
+    // settings dialog surface a preset picker (Learn / Classic / Speed
+    // / Zen). Selecting a preset projects a deterministic settings
+    // bundle onto the per-device settings store. Flipping the flag
+    // off hides the picker and falls the user back to whatever
+    // individual settings they had before — no destructive change.
+    key: "mode-presets",
+    envKey: "FLAG_MODE_PRESETS",
+    defaultValue: true,
+    description:
+      "Expose Mode Presets (Learn / Classic / Speed / Zen) on the play home + settings dialog. Each preset projects a deterministic bundle of per-device settings.",
+    linearId: "RAZ-54",
+  },
+  {
     // RAZ-15: Per-cell mistake indicator. When the user opts in and the
     // client has the puzzle solution (random non-daily puzzles only),
     // any cell whose placed value doesn't match the solution tints red

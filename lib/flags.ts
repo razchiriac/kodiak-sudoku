@@ -239,6 +239,15 @@ export const progressiveHints = declareFlag("progressive-hints");
 // route 404s.
 export const printPuzzle = declareFlag("print-puzzle");
 
+// RAZ-54 - Mode Presets (Learn / Classic / Speed / Zen). When on, the
+// play home and the in-game settings dialog surface a one-tap preset
+// picker that projects a deterministic settings bundle onto the
+// per-device settings store. Flipping the flag off hides the picker
+// entirely; the user keeps whatever settings they last had (the
+// `selectedPreset` value remains persisted but is unused at the UI
+// level — re-enabling the flag restores the picker pre-selected).
+export const modePresets = declareFlag("mode-presets");
+
 // RAZ-15 - Per-cell mistake indicator. When on, the settings dialog
 // exposes a "Show mistakes" toggle; if the user enables it AND the
 // client has the puzzle solution (i.e. random non-daily puzzles where

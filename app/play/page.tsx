@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { DIFFICULTY_LABEL } from "@/lib/utils";
 import { getCurrentUser } from "@/lib/supabase/server";
 import { listRecentSavedGames } from "@/lib/db/queries";
+import { modePresets } from "@/lib/flags";
+import { ModePresetPicker } from "@/components/game/mode-preset-picker";
 
 // Reads the caller's session and saved games; never static.
 export const dynamic = "force-dynamic";
@@ -14,9 +16,19 @@ export const dynamic = "force-dynamic";
 export default async function PlayHomePage() {
   const user = await getCurrentUser();
   const saved = user ? await listRecentSavedGames(user.id, 3) : [];
+  // RAZ-54: resolve the Mode Presets flag server-side so the client
+  // picker hides itself instantly when the flag is off — no flicker
+  // from a client effect that runs after first paint.
+  const modePresetsEnabled = await modePresets();
 
   return (
     <div className="container max-w-3xl py-10">
+      {/* RAZ-54: preset picker. Renders nothing when the feature flag
+          is off (the client component checks the mirrored flag in the
+          store). Placed above the difficulty buttons so a player
+          decides "how" before they decide "how hard". */}
+      <ModePresetPicker enabled={modePresetsEnabled} variant="home" />
+
       {saved.length > 0 && (
         <section className="mb-8">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">

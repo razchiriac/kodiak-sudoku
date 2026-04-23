@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { Flame, Trophy } from "lucide-react";
+import { Flame, Snowflake, Trophy } from "lucide-react";
 import { getProfileByUsername, listRecentCompletions, getUserStats } from "@/lib/db/queries";
 import { DIFFICULTY_LABEL, formatTime } from "@/lib/utils";
 
@@ -41,6 +41,19 @@ export default async function ProfilePage({
             value={profile.currentDailyStreak.toString()}
             sub={`best ${profile.longestDailyStreak}`}
           />
+          {/* RAZ-8: Streak freezes — spent automatically by the
+              Postgres trigger to forgive missed days. We surface the
+              bank so players know they have a safety net (and how
+              much). Hidden when zero on a fresh account so the
+              header doesn't look cluttered for brand-new users. */}
+          {profile.streakFreezesAvailable > 0 ? (
+            <Stat
+              icon={<Snowflake className="h-4 w-4" />}
+              label="Freezes"
+              value={profile.streakFreezesAvailable.toString()}
+              sub="auto-spent"
+            />
+          ) : null}
         </div>
       </header>
 

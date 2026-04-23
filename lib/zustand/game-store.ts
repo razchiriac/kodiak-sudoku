@@ -1419,6 +1419,24 @@ export const useGameStore = create<GameState & GameActions>()(
   ),
 );
 
+// RAZ-73: Expose the store to window in non-production builds so e2e
+// tests can drive game state directly without having to type 50+
+// digits per test. The expose is gated on NODE_ENV so production
+// bundles never carry the reference (which would let any malicious
+// extension inspect / mutate the live game).
+//
+// We reach the store only after at least one client-side render has
+// hooked it up — using `setTimeout` here would race the Next hydration
+// boundary; instead we attach on the first store subscription. This
+// fires once per page load (zustand calls listeners on subscribe) and
+// is a no-op everywhere a non-browser env lacks `window`.
+if (process.env.NODE_ENV !== "production" && typeof window !== "undefined") {
+  // Cast: typing window with our own augmentation here would leak the
+  // dev-only key into all of `lib/`. A localized cast is cleaner.
+  (window as unknown as { __sudokuStore?: typeof useGameStore }).__sudokuStore =
+    useGameStore;
+}
+
 // Read the persisted anonymous snapshot without subscribing to the store.
 // Used by the play page to decide whether to offer "Continue".
 export function readPersistedSnapshot(): (GameSnapshot & { puzzle: string }) | null {

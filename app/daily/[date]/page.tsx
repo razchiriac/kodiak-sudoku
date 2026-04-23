@@ -23,6 +23,7 @@ import {
   haptics,
   modePresets,
   pbRibbon,
+  postGameBreakdown,
   printPuzzle,
   eventLog,
   progressiveHints,
@@ -147,6 +148,8 @@ export default async function DailyArchivePage({
   const eventLogEnabled = await eventLog();
   // RAZ-54 / mode-presets flag.
   const modePresetsEnabled = await modePresets();
+  // RAZ-45 / post-game-breakdown flag. Forwarded to CompletionModal.
+  const breakdownEnabled = await postGameBreakdown();
   const adjacent = await getAdjacentDailyDates(date);
 
   return (
@@ -202,6 +205,7 @@ export default async function DailyArchivePage({
         progressiveHintsEnabled={progressiveHintsEnabled}
         eventLogEnabled={eventLogEnabled}
         modePresetsEnabled={modePresetsEnabled}
+        breakdownEnabled={breakdownEnabled}
         isArchive
       />
     </>

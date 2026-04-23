@@ -18,6 +18,7 @@ import {
   longPressNote,
   modePresets,
   pbRibbon,
+  postGameBreakdown,
   printPuzzle,
   eventLog,
   progressiveHints,
@@ -163,6 +164,13 @@ export default async function PuzzlePage({
   // immediately when toggled off in Edge Config.
   const modePresetsEnabled = await modePresets();
 
+  // RAZ-45 / post-game-breakdown flag. Pure UI gate — forwarded to
+  // the CompletionModal which renders the BreakdownPanel below the
+  // existing stat grid. Compute is purely client-side so the panel
+  // renders in <300ms after the modal opens regardless of network
+  // conditions.
+  const breakdownEnabled = await postGameBreakdown();
+
   return (
     <PlayClient
       puzzle={{
@@ -204,6 +212,7 @@ export default async function PuzzlePage({
       progressiveHintsEnabled={progressiveHintsEnabled}
       eventLogEnabled={eventLogEnabled}
       modePresetsEnabled={modePresetsEnabled}
+      breakdownEnabled={breakdownEnabled}
     />
   );
 }

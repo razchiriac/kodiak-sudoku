@@ -281,6 +281,21 @@ export const FLAG_REGISTRY: readonly FlagSpec[] = [
     linearId: "RAZ-9",
   },
   {
+    // RAZ-45: Post-Game Breakdown. When on, the completion modal
+    // renders a deterministic insights panel under the existing
+    // Time/Mistakes/Hints stat grid (pace bucket, accuracy bucket,
+    // assistance bucket, one concrete next-step recommendation).
+    // The compute is purely client-side and pure-functional, so
+    // flipping the flag off cleanly hides the panel with zero side
+    // effects on existing completion submission behavior.
+    key: "post-game-breakdown",
+    envKey: "FLAG_POST_GAME_BREAKDOWN",
+    defaultValue: true,
+    description:
+      "Render a deterministic Post-Game Breakdown panel in the completion modal (pace / accuracy / assistance buckets + one recommendation).",
+    linearId: "RAZ-45",
+  },
+  {
     // RAZ-54: Mode Presets. When on, the play home and the in-game
     // settings dialog surface a preset picker (Learn / Classic / Speed
     // / Zen). Selecting a preset projects a deterministic settings

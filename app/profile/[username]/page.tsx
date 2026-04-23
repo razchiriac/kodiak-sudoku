@@ -1,8 +1,14 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Flame, Snowflake, Trophy } from "lucide-react";
-import { getProfileByUsername, listRecentCompletions, getUserStats } from "@/lib/db/queries";
+import {
+  getProfileByUsername,
+  getRecentTimesByBucket,
+  listRecentCompletions,
+  getUserStats,
+} from "@/lib/db/queries";
 import { DIFFICULTY_LABEL, formatTime } from "@/lib/utils";
+import { Sparkline } from "@/components/profile/sparkline";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 30;
@@ -19,10 +25,27 @@ export default async function ProfilePage({
   const profile = await getProfileByUsername(username);
   if (!profile) notFound();
 
-  const [stats, recent] = await Promise.all([
-    getUserStats(profile.id),
-    listRecentCompletions(profile.id, 20),
-  ]);
+  // RAZ-30: in addition to the aggregated stats and the recent-list,
+  // fetch the last 20 solve times per difficulty so each card can
+  // render a sparkline. Four parallel queries is fine — each hits the
+  // (user_id, completed_at desc) index and returns at most 20 rows.
+  const [stats, recent, trendEasy, trendMedium, trendHard, trendExpert] =
+    await Promise.all([
+      getUserStats(profile.id),
+      listRecentCompletions(profile.id, 20),
+      getRecentTimesByBucket(profile.id, 1, 20),
+      getRecentTimesByBucket(profile.id, 2, 20),
+      getRecentTimesByBucket(profile.id, 3, 20),
+      getRecentTimesByBucket(profile.id, 4, 20),
+    ]);
+  // Index trends by bucket so the difficulty map below can look each
+  // one up by number without a chain of conditionals.
+  const trendsByBucket: Record<number, { timeMs: number }[]> = {
+    1: trendEasy,
+    2: trendMedium,
+    3: trendHard,
+    4: trendExpert,
+  };
 
   return (
     <div className="container max-w-3xl py-10">
@@ -60,6 +83,10 @@ export default async function ProfilePage({
       <section className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[1, 2, 3, 4].map((b) => {
           const s = stats.find((x) => x.difficulty === b);
+          // RAZ-30: feed the bucket's ordered series into the Sparkline.
+          // We only draw when there are ≥2 points (a single solve has
+          // no trend to show); the component returns null otherwise.
+          const trendPoints = (trendsByBucket[b] ?? []).map((r) => r.timeMs);
           return (
             <div key={b} className="rounded-lg border bg-card p-4">
               <div className="text-xs uppercase tracking-wide text-muted-foreground">
@@ -72,6 +99,16 @@ export default async function ProfilePage({
               <div className="text-xs text-muted-foreground">
                 Avg: {s?.avgTimeMs ? formatTime(s.avgTimeMs) : "—"}
               </div>
+              {trendPoints.length >= 2 ? (
+                <div className="mt-2">
+                  <Sparkline
+                    points={trendPoints}
+                    width={160}
+                    height={28}
+                    ariaLabel={`${DIFFICULTY_LABEL[b]} trend across last ${trendPoints.length} solves`}
+                  />
+                </div>
+              ) : null}
             </div>
           );
         })}

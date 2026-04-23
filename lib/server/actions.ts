@@ -12,6 +12,13 @@ import { findConflicts, isCorrect, isFilled } from "@/lib/sudoku/validate";
 import { parseBoard } from "@/lib/sudoku/board";
 import { nextHint } from "@/lib/sudoku/solver";
 import { dailyCompare, eventLog, solveTimeSanity } from "@/lib/flags";
+import {
+  HINT_BUCKET,
+  HINT_LIMITS,
+  checkRateLimit,
+  rateLimitActorKey,
+  recordRateLimitEvent,
+} from "@/lib/server/rate-limit";
 
 // All mutations go through Server Actions defined in this file. Every
 // action validates inputs with Zod, derives the user from the cookie
@@ -313,13 +320,39 @@ const HintSchema = z.object({
 
 export type HintInput = z.infer<typeof HintSchema>;
 
-// Server-side hint endpoint, used for daily puzzles where we don't ship
-// the solution to the client. Anyone can call this; the rate is bounded
-// because the client only fires it on a button press.
+// Server-side hint endpoint, used for daily puzzles where we don't
+// ship the solution to the client.
+//
+// RAZ-29: wrapped in a rate limiter (3/min, 30/hour, per actor). Daily
+// puzzles keep the solution server-side specifically to prevent
+// scraping; without a rate limit a bot could hit this endpoint once
+// per cell and reconstruct the board. We bill the quota AFTER we've
+// decided the request is honest (valid schema, known puzzle) so a
+// malformed request doesn't burn through a legitimate player's quota
+// by accident.
 export async function hintAction(raw: HintInput) {
   const input = HintSchema.parse(raw);
+
+  // Validate puzzle existence FIRST. A 404 on puzzle_not_found shouldn't
+  // count against the actor's quota — that's a client-state bug, not
+  // abuse.
   const puzzle = await getPuzzleById(input.puzzleId);
   if (!puzzle) return { ok: false as const, error: "puzzle_not_found" };
+
+  // Resolve the rate-limit key. For signed-in users this is user_id;
+  // for anon callers we hash their forwarded-for IP. Either way the
+  // limit is PER ACTOR so one abusive user can't DoS others.
+  const user = await getCurrentUser();
+  const key = await rateLimitActorKey(user?.id ?? null);
+  const decision = await checkRateLimit(HINT_BUCKET, key, HINT_LIMITS);
+  if (!decision.ok) {
+    return {
+      ok: false as const,
+      error: "rate_limited" as const,
+      retryAfterMs: decision.retryAfterMs,
+      limit: decision.window.label,
+    };
+  }
 
   const board = parseBoard(input.board);
   const suggestion = nextHint(board, {
@@ -327,6 +360,12 @@ export async function hintAction(raw: HintInput) {
     solution: puzzle.solution,
   });
   if (!suggestion) return { ok: false as const, error: "no_hint" };
+
+  // Record AFTER we've committed to returning a real hint. If the
+  // puzzle is already solved (no_hint) we don't charge the quota —
+  // that's a legitimate no-op the UI surfaces as "no more hints
+  // needed" rather than abuse.
+  await recordRateLimitEvent(HINT_BUCKET, key);
 
   return {
     ok: true as const,

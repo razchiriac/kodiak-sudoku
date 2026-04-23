@@ -172,6 +172,23 @@ export const puzzleAttempts = pgTable(
   (t) => [index("puzzle_attempts_puzzle_idx").on(t.puzzleId, t.createdAt)],
 );
 
+// RAZ-29: sliding-window rate-limit log. One row per successful call
+// to a rate-limited surface. See drizzle/migrations/0002 for the
+// bucket/key convention. Kept as a generic log rather than a hint-
+// specific table so the next rate-limited action reuses it.
+export const rateLimitEvents = pgTable(
+  "rate_limit_events",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    bucket: text("bucket").notNull(),
+    key: text("key").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("rate_limit_events_lookup_idx").on(t.bucket, t.key, t.createdAt),
+  ],
+);
+
 export type Puzzle = typeof puzzles.$inferSelect;
 export type SavedGame = typeof savedGames.$inferSelect;
 export type CompletedGame = typeof completedGames.$inferSelect;

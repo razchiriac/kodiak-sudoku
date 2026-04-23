@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import {
+  getBestOnPuzzleByUsername,
   getBestTimeForDifficulty,
+  getProfileById,
   getPuzzleById,
   getSavedGame,
 } from "@/lib/db/queries";
@@ -9,6 +11,7 @@ import { getCurrentUser } from "@/lib/supabase/server";
 import {
   autoPause,
   autoSwitchDigit,
+  challengeLink,
   compactControls,
   haptics,
   jumpOnPlace,
@@ -109,6 +112,30 @@ export default async function PuzzlePage({
   const quickPlayFlag = await quickPlay();
   const isQuickPlay = quickPlayFlag && sp.quick === "1";
 
+  // RAZ-13 / challenge-link. Two orthogonal pieces of data are
+  // resolved server-side so the client can stay dumb:
+  //   1. `challenge` — when the URL carries `?from=<username>`, look
+  //      up that sender's best random-mode time on THIS puzzle so
+  //      the banner can render "Beat @X's time of M:SS". Silently
+  //      null when the flag is off, the sender is unknown, or they
+  //      have no random completion of this puzzle.
+  //   2. `currentUsername` — the viewer's own username (if signed
+  //      in with a profile), used to seed the "Challenge a friend"
+  //      action in the completion modal. Null for anonymous or
+  //      username-less accounts disables the action.
+  const challengeLinkFlag = await challengeLink();
+  const fromRaw = sp.from;
+  const fromUsername =
+    challengeLinkFlag && typeof fromRaw === "string" && fromRaw.length > 0
+      ? fromRaw
+      : null;
+  const challenge = fromUsername
+    ? await getBestOnPuzzleByUsername(fromUsername, puzzle.id)
+    : null;
+  const currentProfile =
+    challengeLinkFlag && user ? await getProfileById(user.id) : null;
+  const currentUsername = currentProfile?.username ?? null;
+
   return (
     <PlayClient
       puzzle={{
@@ -142,6 +169,9 @@ export default async function PuzzlePage({
       jumpOnPlaceEnabled={jumpOnPlaceEnabled}
       showMistakesEnabled={showMistakesEnabled}
       isQuickPlay={isQuickPlay}
+      challenge={challenge}
+      challengeLinkEnabled={challengeLinkFlag}
+      currentUsername={currentUsername}
     />
   );
 }

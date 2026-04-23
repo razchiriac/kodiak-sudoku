@@ -191,6 +191,14 @@ export const colorPalette = declareFlag("color-palette");
 // and the cross-links disappear; daily board is untouched.
 export const difficultyLeaderboards = declareFlag("difficulty-leaderboards");
 
+// RAZ-13 - Share-a-puzzle challenge link. When on, the completion
+// modal adds a "Challenge a friend" button that copies a URL like
+// `/play/<id>?from=<username>` to the clipboard. Opening a puzzle
+// with `?from=<username>` fetches the sender's best time via
+// `getBestOnPuzzleByUsername` and renders a small banner above the
+// board. Random-mode puzzles only. No schema changes.
+export const challengeLink = declareFlag("challenge-link");
+
 // RAZ-15 - Per-cell mistake indicator. When on, the settings dialog
 // exposes a "Show mistakes" toggle; if the user enables it AND the
 // client has the puzzle solution (i.e. random non-daily puzzles where

@@ -2,12 +2,18 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import {
   getAdjacentDailyDates,
+  getDailyBucketsForDate,
   getDailyLeaderboard,
   getDailyPuzzle,
 } from "@/lib/db/queries";
 import { dailyArchive, difficultyLeaderboards } from "@/lib/flags";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatTime, DIFFICULTY_LABEL } from "@/lib/utils";
+import {
+  DailyTierTabs,
+  parseTier,
+  tierSlug,
+} from "@/components/game/daily-tier-tabs";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 60;
@@ -28,7 +34,7 @@ export default async function LeaderboardPage({
   searchParams,
 }: {
   // Next 15: searchParams is a Promise in RSC.
-  searchParams: Promise<{ date?: string }>;
+  searchParams: Promise<{ date?: string; tier?: string | string[] }>;
 }) {
   const today = new Date().toISOString().slice(0, 10);
   const sp = await searchParams;
@@ -41,12 +47,25 @@ export default async function LeaderboardPage({
     date = sp.date;
   }
 
-  const daily = await getDailyPuzzle(date);
+  // RAZ-33: leaderboard is now scoped to a tier (Easy/Medium/Hard).
+  // Default to Easy. If the selected tier doesn't exist on this date
+  // (e.g. an old pre-mini-daily date), fall back to the first
+  // available bucket.
+  const requestedTier = parseTier(sp.tier);
+  const availableBuckets = await getDailyBucketsForDate(date);
+  const tier =
+    availableBuckets.length === 0
+      ? requestedTier
+      : availableBuckets.includes(requestedTier)
+        ? requestedTier
+        : ((availableBuckets[0] ?? 1) as 1 | 2 | 3);
+
+  const daily = await getDailyPuzzle(date, tier);
 
   const [pure, all] = daily
     ? await Promise.all([
-        getDailyLeaderboard(date, { pure: true, limit: 50 }),
-        getDailyLeaderboard(date, { pure: false, limit: 50 }),
+        getDailyLeaderboard(date, { pure: true, limit: 50, bucket: tier }),
+        getDailyLeaderboard(date, { pure: false, limit: 50, bucket: tier }),
       ])
     : [[], []];
 
@@ -162,6 +181,18 @@ export default async function LeaderboardPage({
           </div>
         </section>
       ) : null}
+
+      {/* RAZ-33: tier tabs (Easy/Medium/Hard). Preserves the date
+          query string so tier navigation doesn't bounce the user
+          back to today's board. */}
+      <DailyTierTabs
+        active={tier}
+        availableBuckets={availableBuckets}
+        hrefFor={(t) => {
+          const base = `/leaderboard?tier=${tierSlug(t)}`;
+          return date === today ? base : `${base}&date=${date}`;
+        }}
+      />
 
       <Tabs defaultValue="pure">
         <TabsList>

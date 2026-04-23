@@ -4,9 +4,15 @@ import { getCurrentUser } from "@/lib/supabase/server";
 import {
   getAdjacentDailyDates,
   getBestTimeForDifficulty,
+  getDailyBucketsForDate,
   getDailyPuzzle,
   getSavedGame,
 } from "@/lib/db/queries";
+import {
+  DailyTierTabs,
+  parseTier,
+  tierSlug,
+} from "@/components/game/daily-tier-tabs";
 import {
   autoPause,
   autoSwitchDigit,
@@ -58,10 +64,13 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export default async function DailyArchivePage({
   params,
+  searchParams,
 }: {
   // Next 15: `params` is a Promise in the app router RSC. We await.
   params: Promise<{ date: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const sp = await searchParams;
   // Flag gate first so a disabled archive is effectively a 404 for
   // the whole namespace, not just /daily/[date]/random-ish routes.
   const archiveEnabled = await dailyArchive();
@@ -87,7 +96,17 @@ export default async function DailyArchivePage({
     notFound();
   }
 
-  const daily = await getDailyPuzzle(date);
+  // RAZ-33: archive dailies now also have tiers. Resolve the
+  // requested tier from ?tier=; fall back to whatever tier was
+  // seeded if the requested one is missing (e.g. an old Saturday
+  // that only has an Expert row from pre-RAZ-33).
+  const requestedTier = parseTier(sp.tier);
+  const availableBuckets = await getDailyBucketsForDate(date);
+  if (availableBuckets.length === 0) notFound();
+  const resolvedTier = availableBuckets.includes(requestedTier)
+    ? requestedTier
+    : availableBuckets[0];
+  const daily = await getDailyPuzzle(date, resolvedTier);
   if (!daily) notFound();
 
   const user = await getCurrentUser();
@@ -135,6 +154,15 @@ export default async function DailyArchivePage({
         next={adjacent.next}
         leaderboardHref={`/leaderboard?date=${date}` as Route}
       />
+      {/* RAZ-33: tier tabs on the archive page too. We only show
+          tabs for tiers that actually have a row on this date. */}
+      <div className="container max-w-3xl pt-4">
+        <DailyTierTabs
+          active={resolvedTier as 1 | 2 | 3}
+          availableBuckets={availableBuckets}
+          hrefFor={(t) => `/daily/${date}?tier=${tierSlug(t)}`}
+        />
+      </div>
       <PlayClient
         puzzle={{
           id: daily.puzzle.id,

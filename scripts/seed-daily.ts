@@ -1,24 +1,21 @@
 /* eslint-disable no-console */
 import { Client } from "pg";
 
-// Pre-assign one puzzle to each of the next N days. The user-facing path
-// for the daily puzzle is then a single SELECT ... where puzzle_date = today.
+// Pre-assign daily puzzles to the next N days.
 //
-// Default difficulty rotation by weekday gives players some variety
-// without making the experience random:
-//   Mon Easy, Tue Medium, Wed Hard, Thu Medium, Fri Hard, Sat Expert, Sun Medium
-// The rotation is documented as part of the product, so changing it later
-// requires a clear announcement.
-const ROTATION: Record<number, number> = {
-  // 0 = Sunday in JS Date.getUTCDay()
-  0: 2, // Sun -> Medium
-  1: 1, // Mon -> Easy
-  2: 2, // Tue -> Medium
-  3: 3, // Wed -> Hard
-  4: 2, // Thu -> Medium
-  5: 3, // Fri -> Hard
-  6: 4, // Sat -> Expert
-};
+// RAZ-33: The mini-daily rotation is three puzzles per date, one
+// per tier (Easy / Medium / Hard). Expert is intentionally NOT
+// part of the daily rotation — the all-time Expert leaderboard
+// (RAZ-6) exists for that audience. Existing Expert rows from
+// the pre-RAZ-33 rotation are left untouched (they belong to
+// past dates which are already "in the bag").
+//
+// The user-facing path (`/daily?tier=easy|medium|hard`) then does a
+// single SELECT ... where puzzle_date = today and difficulty_bucket = $1.
+
+// Daily tiers we seed every date. Order matters for legibility in
+// the seed output; it does not affect storage.
+const DAILY_BUCKETS = [1, 2, 3] as const;
 
 type CliArgs = { days: number; startDate: Date };
 
@@ -44,56 +41,64 @@ async function main() {
   const pg = new Client({ connectionString: url });
   await pg.connect();
 
-  // Find which dates already have a puzzle assigned so we don't disturb
-  // them. The daily puzzle is part of the leaderboard's identity; never
-  // change a date's puzzle once it has been seen by users.
-  const existingRes = await pg.query<{ puzzle_date: string }>(
-    `select puzzle_date::text from daily_puzzles
-     where puzzle_date >= $1 and puzzle_date < $1::date + $2::int`,
-    [isoDate(args.startDate), args.days],
-  );
-  const existing = new Set(existingRes.rows.map((r) => r.puzzle_date));
-
-  // For each missing date, pick a random puzzle that has not yet been used
-  // for any past or future daily, with the rotation's difficulty.
-  let assigned = 0;
+  // Build the candidate date list.
+  const dates: string[] = [];
   for (let i = 0; i < args.days; i++) {
     const d = new Date(args.startDate);
     d.setUTCDate(d.getUTCDate() + i);
-    const dateStr = isoDate(d);
-    if (existing.has(dateStr)) continue;
-
-    const bucket = ROTATION[d.getUTCDay()];
-
-    // Pick a puzzle that has never been used as a daily before. We use
-    // ORDER BY random() because we run this once a year and the cost is
-    // trivial; no need for tablesample tricks.
-    const pick = await pg.query<{ id: string; difficulty_bucket: number }>(
-      `select p.id::text, p.difficulty_bucket
-       from puzzles p
-       where p.difficulty_bucket = $1
-         and not exists (
-           select 1 from daily_puzzles d where d.puzzle_id = p.id
-         )
-       order by random()
-       limit 1`,
-      [bucket],
-    );
-    if (pick.rowCount === 0) {
-      console.warn(`No unused puzzle available for ${dateStr} bucket ${bucket}; skipping`);
-      continue;
-    }
-
-    await pg.query(
-      `insert into daily_puzzles (puzzle_date, puzzle_id, difficulty_bucket)
-       values ($1, $2, $3)
-       on conflict (puzzle_date) do nothing`,
-      [dateStr, pick.rows[0].id, pick.rows[0].difficulty_bucket],
-    );
-    assigned++;
+    dates.push(isoDate(d));
   }
 
-  console.log(`Assigned ${assigned} new daily puzzles.`);
+  // Fetch all (date, bucket) rows in range so we can skip the ones
+  // that already exist. Changing an already-seeded row would shift
+  // a live leaderboard under our users, which is a cardinal sin.
+  const existingRes = await pg.query<{ puzzle_date: string; difficulty_bucket: number }>(
+    `select puzzle_date::text, difficulty_bucket from daily_puzzles
+     where puzzle_date = any($1::date[])`,
+    [dates],
+  );
+  const existing = new Set(
+    existingRes.rows.map((r) => `${r.puzzle_date}:${r.difficulty_bucket}`),
+  );
+
+  let assigned = 0;
+  for (const dateStr of dates) {
+    for (const bucket of DAILY_BUCKETS) {
+      if (existing.has(`${dateStr}:${bucket}`)) continue;
+
+      // Pick a puzzle in the target bucket that has NOT yet been
+      // used for any daily. ORDER BY random() is fine because we
+      // run this script annually and each bucket has tens of
+      // thousands of unused rows.
+      const pick = await pg.query<{ id: string; difficulty_bucket: number }>(
+        `select p.id::text, p.difficulty_bucket
+         from puzzles p
+         where p.difficulty_bucket = $1
+           and not exists (
+             select 1 from daily_puzzles d where d.puzzle_id = p.id
+           )
+         order by random()
+         limit 1`,
+        [bucket],
+      );
+      if (pick.rowCount === 0) {
+        console.warn(
+          `No unused puzzle available for ${dateStr} bucket ${bucket}; skipping`,
+        );
+        continue;
+      }
+
+      await pg.query(
+        `insert into daily_puzzles (puzzle_date, puzzle_id, difficulty_bucket)
+         values ($1, $2, $3)
+         on conflict (puzzle_date, difficulty_bucket) do nothing`,
+        [dateStr, pick.rows[0].id, pick.rows[0].difficulty_bucket],
+      );
+      assigned++;
+    }
+  }
+
+  console.log(`Assigned ${assigned} new daily puzzle rows across ${dates.length} dates.`);
   await pg.end();
 }
 

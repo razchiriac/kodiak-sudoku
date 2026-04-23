@@ -4,9 +4,15 @@ import { getCurrentUser } from "@/lib/supabase/server";
 import {
   getAdjacentDailyDates,
   getBestTimeForDifficulty,
+  getDailyBucketsForDate,
   getDailyPuzzle,
   getSavedGame,
 } from "@/lib/db/queries";
+import {
+  DailyTierTabs,
+  parseTier,
+  tierSlug,
+} from "@/components/game/daily-tier-tabs";
 import {
   autoPause,
   autoSwitchDigit,
@@ -47,9 +53,22 @@ export const dynamic = "force-dynamic";
 // Daily puzzle page. Same play UI as a normal puzzle, but the mode is
 // "daily" and the solution is intentionally NOT sent to the client (so
 // the hint button always round-trips through the server).
-export default async function DailyPage() {
+//
+// RAZ-33: The daily now has three tiers (Easy / Medium / Hard). The
+// tier is picked via `?tier=easy|medium|hard` and defaults to Easy.
+// Tabs let the player jump between tiers without leaving the page.
+export default async function DailyPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const sp = await searchParams;
   const today = new Date().toISOString().slice(0, 10);
-  const daily = await getDailyPuzzle(today);
+  const tier = parseTier(sp.tier);
+  const [daily, availableBuckets] = await Promise.all([
+    getDailyPuzzle(today, tier),
+    getDailyBucketsForDate(today),
+  ]);
   if (!daily) notFound();
 
   const user = await getCurrentUser();
@@ -111,6 +130,16 @@ export default async function DailyPage() {
       {archiveEnabled ? (
         <ArchiveNav current={today} prev={adjacent.prev} next={null} />
       ) : null}
+      {/* RAZ-33: tier tabs. `hrefFor` builds same-page URLs that
+          only differ in the ?tier query string so Next can keep
+          the UI client-routed. */}
+      <div className="container max-w-3xl pt-4">
+        <DailyTierTabs
+          active={tier}
+          availableBuckets={availableBuckets}
+          hrefFor={(t) => `/daily?tier=${tierSlug(t)}`}
+        />
+      </div>
       <PlayClient
         puzzle={{
           id: daily.puzzle.id,

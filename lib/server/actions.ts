@@ -5,7 +5,14 @@ import { revalidatePath } from "next/cache";
 import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/lib/db/client";
-import { completedGames, friendships, profiles, puzzleAttempts, savedGames } from "@/lib/db/schema";
+import {
+  completedGames,
+  friendships,
+  profiles,
+  pushSubscriptions,
+  puzzleAttempts,
+  savedGames,
+} from "@/lib/db/schema";
 import { evaluateAndAwardAchievements } from "./achievements";
 import { canonicalPair, getFriendship } from "./friends";
 import { getCurrentUser } from "@/lib/supabase/server";
@@ -615,5 +622,84 @@ export async function removeFriendshipAction(otherUserId: string) {
 
   revalidatePath("/friends");
   revalidatePath("/leaderboard");
+  return { ok: true as const };
+}
+
+// ---------------------------------------------------------------------------
+// RAZ-7: Push subscription management
+// ---------------------------------------------------------------------------
+
+const PushSubSchema = z.object({
+  endpoint: z.string().url(),
+  keys: z.object({
+    p256dh: z.string().min(1),
+    auth: z.string().min(1),
+  }),
+});
+
+const SubscribeSchema = z.object({
+  subscription: PushSubSchema,
+  timezone: z.string().max(80).default("UTC"),
+  notifyAt: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/)
+    .default("09:00"),
+});
+
+/**
+ * Save (or update) the user's push subscription. Called when the
+ * client successfully subscribes via PushManager. We upsert on
+ * (user_id, endpoint) so re-subscribing from the same browser
+ * replaces the old row rather than duplicating it.
+ */
+export async function subscribePushAction(raw: {
+  subscription: { endpoint: string; keys: { p256dh: string; auth: string } };
+  timezone?: string;
+  notifyAt?: string;
+}) {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false as const, error: "unauthenticated" };
+
+  const input = SubscribeSchema.parse(raw);
+
+  await db
+    .insert(pushSubscriptions)
+    .values({
+      userId: user.id,
+      endpoint: input.subscription.endpoint,
+      subJson: input.subscription,
+      timezone: input.timezone,
+      notifyAt: input.notifyAt,
+      updatedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: [pushSubscriptions.userId, pushSubscriptions.endpoint],
+      set: {
+        subJson: input.subscription,
+        timezone: input.timezone,
+        notifyAt: input.notifyAt,
+        updatedAt: new Date(),
+      },
+    });
+
+  revalidatePath("/profile/edit");
+  return { ok: true as const };
+}
+
+/**
+ * Remove all push subscriptions for the current user. Called when
+ * they toggle off daily reminders (we unsubscribe client-side too,
+ * but removing the server rows is the source of truth that prevents
+ * further sends).
+ */
+export async function unsubscribePushAction() {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false as const, error: "unauthenticated" };
+
+  await db
+    .delete(pushSubscriptions)
+    .where(eq(pushSubscriptions.userId, user.id));
+
+  revalidatePath("/profile/edit");
   return { ok: true as const };
 }

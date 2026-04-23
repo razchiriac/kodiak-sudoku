@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/supabase/server";
 import { getProfileById } from "@/lib/db/queries";
 import { ProfileEditForm } from "./form";
+import { PushToggle } from "@/components/profile/push-toggle";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,14 @@ export default async function ProfileEditPage() {
         currentUsername={profile?.username ?? ""}
         currentDisplayName={profile?.displayName ?? ""}
       />
+
+      {/* RAZ-7: Push notification opt-in. Rendered as a client island
+          below the profile form. The component self-hides when the
+          browser doesn't support push or VAPID keys aren't set. */}
+      <section className="mt-8">
+        <h2 className="mb-3 text-lg font-semibold">Notifications</h2>
+        <PushToggle />
+      </section>
     </div>
   );
 }

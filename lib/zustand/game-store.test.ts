@@ -470,6 +470,53 @@ describe("game-store: RAZ-28 input-event recording", () => {
   });
 });
 
+describe("game-store: RAZ-54 mode presets", () => {
+  beforeEach(start);
+
+  it("applyPreset projects the bundle and stamps selectedPreset", () => {
+    const { applyPreset } = useGameStore.getState();
+
+    applyPreset("speed");
+    let s = useGameStore.getState();
+    expect(s.settings.selectedPreset).toBe("speed");
+    // Speed bundle: jumpOnPlace + compactControls on, showMistakes off.
+    expect(s.settings.jumpOnPlace).toBe(true);
+    expect(s.settings.compactControls).toBe(true);
+    expect(s.settings.showMistakes).toBe(false);
+
+    applyPreset("learn");
+    s = useGameStore.getState();
+    expect(s.settings.selectedPreset).toBe("learn");
+    // Learn bundle: showMistakes on; speed-specific tweaks reset.
+    expect(s.settings.showMistakes).toBe(true);
+    expect(s.settings.jumpOnPlace).toBe(false);
+    expect(s.settings.compactControls).toBe(false);
+  });
+
+  it("setSetting demotes selectedPreset to 'custom' on a tracked tweak", () => {
+    const { applyPreset, setSetting } = useGameStore.getState();
+    applyPreset("learn");
+    expect(useGameStore.getState().settings.selectedPreset).toBe("learn");
+
+    // Learn opines on showMistakes=true; flipping it diverges and
+    // should auto-demote the picker indicator to "custom".
+    setSetting("showMistakes", false);
+    expect(useGameStore.getState().settings.selectedPreset).toBe("custom");
+  });
+
+  it("setSetting on a non-tracked field preserves the named preset", () => {
+    const { applyPreset, setSetting } = useGameStore.getState();
+    applyPreset("speed");
+
+    // Palette isn't part of any preset bundle; flipping it should
+    // NOT bounce us out of the named preset state.
+    setSetting("palette", "high-contrast");
+    const s = useGameStore.getState();
+    expect(s.settings.selectedPreset).toBe("speed");
+    expect(s.settings.palette).toBe("high-contrast");
+  });
+});
+
 describe("game-store: RAZ-42 auto-notes toggle", () => {
   beforeEach(() => {
     start();

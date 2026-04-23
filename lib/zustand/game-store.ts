@@ -32,6 +32,12 @@ import {
   type InputEvent,
   type InputEventKind,
 } from "@/lib/sudoku/input-events";
+import {
+  applyPresetToSettings,
+  settingsMatchPreset,
+  type PresetId,
+  PRESET_DEFINITIONS,
+} from "./presets";
 
 // Single Zustand store that owns ALL transient gameplay state. UI
 // components subscribe to slices of this store; nothing about the game
@@ -138,6 +144,13 @@ type GameState = {
     // populated (random puzzles); daily puzzles keep the solution
     // server-side so the flag has no visible effect there.
     showMistakes: boolean;
+    // RAZ-54: feature flag mirror for Mode Presets. Controls whether
+    // the play home + settings dialog renders the picker. When off,
+    // the persisted `selectedPreset` value is left untouched but the
+    // picker UI is hidden — flipping the flag back on restores the
+    // pre-selected preset without a migration.
+    // (declared in the featureFlags slice below — duplicated here as
+    // a comment so the related settings field is easy to find).
     // RAZ-28: opt-in toggle for the input-event log. When true AND
     // the `event-log` feature flag is on, the store appends a compact
     // event record per value placement / erase / hint-placement into
@@ -153,6 +166,16 @@ type GameState = {
     // players keep the wand; undefined from old persisted state is
     // treated as enabled everywhere we branch.
     autoNotesEnabled: boolean;
+    // RAZ-54: currently-active mode preset. Persisted so the choice
+    // survives reloads. `null` means "the player has never picked a
+    // preset" (legacy users / first run) and the picker UI shows
+    // every option as unselected. `"custom"` means they DID pick
+    // one but then tweaked an individual setting — the picker shows
+    // the named preset highlight cleared and the player's tweaks
+    // remain. The store auto-flips this to "custom" inside
+    // `setSetting` when a manual change diverges from the active
+    // preset's bundle. See `applyPreset` for the explicit setter.
+    selectedPreset: PresetId | null;
     // RAZ-25: which color palette to use for the sudoku cells.
     // "default" keeps the shipped blue/red tokens. "okabe-ito" swaps
     // to the Okabe-Ito colorblind-safe palette (sky-blue / yellow /
@@ -223,6 +246,13 @@ type GameState = {
     // next explicit drain call; that's fine — they'll be discarded
     // on the next startGame.
     eventLog: boolean;
+    // RAZ-54: when on, Mode Presets are exposed in the play home and
+    // settings dialog. When off, the picker is hidden everywhere and
+    // `applyPreset` becomes a no-op at the UI layer (the action is
+    // still callable but no entry point surfaces it). Lets us roll
+    // the feature back from Edge Config without touching persisted
+    // user state.
+    modePresets: boolean;
     // RAZ-14: when on, the Hint button steps through three tiers (region
     // nudge → technique + location → place the digit). When off, every
     // `hint()` call applies the placement immediately — the pre-RAZ-14
@@ -327,6 +357,16 @@ type GameActions = {
     value: GameState["settings"][K],
   ) => void;
 
+  // RAZ-54: project a Mode Preset's settings bundle onto the per-
+  // device settings slice in one call. Updates `selectedPreset` to
+  // the chosen id and merges the preset's projection over the
+  // current settings (keys outside the preset's bundle are
+  // preserved). No-op when called with an unknown preset id (i.e.
+  // "custom" or anything not in PRESET_DEFINITIONS); use
+  // `setSetting("selectedPreset", "custom")` for the synthetic
+  // "the user has tweaked things" case.
+  applyPreset: (presetId: PresetId) => void;
+
   // Mirror a resolved server-side feature flag into the store. Called
   // once on mount from PlayClient with the value PlayClient received
   // from the Server Component. No-op if the value is unchanged.
@@ -398,6 +438,12 @@ const INITIAL: GameState = {
     // RAZ-42: default on — the bulk auto-notes action stays available
     // until the user explicitly turns it off in Settings.
     autoNotesEnabled: true,
+    // RAZ-54: default null — first-run users haven't opted into a
+    // preset yet, so the picker UI shows nothing highlighted and the
+    // app behaves with the canonical defaults above. As soon as a
+    // user picks a preset (or tweaks any setting), this field flips
+    // to a concrete value and persists per-device.
+    selectedPreset: null,
   },
   featureFlags: {
     haptics: false,
@@ -417,6 +463,11 @@ const INITIAL: GameState = {
     // mid-session, recording starts on the NEXT mutation (no
     // retroactive capture of moves the user made before opting in).
     eventLog: false,
+    // RAZ-54: default false — hydrated to the resolved Edge Config
+    // value on mount by PlayClient (and by the play home page for
+    // the picker there). Off = picker is hidden and the persisted
+    // `selectedPreset` setting is unused at the UI layer.
+    modePresets: false,
   },
   hintSession: null,
   events: [],
@@ -1121,7 +1172,47 @@ export const useGameStore = create<GameState & GameActions>()(
       },
 
       setSetting: (key, value) =>
-        set((s) => ({ settings: { ...s.settings, [key]: value } })),
+        set((s) => {
+          const nextSettings = { ...s.settings, [key]: value };
+          // RAZ-54: when the user manually tweaks a setting that the
+          // currently-active preset is opinionated about, drop us into
+          // the synthetic "custom" preset id so the picker UI stops
+          // claiming that preset is still active. We skip this self-
+          // demotion when the change is the `selectedPreset` field
+          // itself (so callers can write `setSetting("selectedPreset",
+          // "custom")` directly without an infinite loop), and when
+          // there's no active named preset to diverge from.
+          const active = nextSettings.selectedPreset;
+          if (
+            key !== "selectedPreset" &&
+            active &&
+            active !== "custom" &&
+            !settingsMatchPreset(nextSettings, active)
+          ) {
+            nextSettings.selectedPreset = "custom";
+          }
+          return { settings: nextSettings };
+        }),
+
+      applyPreset: (presetId) =>
+        set((s) => {
+          // "custom" is a sentinel state — applying it doesn't change
+          // any individual setting, it just marks the active preset
+          // as user-tweaked. The setSetting auto-demote path handles
+          // the more common case where a user toggles one setting.
+          if (presetId === "custom") {
+            return { settings: { ...s.settings, selectedPreset: "custom" } };
+          }
+          // Unknown id: bail rather than silently corrupting state.
+          // Should never happen because the type narrows to PresetId,
+          // but a stale persist payload from a future build could
+          // smuggle one through.
+          if (!PRESET_DEFINITIONS.find((p) => p.id === presetId)) return s;
+          const projected = applyPresetToSettings(s.settings, presetId);
+          return {
+            settings: { ...projected, selectedPreset: presetId },
+          };
+        }),
 
       setFeatureFlag: (key, value) =>
         set((s) =>

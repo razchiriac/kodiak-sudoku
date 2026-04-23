@@ -16,6 +16,7 @@ import {
   haptics,
   jumpOnPlace,
   longPressNote,
+  modePresets,
   pbRibbon,
   printPuzzle,
   eventLog,
@@ -156,6 +157,12 @@ export default async function PuzzlePage({
   // feature.
   const eventLogEnabled = await eventLog();
 
+  // RAZ-54 / mode-presets flag. Pure UI gate — when on, the settings
+  // dialog renders the inline preset picker so a mid-game switch is
+  // one click. The store mirrors this flag so the picker hides
+  // immediately when toggled off in Edge Config.
+  const modePresetsEnabled = await modePresets();
+
   return (
     <PlayClient
       puzzle={{
@@ -196,6 +203,7 @@ export default async function PuzzlePage({
       printPuzzleEnabled={printPuzzleEnabled}
       progressiveHintsEnabled={progressiveHintsEnabled}
       eventLogEnabled={eventLogEnabled}
+      modePresetsEnabled={modePresetsEnabled}
     />
   );
 }

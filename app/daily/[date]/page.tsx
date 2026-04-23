@@ -21,6 +21,7 @@ import {
   jumpOnPlace,
   longPressNote,
   haptics,
+  modePresets,
   pbRibbon,
   printPuzzle,
   eventLog,
@@ -144,6 +145,8 @@ export default async function DailyArchivePage({
   // RAZ-14 / progressive-hints flag. Same reasoning as the today route.
   const progressiveHintsEnabled = await progressiveHints();
   const eventLogEnabled = await eventLog();
+  // RAZ-54 / mode-presets flag.
+  const modePresetsEnabled = await modePresets();
   const adjacent = await getAdjacentDailyDates(date);
 
   return (
@@ -198,6 +201,7 @@ export default async function DailyArchivePage({
         printPuzzleEnabled={printPuzzleEnabled}
         progressiveHintsEnabled={progressiveHintsEnabled}
         eventLogEnabled={eventLogEnabled}
+        modePresetsEnabled={modePresetsEnabled}
         isArchive
       />
     </>

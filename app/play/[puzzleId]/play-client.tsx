@@ -71,6 +71,7 @@ export function PlayClient({
   printPuzzleEnabled = false,
   progressiveHintsEnabled = false,
   eventLogEnabled = false,
+  modePresetsEnabled = false,
 }: {
   puzzle: PuzzleProp;
   savedGame: SavedProp;
@@ -166,6 +167,11 @@ export function PlayClient({
   // SettingsDialog reads the same flag to decide whether to render
   // the opt-in toggle.
   eventLogEnabled?: boolean;
+  // RAZ-54: server-resolved value of `mode-presets`. Mirrored into the
+  // store so the SettingsDialog's inline preset picker (and any
+  // future surfaces) gate on the same source of truth without prop-
+  // drilling. When false, the picker is hidden everywhere.
+  modePresetsEnabled?: boolean;
 }) {
   const startGame = useGameStore((s) => s.startGame);
   const resumeFromSnapshot = useGameStore((s) => s.resumeFromSnapshot);
@@ -326,6 +332,16 @@ export function PlayClient({
   useEffect(() => {
     setFeatureFlag("progressiveHints", progressiveHintsEnabled);
   }, [progressiveHintsEnabled, setFeatureFlag]);
+
+  // RAZ-54 mode-presets mirror. The SettingsDialog reads the mirrored
+  // flag to decide whether to render the inline preset picker; the
+  // ModePresetPicker component on /play also reads it via its own
+  // mirror. Same pattern as every other UI-gate flag — flipping the
+  // flag off in Edge Config takes effect on the next render with no
+  // redeploy required.
+  useEffect(() => {
+    setFeatureFlag("modePresets", modePresetsEnabled);
+  }, [modePresetsEnabled, setFeatureFlag]);
 
   // RAZ-28 event-log mirror. The store gates recording on this flag AND
   // the per-user `recordEvents` setting, so flipping this to false in

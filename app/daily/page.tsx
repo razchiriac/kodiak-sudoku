@@ -21,6 +21,7 @@ import {
   jumpOnPlace,
   longPressNote,
   haptics,
+  modePresets,
   pbRibbon,
   printPuzzle,
   eventLog,
@@ -115,6 +116,8 @@ export default async function DailyPage({
   // RAZ-14 / progressive-hints flag.
   const progressiveHintsEnabled = await progressiveHints();
   const eventLogEnabled = await eventLog();
+  // RAZ-54 / mode-presets flag.
+  const modePresetsEnabled = await modePresets();
 
   // RAZ-5 / daily-archive flag. When on, surface a "Previous day" link
   // above the board so players can reach the archive from anywhere.
@@ -176,6 +179,7 @@ export default async function DailyPage({
         printPuzzleEnabled={printPuzzleEnabled}
         progressiveHintsEnabled={progressiveHintsEnabled}
         eventLogEnabled={eventLogEnabled}
+        modePresetsEnabled={modePresetsEnabled}
       />
     </>
   );

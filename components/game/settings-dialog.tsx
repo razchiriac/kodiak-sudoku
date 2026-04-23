@@ -2,6 +2,7 @@
 
 import { toast } from "sonner";
 import { PALETTES, type Palette, useGameStore } from "@/lib/zustand/game-store";
+import { ModePresetPicker } from "@/components/game/mode-preset-picker";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -115,6 +116,11 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const autoNotesOn = useGameStore(
     (s) => s.settings.autoNotesEnabled !== false,
   );
+  // RAZ-54: mode-presets mirror. Read directly from the store (the
+  // PlayClient mirrors the server-resolved value on mount). The
+  // inline picker component renders nothing when the flag is off so
+  // we don't need to gate the JSX here.
+  const modePresetsFlag = useGameStore((s) => s.featureFlags.modePresets);
   const setSetting = useGameStore((s) => s.setSetting);
 
   const handleTestHaptic = () => {
@@ -151,6 +157,14 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
         </DialogHeader>
 
         <div className="flex flex-col gap-4 py-2">
+          {/* RAZ-54: inline mode preset picker. Renders nothing when
+              the flag is off, so a flag flip in Edge Config hides
+              the entry point without leaving a stub behind.
+              Forwarding `modePresetsFlag` keeps the prop the same
+              shape as the home variant — the picker re-mirrors it
+              into the store on its own. */}
+          <ModePresetPicker enabled={modePresetsFlag} variant="inline" />
+
           {/* RAZ-42: always available — hides the wand / bulk-fill control
               for players who prefer manual pencil marks only. */}
           <label className="flex items-start justify-between gap-4 text-sm">

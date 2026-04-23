@@ -215,6 +215,13 @@ export const dailyCompare = declareFlag("daily-compare");
 // board. Random-mode puzzles only. No schema changes.
 export const challengeLink = declareFlag("challenge-link");
 
+// RAZ-14 - Progressive hint disclosure. Splits the Hint action into
+// three tiers (region nudge → technique + location → place digit) so
+// players can learn WHY a move is forced instead of just seeing the
+// answer. Still increments `hintsUsed` once per hint cycle for
+// leaderboard integrity. Off = legacy one-shot reveal.
+export const progressiveHints = declareFlag("progressive-hints");
+
 // RAZ-9 - Print-friendly puzzle PDF. When on, the play screen surfaces a
 // Printer icon that opens a dialog asking the player to pick board-content
 // (original puzzle vs my progress) and pencil-marks (none, template =

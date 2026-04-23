@@ -7,6 +7,7 @@ import {
   haptics,
   jumpOnPlace,
   longPressNote,
+  progressiveHints,
   showMistakes,
 } from "@/lib/flags";
 import { normalizePastedPuzzle, parseBoard, serializeBoard } from "@/lib/sudoku/board";
@@ -66,6 +67,7 @@ export default async function CustomPlayPage({
     longPressNoteEnabled,
     jumpOnPlaceEnabled,
     showMistakesEnabled,
+    progressiveHintsEnabled,
   ] = await Promise.all([
     haptics(),
     autoSwitchDigit(),
@@ -74,6 +76,7 @@ export default async function CustomPlayPage({
     longPressNote(),
     jumpOnPlace(),
     showMistakes(),
+    progressiveHints(),
   ]);
 
   return (
@@ -105,6 +108,7 @@ export default async function CustomPlayPage({
       longPressNoteEnabled={longPressNoteEnabled}
       jumpOnPlaceEnabled={jumpOnPlaceEnabled}
       showMistakesEnabled={showMistakesEnabled}
+      progressiveHintsEnabled={progressiveHintsEnabled}
       isCustom
     />
   );

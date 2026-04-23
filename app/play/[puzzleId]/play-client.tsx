@@ -60,6 +60,7 @@ export function PlayClient({
   challengeLinkEnabled = false,
   currentUsername = null,
   printPuzzleEnabled = false,
+  progressiveHintsEnabled = false,
 }: {
   puzzle: PuzzleProp;
   savedGame: SavedProp;
@@ -141,6 +142,11 @@ export function PlayClient({
   // handler checks the flag again server-side so a direct URL with
   // the flag off still 403s.
   printPuzzleEnabled?: boolean;
+  // RAZ-14: server-resolved value of `progressive-hints`. Mirrored into
+  // the store so the `hint()` action decides whether to step through
+  // the three-tier disclosure vs. the legacy one-shot reveal. The
+  // ControlPanel also reads the store to show a tier indicator.
+  progressiveHintsEnabled?: boolean;
 }) {
   const startGame = useGameStore((s) => s.startGame);
   const resumeFromSnapshot = useGameStore((s) => s.resumeFromSnapshot);
@@ -276,6 +282,17 @@ export function PlayClient({
   useEffect(() => {
     setFeatureFlag("showMistakes", showMistakesEnabled);
   }, [showMistakesEnabled, setFeatureFlag]);
+
+  // RAZ-14 progressive-hints mirror. The store's `hint()` action reads
+  // this to choose between the three-tier disclosure flow and the
+  // legacy one-click placement. Flipping the flag to false in Edge
+  // Config is an instant kill switch — any in-flight session stays
+  // active on the current page load (the session is transient and
+  // dies on the next clearing action) but new sessions revert to the
+  // legacy behavior immediately.
+  useEffect(() => {
+    setFeatureFlag("progressiveHints", progressiveHintsEnabled);
+  }, [progressiveHintsEnabled, setFeatureFlag]);
 
   // Autosave: every time the relevant slice of state changes, debounce a
   // server action call. Only signed-in users autosave to the server;

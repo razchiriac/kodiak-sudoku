@@ -1,7 +1,10 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { Eraser, Lightbulb, Pencil, Redo2, Undo2, WandSparkles } from "lucide-react";
+import { toast } from "sonner";
 import { useGameStore } from "@/lib/zustand/game-store";
+import { tier1Message, tier2Message } from "@/lib/sudoku/hint-tier";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -29,6 +32,58 @@ export function ControlPanel({ side }: { side: "left" | "right" }) {
   const toggleMode = useGameStore((s) => s.toggleMode);
   const autoFillNotes = useGameStore((s) => s.autoFillNotes);
   const isComplete = useGameStore((s) => s.isComplete);
+  // RAZ-14 — subscribe to the tiered hint session so we can (a) show
+  // a "1/3" / "2/3" badge on the Hint button, (b) fire a sonner toast
+  // whenever the session transitions to a new tier. Both the left and
+  // right control panels mount this subscription because <ControlPanel>
+  // is rendered twice; we guard the side=right branch below to ensure
+  // the toast fires exactly once per tier change (the effect is side-
+  // scoped).
+  const hintSession = useGameStore((s) => s.hintSession);
+
+  // Toast-on-tier-change effect. We keep a ref of the last-seen
+  // (tier, cellIndex) so we only toast on a genuine change — not on
+  // every unrelated re-render of the control panel. The ref survives
+  // across renders; the effect fires the toast when the current pair
+  // differs from the previous one AND the current session is non-null.
+  //
+  // We intentionally fire the toast on tier 1 (region) and tier 2
+  // (technique + cell) only. Tier 3 clears the session (hintSession
+  // becomes null) and the placement itself is the visual feedback —
+  // an extra toast there would be noise.
+  //
+  // Only one of the two <ControlPanel> mounts (left/right) should
+  // own this effect or we'd double-toast. We pick `side === "right"`
+  // because that's where the Hint button lives — the side that cares.
+  const lastSeen = useRef<{ tier: 1 | 2; index: number } | null>(null);
+  useEffect(() => {
+    if (side !== "right") return;
+    if (!hintSession) {
+      lastSeen.current = null;
+      return;
+    }
+    const current = { tier: hintSession.tier, index: hintSession.suggestion.index };
+    const prev = lastSeen.current;
+    const changed =
+      !prev || prev.tier !== current.tier || prev.index !== current.index;
+    if (!changed) return;
+    lastSeen.current = current;
+    const msg =
+      hintSession.tier === 1
+        ? tier1Message(hintSession.suggestion)
+        : tier2Message(hintSession.suggestion);
+    // Short TTL — the player is actively playing and the next click
+    // will supersede this toast with the deeper tier. 4s is long
+    // enough to read the sentence (both tiers are <50 chars) but
+    // short enough that a forgotten toast doesn't clutter the UI.
+    toast.message(msg, {
+      duration: 4000,
+      // Stable id so the next tier REPLACES the previous toast in
+      // place rather than stacking — users get a clean progression
+      // of messages instead of a queue.
+      id: "progressive-hint",
+    });
+  }, [hintSession, side]);
 
   return (
     <TooltipProvider delayDuration={250}>
@@ -72,12 +127,28 @@ export function ControlPanel({ side }: { side: "left" | "right" }) {
               active={mode === "notes"}
               icon={<Pencil />}
             />
+            {/* RAZ-14: Hint label mirrors the next action.
+                - no session: "Hint" (reveal a nudge)
+                - tier 1 active: "Hint 2/3" (tap to see technique + cell)
+                - tier 2 active: "Hint 3/3" (tap to place)
+                We keep the word "Hint" in the label so the button's
+                purpose stays obvious at a glance; the fraction is
+                a progress indicator. The badge only appears when a
+                progressive session is active — legacy one-shot mode
+                shows the plain label. */}
             <ControlButton
-              label="Hint"
+              label={
+                hintSession
+                  ? hintSession.tier === 1
+                    ? "Hint 2/3"
+                    : "Hint 3/3"
+                  : "Hint"
+              }
               shortcut="H"
               onClick={() => void hint()}
               disabled={isComplete}
               icon={<Lightbulb />}
+              active={!!hintSession}
             />
             {/* Auto-notes: replaces every empty cell's pencil marks
                 with the freshly computed legal candidates. One tap

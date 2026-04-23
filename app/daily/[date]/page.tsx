@@ -17,6 +17,7 @@ import {
   haptics,
   pbRibbon,
   printPuzzle,
+  progressiveHints,
   shareResult,
   showMistakes,
 } from "@/lib/flags";
@@ -120,6 +121,8 @@ export default async function DailyArchivePage({
   const showMistakesEnabled = await showMistakes();
   // RAZ-9 / print-puzzle flag.
   const printPuzzleEnabled = await printPuzzle();
+  // RAZ-14 / progressive-hints flag. Same reasoning as the today route.
+  const progressiveHintsEnabled = await progressiveHints();
   const adjacent = await getAdjacentDailyDates(date);
 
   return (
@@ -163,6 +166,7 @@ export default async function DailyArchivePage({
         jumpOnPlaceEnabled={jumpOnPlaceEnabled}
         showMistakesEnabled={showMistakesEnabled}
         printPuzzleEnabled={printPuzzleEnabled}
+        progressiveHintsEnabled={progressiveHintsEnabled}
         isArchive
       />
     </>

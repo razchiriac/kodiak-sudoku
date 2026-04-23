@@ -18,6 +18,7 @@ import {
   longPressNote,
   pbRibbon,
   printPuzzle,
+  progressiveHints,
   quickPlay,
   shareResult,
   showMistakes,
@@ -142,6 +143,12 @@ export default async function PuzzlePage({
   // here and forwarded as a plain bool.
   const printPuzzleEnabled = await printPuzzle();
 
+  // RAZ-14 / progressive-hints flag. Pure UI gate — when on, the
+  // client-side `hint()` reducer splits a hint click into three
+  // tiers (region nudge → technique + cell → place the digit).
+  // When off, clicking Hint behaves exactly as before.
+  const progressiveHintsEnabled = await progressiveHints();
+
   return (
     <PlayClient
       puzzle={{
@@ -179,6 +186,7 @@ export default async function PuzzlePage({
       challengeLinkEnabled={challengeLinkFlag}
       currentUsername={currentUsername}
       printPuzzleEnabled={printPuzzleEnabled}
+      progressiveHintsEnabled={progressiveHintsEnabled}
     />
   );
 }

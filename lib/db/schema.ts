@@ -218,6 +218,40 @@ export const achievements = pgTable(
   ],
 );
 
+// RAZ-12: Friendships. One row per unordered pair, status-driven
+// lifecycle (pending → accepted, delete on decline/remove). See
+// drizzle/migrations/0005_friendships.sql for the shape and
+// invariants. We enforce user_a < user_b via a DB check; the
+// helper `canonicalPair()` in lib/server/friends.ts mirrors that
+// at the app layer.
+export const friendships = pgTable(
+  "friendships",
+  {
+    userA: uuid("user_a")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    userB: uuid("user_b")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    status: text("status").notNull(),
+    requestedBy: uuid("requested_by")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userA, t.userB] }),
+    index("friendships_user_a_idx").on(t.userA),
+    index("friendships_user_b_idx").on(t.userB),
+    check("friendships_status_check", sql`${t.status} in ('pending','accepted','blocked')`),
+  ],
+);
+
 export type Puzzle = typeof puzzles.$inferSelect;
 export type SavedGame = typeof savedGames.$inferSelect;
 export type CompletedGame = typeof completedGames.$inferSelect;

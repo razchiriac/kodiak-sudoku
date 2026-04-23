@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Share2, Sparkles, Swords, Trophy } from "lucide-react";
+import { Share2, Sparkles, Swords, Trophy, Users } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -32,6 +32,7 @@ export function CompletionModal({
   challenge = null,
   challengeLinkEnabled = false,
   currentUsername = null,
+  rankContext = null,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -73,6 +74,11 @@ export function CompletionModal({
   // `/play/<id>?from=<username>`. Null when anonymous or when the
   // signed-in user has never set a username — the action is hidden.
   currentUsername?: string | null;
+  // RAZ-32: rank context returned by `submitCompletionAction` for a
+  // successful daily submit. Drives the "You beat X% of today's
+  // solvers" banner. Null for random mode, archive completions,
+  // anonymous users, or when the `daily-compare` flag is off.
+  rankContext?: { total: number; slower: number; percentile: number } | null;
 }) {
   const elapsedMs = useGameStore((s) => s.elapsedMs);
   const mistakes = useGameStore((s) => s.mistakes);
@@ -232,6 +238,30 @@ export function CompletionModal({
             </span>
           </div>
         )}
+
+        {/* RAZ-32: "You beat X% of today's solvers" for daily mode.
+            Shown only when the server returned a rank context with
+            at least one solver (ourselves). Total-of-one is
+            intentionally suppressed: "you beat 0% (0 of 1)" is a
+            buzzkill and not socially useful. */}
+        {rankContext && rankContext.total > 1 ? (
+          <div
+            className="mx-auto flex items-center gap-2 rounded-full border border-primary/30 bg-primary/5 px-4 py-1.5 text-sm"
+            role="status"
+            aria-live="polite"
+          >
+            <Users className="h-4 w-4 text-primary" aria-hidden />
+            <span>
+              You beat{" "}
+              <span className="font-semibold">{rankContext.percentile}%</span>{" "}
+              of today&apos;s solvers (
+              <span className="font-mono tabular-nums">
+                {rankContext.slower} of {rankContext.total}
+              </span>
+              )
+            </span>
+          </div>
+        ) : null}
 
         {/* RAZ-13: resolution line for an incoming challenge. Only
             rendered when the flag is on AND the page received a

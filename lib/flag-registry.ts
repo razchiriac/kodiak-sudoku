@@ -187,6 +187,20 @@ export const FLAG_REGISTRY: readonly FlagSpec[] = [
     linearId: "RAZ-6",
   },
   {
+    // RAZ-32: Compare-to-field on daily completion. When on, a
+    // successful daily submit returns a {total, slower, percentile}
+    // rank context the completion modal renders as "You beat 73% of
+    // today's solvers (146 of 200)". Computed with a single count
+    // query per predicate, both satisfied by the partial index
+    // `completed_games_daily_time_idx (daily_date, time_ms)`.
+    key: "daily-compare",
+    envKey: "FLAG_DAILY_COMPARE",
+    defaultValue: true,
+    description:
+      "On daily completion, return a {total, slower, percentile} rank context and render `You beat 73% of solvers` in the modal.",
+    linearId: "RAZ-32",
+  },
+  {
     // RAZ-13: Share-a-puzzle challenge link. When on, the completion
     // modal adds a "Challenge a friend" action that copies a URL of
     // the form `/play/<id>?from=<username>` to the clipboard. When

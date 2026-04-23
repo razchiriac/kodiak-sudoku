@@ -319,6 +319,46 @@ export async function getQuickLeaderboardWeekly(
   return rows;
 }
 
+// RAZ-32: "You beat X% of today's solvers" context for a daily
+// completion. Called AFTER the user's own completion has been
+// inserted, so `total` already includes the caller — that matters
+// for the framing: "beat N of M" reads as "of all M of us, you were
+// faster than N" which is what players expect.
+//
+// Returns:
+//   - total:   every daily completion for this date (any time).
+//   - slower:  every daily completion with a strictly larger time
+//              than the caller's. Strict inequality so ties are not
+//              counted as "beaten" — if you tied the median, you
+//              beat exactly the players below you, not half of them.
+//   - percentile: round(slower / total * 100), clamped to [0, 100].
+//
+// Powered by the partial index
+// `completed_games_daily_time_idx (daily_date, time_ms)` where
+// `mode='daily'` — both predicates below can use it directly. Two
+// index lookups is faster than one full scan + group-by.
+export async function getDailyRankContext(
+  date: string,
+  timeMs: number,
+): Promise<{ total: number; slower: number; percentile: number }> {
+  const rows = await db.execute<{ total: number; slower: number }>(
+    sql`select
+          count(*)::int as total,
+          count(*) filter (where ${completedGames.timeMs} > ${timeMs})::int as slower
+        from ${completedGames}
+        where ${completedGames.mode} = 'daily'
+          and ${completedGames.dailyDate} = ${date}`,
+  );
+  const first =
+    (rows as unknown as { rows: { total: number; slower: number }[] }).rows?.[0] ??
+    { total: 0, slower: 0 };
+  const total = Number(first.total) || 0;
+  const slower = Number(first.slower) || 0;
+  const percentile =
+    total === 0 ? 0 : Math.max(0, Math.min(100, Math.round((slower / total) * 100)));
+  return { total, slower, percentile };
+}
+
 // RAZ-30: Recent solve times in a single difficulty bucket for a
 // user, oldest-first so a sparkline reads left→right chronologically.
 // Returns at most `limit` entries (default 20). Includes both random

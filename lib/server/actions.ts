@@ -7,11 +7,11 @@ import { z } from "zod";
 import { db } from "@/lib/db/client";
 import { completedGames, savedGames } from "@/lib/db/schema";
 import { getCurrentUser } from "@/lib/supabase/server";
-import { getPuzzleById } from "@/lib/db/queries";
+import { getDailyRankContext, getPuzzleById } from "@/lib/db/queries";
 import { findConflicts, isCorrect, isFilled } from "@/lib/sudoku/validate";
 import { parseBoard } from "@/lib/sudoku/board";
 import { nextHint } from "@/lib/sudoku/solver";
-import { solveTimeSanity } from "@/lib/flags";
+import { dailyCompare, solveTimeSanity } from "@/lib/flags";
 
 // All mutations go through Server Actions defined in this file. Every
 // action validates inputs with Zod, derives the user from the cookie
@@ -197,7 +197,26 @@ export async function submitCompletionAction(raw: SubmitInput) {
   revalidatePath("/profile");
   revalidatePath("/play");
 
-  return { ok: true as const };
+  // RAZ-32: compute a rank context AFTER the insert so the caller is
+  // counted in the denominator. Only for daily mode (the feature is
+  // framed around "today's solvers" — a per-puzzle rank context for
+  // random puzzles exists in the per-difficulty leaderboard already).
+  // Flag off or non-daily mode → null and the modal simply hides the
+  // banner. We swallow errors defensively: a failed rank lookup must
+  // not mask the fact that the completion itself was recorded
+  // successfully.
+  let rankContext:
+    | { total: number; slower: number; percentile: number }
+    | null = null;
+  if (input.mode === "daily" && dailyDate && (await dailyCompare())) {
+    try {
+      rankContext = await getDailyRankContext(dailyDate, input.elapsedMs);
+    } catch {
+      rankContext = null;
+    }
+  }
+
+  return { ok: true as const, rankContext };
 }
 
 const HintSchema = z.object({

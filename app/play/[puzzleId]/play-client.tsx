@@ -302,6 +302,15 @@ export function PlayClient({
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [completionOpen, setCompletionOpen] = useState(false);
+  // RAZ-32: rank context returned by `submitCompletionAction` for
+  // daily completions. Null until the submit resolves, or forever
+  // when the flag is off / the user is anonymous / the completion
+  // was an archive practice run.
+  const [rankContext, setRankContext] = useState<{
+    total: number;
+    slower: number;
+    percentile: number;
+  } | null>(null);
   const submitted = useRef(false);
   useEffect(() => {
     if (!isComplete || !meta) return;
@@ -332,7 +341,13 @@ export function PlayClient({
         dailyDate: dailyDate ?? null,
       });
       setSubmitting(false);
-      if (!res.ok) setSubmitError(res.error);
+      if (!res.ok) {
+        setSubmitError(res.error);
+        return;
+      }
+      // RAZ-32: stash the rank context so the modal can render
+      // "You beat 73% of today's solvers". Null for random mode.
+      if (res.rankContext) setRankContext(res.rankContext);
     })();
   }, [isComplete, meta, isSignedIn, snapshot, dailyDate, isArchive]);
 
@@ -448,6 +463,7 @@ export function PlayClient({
         challenge={challenge}
         challengeLinkEnabled={challengeLinkEnabled}
         currentUsername={currentUsername}
+        rankContext={rankContext}
       />
       <ShortcutsOverlay open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />

@@ -45,7 +45,16 @@ export async function getPuzzleById(id: number): Promise<Puzzle | null> {
 // Today's daily puzzle, in UTC. We deliberately do not auto-create one
 // here: scripts/seed-daily.ts is the only writer, so a missing daily is a
 // loud failure (better than silently picking a random puzzle).
-export async function getDailyPuzzle(date: string): Promise<{ puzzle: Puzzle; date: string } | null> {
+//
+// RAZ-33: the table now carries up to 3 rows per date (Easy/Medium/
+// Hard tiers). Call sites pass the desired bucket. When `bucket` is
+// omitted we return the first row the table gives us — this is only
+// used by a couple of legacy call sites and in practice always
+// matches the single row that existed pre-RAZ-33.
+export async function getDailyPuzzle(
+  date: string,
+  bucket?: number,
+): Promise<{ puzzle: Puzzle; date: string } | null> {
   const rows = await db
     .select({
       puzzle: puzzles,
@@ -53,9 +62,29 @@ export async function getDailyPuzzle(date: string): Promise<{ puzzle: Puzzle; da
     })
     .from(dailyPuzzles)
     .innerJoin(puzzles, eq(puzzles.id, dailyPuzzles.puzzleId))
-    .where(eq(dailyPuzzles.puzzleDate, date))
+    .where(
+      bucket === undefined
+        ? eq(dailyPuzzles.puzzleDate, date)
+        : and(
+            eq(dailyPuzzles.puzzleDate, date),
+            eq(dailyPuzzles.difficultyBucket, bucket),
+          ),
+    )
+    .orderBy(dailyPuzzles.difficultyBucket)
     .limit(1);
   return rows[0] ?? null;
+}
+
+// RAZ-33: which daily tiers exist for a given date. The daily pages
+// use this to render the tier tabs — if a future migration adds
+// Expert or removes Medium, the tabs simply reflect what's seeded.
+export async function getDailyBucketsForDate(date: string): Promise<number[]> {
+  const rows = await db
+    .select({ bucket: dailyPuzzles.difficultyBucket })
+    .from(dailyPuzzles)
+    .where(eq(dailyPuzzles.puzzleDate, date))
+    .orderBy(dailyPuzzles.difficultyBucket);
+  return rows.map((r) => r.bucket);
 }
 
 // RAZ-5 / daily-archive: find the previous and next dates present in
@@ -237,8 +266,23 @@ export async function getDifficultyLeaderboard(
 
 // Top N rows on the daily leaderboard for a given date. Optional `pure`
 // flag excludes any completion that used a hint.
-export async function getDailyLeaderboard(date: string, opts: { pure?: boolean; limit?: number } = {}) {
+//
+// RAZ-33: optional `bucket` narrows the board to a single tier
+// (Easy/Medium/Hard). Unset → all tiers combined (kept for backward
+// compatibility with any callers that still want the old behaviour).
+export async function getDailyLeaderboard(
+  date: string,
+  opts: { pure?: boolean; limit?: number; bucket?: number } = {},
+) {
   const limit = opts.limit ?? 50;
+
+  const conds = [
+    eq(completedGames.mode, "daily"),
+    eq(completedGames.dailyDate, date),
+  ];
+  if (opts.pure) conds.push(eq(completedGames.hintsUsed, 0));
+  if (opts.bucket !== undefined)
+    conds.push(eq(completedGames.difficultyBucket, opts.bucket));
 
   const rows = await db
     .select({
@@ -252,15 +296,7 @@ export async function getDailyLeaderboard(date: string, opts: { pure?: boolean; 
     })
     .from(completedGames)
     .leftJoin(profiles, eq(profiles.id, completedGames.userId))
-    .where(
-      opts.pure
-        ? and(
-            eq(completedGames.mode, "daily"),
-            eq(completedGames.dailyDate, date),
-            eq(completedGames.hintsUsed, 0),
-          )
-        : and(eq(completedGames.mode, "daily"), eq(completedGames.dailyDate, date)),
-    )
+    .where(and(...conds))
     .orderBy(completedGames.timeMs, completedGames.completedAt)
     .limit(limit);
 
@@ -340,6 +376,11 @@ export async function getQuickLeaderboardWeekly(
 export async function getDailyRankContext(
   date: string,
   timeMs: number,
+  // RAZ-33: when set, the rank context is scoped to a single
+  // difficulty tier. Callers on the daily pages pass the tier the
+  // user just completed so the "beat X% of solvers" banner
+  // compares like-with-like. Unset → the legacy all-tiers scope.
+  bucket?: number,
 ): Promise<{ total: number; slower: number; percentile: number }> {
   const rows = await db.execute<{ total: number; slower: number }>(
     sql`select
@@ -347,7 +388,8 @@ export async function getDailyRankContext(
           count(*) filter (where ${completedGames.timeMs} > ${timeMs})::int as slower
         from ${completedGames}
         where ${completedGames.mode} = 'daily'
-          and ${completedGames.dailyDate} = ${date}`,
+          and ${completedGames.dailyDate} = ${date}
+          ${bucket !== undefined ? sql`and ${completedGames.difficultyBucket} = ${bucket}` : sql``}`,
   );
   const first =
     (rows as unknown as { rows: { total: number; slower: number }[] }).rows?.[0] ??

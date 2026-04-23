@@ -218,7 +218,14 @@ export async function submitCompletionAction(raw: SubmitInput) {
     | null = null;
   if (input.mode === "daily" && dailyDate && (await dailyCompare())) {
     try {
-      rankContext = await getDailyRankContext(dailyDate, input.elapsedMs);
+      // RAZ-33: scope rank context to this tier so "you beat 73%
+      // of today's solvers" compares like-with-like — a Medium
+      // solver shouldn't be ranked against Easy solvers.
+      rankContext = await getDailyRankContext(
+        dailyDate,
+        input.elapsedMs,
+        puzzle.difficultyBucket,
+      );
     } catch {
       rankContext = null;
     }

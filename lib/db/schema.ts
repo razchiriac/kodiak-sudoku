@@ -133,10 +133,12 @@ export const completedGames = pgTable(
     index("completed_games_daily_time_idx")
       .on(t.dailyDate, t.timeMs)
       .where(sql`${t.mode} = 'daily'`),
-    // One scored daily completion per user per date. Enforced even though
-    // app code also checks this; defense in depth.
-    uniqueIndex("completed_games_daily_user_uniq")
-      .on(t.userId, t.dailyDate)
+    // RAZ-33: One scored daily completion per user per (date,
+    // bucket). Three mini-daily tiers per day means a user can
+    // score three rows for one date — but only one per tier.
+    // Enforced at the DB for defense in depth.
+    uniqueIndex("completed_games_daily_user_bucket_uniq")
+      .on(t.userId, t.dailyDate, t.difficultyBucket)
       .where(sql`${t.mode} = 'daily'`),
   ],
 );
@@ -146,13 +148,19 @@ export const completedGames = pgTable(
 export const dailyPuzzles = pgTable(
   "daily_puzzles",
   {
-    puzzleDate: date("puzzle_date").primaryKey(),
+    puzzleDate: date("puzzle_date").notNull(),
     puzzleId: bigint("puzzle_id", { mode: "number" })
       .notNull()
       .references(() => puzzles.id),
     difficultyBucket: smallint("difficulty_bucket").notNull(),
   },
-  (t) => [index("daily_puzzles_puzzle_idx").on(t.puzzleId)],
+  (t) => [
+    // RAZ-33: composite PK so one date can carry up to three
+    // buckets (Easy/Medium/Hard). The physical migration is
+    // drizzle/migrations/0004_mini_daily.sql.
+    primaryKey({ columns: [t.puzzleDate, t.difficultyBucket] }),
+    index("daily_puzzles_puzzle_idx").on(t.puzzleId),
+  ],
 );
 
 // Optional event log for re-bucketing difficulty post-launch. Empty in v1

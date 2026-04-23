@@ -56,14 +56,19 @@ test.describe("public routes — 200 + page-specific anchor renders", () => {
     await expect(page.getByRole("grid", { name: /sudoku/i })).toBeVisible();
   });
 
-  test("/play/diagonal renders the variant heading + grid", async ({ page }) => {
+  test("/play/diagonal renders the variant difficulty picker", async ({ page }) => {
     const res = await page.goto("/play/diagonal");
     expect(res?.status()).toBeLessThan(400);
-    // The diagonal variant page has a dedicated h1 ("Diagonal Sudoku").
+    // The diagonal variant page has a dedicated h1 ("Diagonal
+    // Sudoku") and the same Easy / Medium / Hard difficulty
+    // picker shape as `/play` — but no Expert (variant only ships
+    // Easy / Medium / Hard, see app/play/diagonal/page.tsx).
     await expect(
       page.getByRole("heading", { level: 1, name: /diagonal/i }),
     ).toBeVisible();
-    await expect(page.getByRole("grid", { name: /sudoku/i })).toBeVisible();
+    for (const label of ["Easy", "Medium", "Hard"]) {
+      await expect(page.getByRole("button", { name: label })).toBeVisible();
+    }
   });
 
   test("/play/custom — paste form when flag on, 404 when off", async ({ page }) => {

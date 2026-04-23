@@ -54,6 +54,7 @@ export function PlayClient({
   showMistakesEnabled = false,
   isQuickPlay = false,
   isArchive = false,
+  isCustom = false,
   challenge = null,
   challengeLinkEnabled = false,
   currentUsername = null,
@@ -67,6 +68,10 @@ export function PlayClient({
   // "practice only, not scored" badge and skip submitCompletionAction
   // on finish. Today's daily keeps its normal scored behaviour.
   isArchive?: boolean;
+  // RAZ-35: when true, this is a user-pasted puzzle (no DB row,
+  // no leaderboard). Skip BOTH the autosave path AND the submit
+  // path, and render a "Custom puzzle · not saved" badge.
+  isCustom?: boolean;
   // Previous best time (ms) for this user in this difficulty, or null
   // when the pb-ribbon flag (RAZ-22) is off, the user is anonymous, or
   // they have no completions in this bucket. Forwarded to the
@@ -275,6 +280,9 @@ export function PlayClient({
   useEffect(() => {
     if (!isSignedIn || !meta) return;
     if (mode === "daily") return; // daily progress is intentionally not server-saved
+    // RAZ-35: user-pasted puzzles have no DB row, so there's nothing
+    // the autosave endpoint could upsert into. Skip entirely.
+    if (isCustom) return;
     if (debounce.current) window.clearTimeout(debounce.current);
     debounce.current = window.setTimeout(() => {
       const snap = snapshot();
@@ -295,7 +303,7 @@ export function PlayClient({
     // We deliberately only depend on values that should trigger save. The
     // store's `snapshot` is stable so it's safe to omit from deps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [board, elapsedMs, isPaused, meta, isSignedIn, mode]);
+  }, [board, elapsedMs, isPaused, meta, isSignedIn, mode, isCustom]);
 
   // On completion, submit to the server once. We track submission status
   // for the completion modal so the user gets feedback if it failed.
@@ -320,6 +328,12 @@ export function PlayClient({
     // RAZ-5 / daily-archive: archive completions are practice-only so we
     // skip the scored submit path entirely. Completion modal still shows.
     if (isArchive) {
+      submitted.current = true;
+      return;
+    }
+    // RAZ-35: custom (pasted) puzzles aren't in the DB, so there's
+    // nothing `submitCompletionAction` could record. Same short-circuit.
+    if (isCustom) {
       submitted.current = true;
       return;
     }
@@ -349,7 +363,7 @@ export function PlayClient({
       // "You beat 73% of today's solvers". Null for random mode.
       if (res.rankContext) setRankContext(res.rankContext);
     })();
-  }, [isComplete, meta, isSignedIn, snapshot, dailyDate, isArchive]);
+  }, [isComplete, meta, isSignedIn, snapshot, dailyDate, isArchive, isCustom]);
 
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -397,9 +411,11 @@ export function PlayClient({
       <div className="flex w-full max-w-[560px] items-center justify-between">
         <div className="flex flex-col text-sm text-muted-foreground">
           <span>
-            {mode === "daily"
-              ? "Daily puzzle"
-              : `${DIFFICULTY_LABEL[puzzle.difficultyBucket]} puzzle`}
+            {isCustom
+              ? "Custom puzzle"
+              : mode === "daily"
+                ? "Daily puzzle"
+                : `${DIFFICULTY_LABEL[puzzle.difficultyBucket]} puzzle`}
             {mode === "daily" && dailyDate ? ` · ${dailyDate}` : ""}
           </span>
           {/* RAZ-5: make it obvious an archive daily won't be scored so
@@ -408,6 +424,13 @@ export function PlayClient({
           {isArchive ? (
             <span className="text-xs text-muted-foreground/80">
               Archive · practice only (not scored)
+            </span>
+          ) : null}
+          {/* RAZ-35: same framing for pasted puzzles. Players need to
+              know this isn't going to their stats / leaderboard. */}
+          {isCustom ? (
+            <span className="text-xs text-muted-foreground/80">
+              Imported · not saved, not scored
             </span>
           ) : null}
         </div>

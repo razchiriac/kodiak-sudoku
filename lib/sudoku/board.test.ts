@@ -6,6 +6,7 @@ import {
   digitCounts,
   emptyNotes,
   hasNote,
+  normalizePastedPuzzle,
   parseBoard,
   peers,
   prunePeerNotes,
@@ -29,6 +30,55 @@ describe("parseBoard / serializeBoard", () => {
 
   it("rejects wrong length", () => {
     expect(() => parseBoard("123")).toThrow();
+  });
+});
+
+describe("normalizePastedPuzzle", () => {
+  it("accepts a canonical 81-digit string", () => {
+    const res = normalizePastedPuzzle(SAMPLE_PUZZLE);
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.digits).toBe(SAMPLE_PUZZLE);
+  });
+
+  it("treats `.` as empty", () => {
+    const dotted = SAMPLE_PUZZLE.replaceAll("0", ".");
+    const res = normalizePastedPuzzle(dotted);
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.digits).toBe(SAMPLE_PUZZLE);
+  });
+
+  it("strips whitespace, pipes, plus, and dashes", () => {
+    // Simulate paste from a pretty-printed grid.
+    const pretty = [
+      "+---+---+---+",
+      "| 5 3 . | . 7 . | . . . |",
+      "| 6 . . | 1 9 5 | . . . |",
+      "| . 9 8 | . . . | . 6 . |",
+      "+---+---+---+",
+      "| 8 . . | . 6 . | . . 3 |",
+      "| 4 . . | 8 . 3 | . . 1 |",
+      "| 7 . . | . 2 . | . . 6 |",
+      "+---+---+---+",
+      "| . 6 . | . . . | 2 8 . |",
+      "| . . . | 4 1 9 | . . 5 |",
+      "| . . . | . 8 . | . 7 9 |",
+      "+---+---+---+",
+    ].join("\n");
+    const res = normalizePastedPuzzle(pretty);
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.digits).toBe(SAMPLE_PUZZLE);
+  });
+
+  it("rejects too-short input with a descriptive error", () => {
+    const res = normalizePastedPuzzle("1234");
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/81/);
+  });
+
+  it("rejects too-long input with a descriptive error", () => {
+    const res = normalizePastedPuzzle(SAMPLE_PUZZLE + "0");
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/82/);
   });
 });
 

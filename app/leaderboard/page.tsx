@@ -17,8 +17,11 @@ import {
   tierSlug,
 } from "@/components/game/daily-tier-tabs";
 
+// RAZ-74: `force-dynamic` already renders on every request — the
+// `revalidate` window pinned the leaderboard for up to a minute
+// after a fresh completion, which made the "I just solved it"
+// experience confusing. See the matching fix on /profile/[username].
 export const dynamic = "force-dynamic";
-export const revalidate = 60;
 
 // Daily leaderboard. Shows two tabs: "Pure" (no hints) is the default and
 // is what we promote in marketing; "All" includes anyone who finished,

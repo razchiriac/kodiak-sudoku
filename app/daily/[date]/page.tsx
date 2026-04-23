@@ -16,6 +16,7 @@ import {
   longPressNote,
   haptics,
   pbRibbon,
+  printPuzzle,
   shareResult,
   showMistakes,
 } from "@/lib/flags";
@@ -117,6 +118,8 @@ export default async function DailyArchivePage({
   // we still mirror the flag so the settings dialog renders the
   // toggle consistently.
   const showMistakesEnabled = await showMistakes();
+  // RAZ-9 / print-puzzle flag.
+  const printPuzzleEnabled = await printPuzzle();
   const adjacent = await getAdjacentDailyDates(date);
 
   return (
@@ -159,6 +162,7 @@ export default async function DailyArchivePage({
         longPressNoteEnabled={longPressNoteEnabled}
         jumpOnPlaceEnabled={jumpOnPlaceEnabled}
         showMistakesEnabled={showMistakesEnabled}
+        printPuzzleEnabled={printPuzzleEnabled}
         isArchive
       />
     </>

@@ -232,6 +232,23 @@ export const FLAG_REGISTRY: readonly FlagSpec[] = [
     linearId: "RAZ-13",
   },
   {
+    // RAZ-9: Print-friendly puzzle PDF. When on, the play screen
+    // surfaces a Printer icon next to the settings button. Clicking
+    // it opens a small dialog with two radio groups (board content
+    // and pencil marks) and a Download button that navigates to
+    // /print/<puzzleId>?board=...&marks=... — the route handler
+    // renders the PDF on the server with @react-pdf/renderer and
+    // streams it back as an attachment. No DB changes; the current
+    // board + notes are passed as base64-encoded query params when
+    // the user picks "My progress" / "My current notes".
+    key: "print-puzzle",
+    envKey: "FLAG_PRINT_PUZZLE",
+    defaultValue: true,
+    description:
+      "Expose a printer icon on /play/[id] that downloads a PDF of the puzzle with optional pencil-marks (original/progress x none/template/my-notes).",
+    linearId: "RAZ-9",
+  },
+  {
     // RAZ-15: Per-cell mistake indicator. When the user opts in and the
     // client has the puzzle solution (random non-daily puzzles only),
     // any cell whose placed value doesn't match the solution tints red

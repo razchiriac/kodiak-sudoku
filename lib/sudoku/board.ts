@@ -296,3 +296,34 @@ export function computeAllCandidates(board: Board, variant?: Variant): Notes {
   }
   return notes;
 }
+
+// RAZ-43: true when the current notes buffer is exactly what
+// `computeAllCandidates` would produce for this board+variant. Used
+// by the play UI to show the auto-notes control as "on" and to make
+// the next tap clear every empty cell's pencil marks instead of
+// re-filling. Pure; safe to call from selectors.
+export function notesMatchComputedCandidates(
+  board: Board,
+  notes: Notes,
+  variant?: Variant,
+): boolean {
+  const expected = computeAllCandidates(board, variant);
+  for (let i = 0; i < BOARD_SIZE; i++) {
+    if (notes[i] !== expected[i]) return false;
+  }
+  return true;
+}
+
+// RAZ-43: clear pencil marks on every cell that is still empty (value
+// 0). Clue and user-filled cells are left unchanged. One history step
+// when paired with a full `prevNotes` snapshot.
+export function clearNotesOnEmptyCells(
+  board: Board,
+  notes: Notes,
+): Notes {
+  const next = new Uint16Array(notes);
+  for (let i = 0; i < BOARD_SIZE; i++) {
+    if (board[i] === 0) next[i] = 0;
+  }
+  return next;
+}

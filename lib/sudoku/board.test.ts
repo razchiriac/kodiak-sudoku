@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   buildFixedMask,
   clearCellNotes,
+  clearNotesOnEmptyCells,
+  computeAllCandidates,
   computeMistakes,
   digitCounts,
   emptyNotes,
   hasNote,
   normalizePastedPuzzle,
+  notesMatchComputedCandidates,
   parseBoard,
   peers,
   prunePeerNotes,
@@ -210,5 +213,30 @@ describe("computeMistakes", () => {
     const fixed = buildFixedMask(SAMPLE_PUZZLE);
     expect(computeMistakes(board, fixed, null).size).toBe(0);
     expect(computeMistakes(board, fixed, "").size).toBe(0);
+  });
+});
+
+describe("RAZ-43 notesMatchComputedCandidates / clearNotesOnEmptyCells", () => {
+  it("notesMatchComputedCandidates is true for computeAllCandidates output", () => {
+    const board = parseBoard(SAMPLE_PUZZLE);
+    const notes = computeAllCandidates(board);
+    expect(notesMatchComputedCandidates(board, notes)).toBe(true);
+  });
+
+  it("notesMatchComputedCandidates is false when a note mask differs", () => {
+    const board = parseBoard(SAMPLE_PUZZLE);
+    const notes = computeAllCandidates(board);
+    // Cell 2 is empty in the sample puzzle — flip one candidate bit.
+    notes[2] ^= 1;
+    expect(notesMatchComputedCandidates(board, notes)).toBe(false);
+  });
+
+  it("clearNotesOnEmptyCells zeros pencil marks only on empty cells", () => {
+    const board = parseBoard(SAMPLE_PUZZLE);
+    const notes = computeAllCandidates(board);
+    const cleared = clearNotesOnEmptyCells(board, notes);
+    for (let i = 0; i < 81; i++) {
+      if (board[i] === 0) expect(cleared[i]).toBe(0);
+    }
   });
 });

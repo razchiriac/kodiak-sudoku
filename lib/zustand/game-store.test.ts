@@ -491,4 +491,28 @@ describe("game-store: RAZ-42 auto-notes toggle", () => {
     for (let i = 0; i < 81; i++) total += n[i];
     expect(total).toBeGreaterThan(0);
   });
+
+  // RAZ-43: toggle — second tap clears bulk notes when they match full
+  // candidates; third tap fills again.
+  it("autoFillNotes clears on second tap when notes match computed candidates", () => {
+    useGameStore.getState().autoFillNotes();
+    useGameStore.getState().autoFillNotes();
+    const b = useGameStore.getState().board;
+    const n = useGameStore.getState().notes;
+    let sumOnEmpty = 0;
+    for (let i = 0; i < 81; i++) {
+      if (b[i] === 0) sumOnEmpty += n[i];
+    }
+    expect(sumOnEmpty).toBe(0);
+  });
+
+  it("autoFillNotes fills again after clear", () => {
+    useGameStore.getState().autoFillNotes();
+    useGameStore.getState().autoFillNotes();
+    useGameStore.getState().autoFillNotes();
+    let total = 0;
+    const n = useGameStore.getState().notes;
+    for (let i = 0; i < 81; i++) total += n[i];
+    expect(total).toBeGreaterThan(0);
+  });
 });

@@ -157,8 +157,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             <span className="flex flex-col">
               <span className="font-medium text-foreground">Auto-notes</span>
               <span className="text-xs text-muted-foreground">
-                Show the button that fills pencil marks on every empty cell at
-                once. Turn off for manual notes only.
+                Show the wand: first tap fills every empty cell with legal
+                candidates; when that full grid is active, the next tap clears
+                them. Turn off to hide the control.
               </span>
             </span>
             <input

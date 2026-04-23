@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { Eraser, Lightbulb, Pencil, Redo2, Undo2, WandSparkles } from "lucide-react";
 import { toast } from "sonner";
+import { notesMatchComputedCandidates } from "@/lib/sudoku/board";
 import { useGameStore } from "@/lib/zustand/game-store";
 import { tier1Message, tier2Message } from "@/lib/sudoku/hint-tier";
 import { Button } from "@/components/ui/button";
@@ -22,7 +23,7 @@ import { cn } from "@/lib/utils";
 // Grouping rationale:
 //   - left  = Undo / Redo / Erase (history + correction; the "I
 //     messed up" cluster)
-//   - right = Notes / Hint / Auto-notes (mode + assist cluster)
+//   - right = Notes / Hint / Auto-notes toggle (fill vs clear bulk)
 export function ControlPanel({ side }: { side: "left" | "right" }) {
   const undo = useGameStore((s) => s.undo);
   const redo = useGameStore((s) => s.redo);
@@ -34,6 +35,11 @@ export function ControlPanel({ side }: { side: "left" | "right" }) {
   // RAZ-42: bulk auto-notes can be disabled in Settings (persisted).
   const autoNotesEnabled = useGameStore(
     (s) => s.settings.autoNotesEnabled !== false,
+  );
+  // RAZ-43: "on" when the board's pencil marks are exactly the
+  // auto-computed candidate set — next tap clears; otherwise fill.
+  const autoNotesMatch = useGameStore((s) =>
+    notesMatchComputedCandidates(s.board, s.notes, s.meta?.variant),
   );
   const isComplete = useGameStore((s) => s.isComplete);
   // RAZ-14 — subscribe to the tiered hint session so we can (a) show
@@ -159,10 +165,11 @@ export function ControlPanel({ side }: { side: "left" | "right" }) {
                 marks with legal candidates; one undo reverts. */}
             {autoNotesEnabled && (
               <ControlButton
-                label="Auto-notes"
+                label={autoNotesMatch ? "Clear notes" : "Auto-notes"}
                 shortcut=""
                 onClick={autoFillNotes}
                 disabled={isComplete}
+                active={autoNotesMatch}
                 icon={<WandSparkles />}
               />
             )}

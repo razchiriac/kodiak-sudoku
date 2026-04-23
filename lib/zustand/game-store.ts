@@ -7,6 +7,7 @@ import {
   type Variant,
   buildFixedMask,
   clearCellNotes,
+  clearNotesOnEmptyCells,
   computeAllCandidates,
   digitCounts,
   emptyNotes,
@@ -14,6 +15,7 @@ import {
   peers,
   prunePeerNotes,
   toggleNote,
+  notesMatchComputedCandidates,
 } from "@/lib/sudoku/board";
 import { findConflicts, isComplete, isLegalPlacement } from "@/lib/sudoku/validate";
 import { nextHint, type HintSuggestion } from "@/lib/sudoku/solver";
@@ -298,9 +300,9 @@ type GameActions = {
   // value means notes would be meaningless).
   toggleNoteOnSelection: (digit: number) => void;
   eraseSelection: () => void;
-  // Replace every empty cell's notes with the full set of legal
-  // candidates (1..9 minus peers' values). Pushes a single bulk
-  // history entry so one undo reverts the whole operation.
+  // RAZ-43: if notes already match a full auto-candidate grid, clear
+  // pencil marks on all empty cells; else fill with computed
+  // candidates. Each action is one notes-bulk history step.
   autoFillNotes: () => void;
 
   undo: () => void;
@@ -904,11 +906,14 @@ export const useGameStore = create<GameState & GameActions>()(
         // called the action without going through the visible button.
         if (s.settings.autoNotesEnabled === false) return;
         if (s.isComplete || s.isPaused) return;
+        const v = s.meta?.variant;
         const prevNotes = new Uint16Array(s.notes);
-        const nextNotes = computeAllCandidates(s.board, s.meta?.variant);
+        const nextNotes = notesMatchComputedCandidates(s.board, prevNotes, v)
+          ? clearNotesOnEmptyCells(s.board, prevNotes)
+          : computeAllCandidates(s.board, v);
 
         // Skip if nothing actually changed — avoids polluting the undo
-        // stack with no-op entries (e.g. tapping the button twice).
+        // stack with no-op entries (e.g. redundant tap).
         let changed = false;
         for (let i = 0; i < BOARD_SIZE; i++) {
           if (prevNotes[i] !== nextNotes[i]) {

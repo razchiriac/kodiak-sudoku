@@ -38,6 +38,13 @@ yarn-error.log*
 data/raw
 data/processed
 
-# drizzle
-drizzle/
-!drizzle/migrations
+# drizzle: ignore everything inside drizzle/ (e.g. local snapshot
+# JSONs from drizzle-kit) but explicitly track our hand-written
+# migrations so the database schema is versioned with the code.
+# Note: `drizzle/` (the dir itself) cannot be excluded with a trailing
+# slash if we want to un-include files inside it — git won't recurse
+# into an excluded directory. Using `drizzle/*` lets us un-include
+# the migrations subtree.
+drizzle/*
+!drizzle/migrations/
+!drizzle/migrations/**

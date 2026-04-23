@@ -37,6 +37,13 @@ export const profiles = pgTable("profiles", {
   currentDailyStreak: integer("current_daily_streak").notNull().default(0),
   longestDailyStreak: integer("longest_daily_streak").notNull().default(0),
   lastDailyCompletedOn: date("last_daily_completed_on"),
+  // RAZ-8: Streak freeze bank. Earned at every 7-day streak milestone
+  // (capped at 3), spent automatically by the streak trigger to forgive
+  // missed days. Stored as smallint because the cap is 3; check
+  // constraint in migration 0001 enforces 0..3.
+  streakFreezesAvailable: smallint("streak_freezes_available")
+    .notNull()
+    .default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

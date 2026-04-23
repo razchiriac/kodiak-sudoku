@@ -2,11 +2,12 @@
 
 import "server-only";
 import { revalidatePath } from "next/cache";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/lib/db/client";
-import { completedGames, puzzleAttempts, savedGames } from "@/lib/db/schema";
+import { completedGames, friendships, profiles, puzzleAttempts, savedGames } from "@/lib/db/schema";
 import { evaluateAndAwardAchievements } from "./achievements";
+import { canonicalPair, getFriendship } from "./friends";
 import { getCurrentUser } from "@/lib/supabase/server";
 import { getDailyRankContext, getPuzzleById } from "@/lib/db/queries";
 import { findConflicts, isCorrect, isFilled } from "@/lib/sudoku/validate";
@@ -491,4 +492,128 @@ export async function migrateLocalProgressAction(raw: z.infer<typeof MigrateSche
     updatedAt: new Date(),
   });
   return { ok: true as const, kept: "local" };
+}
+
+// =============================================================================
+// RAZ-12 — Friend requests / private leaderboards.
+// =============================================================================
+
+// Usernames are lowercase-ish alphanumeric + dash + underscore.
+// We don't enforce this at the DB level for the profiles table
+// (existing profiles may have mixed case) but we normalise here
+// so "@RAZ" and "@raz" resolve the same way.
+const UsernameSchema = z
+  .string()
+  .min(1)
+  .max(40)
+  .regex(/^[A-Za-z0-9_\-.]+$/);
+
+/**
+ * Send a friend request by username. Idempotent in the sense that
+ * re-sending a request from the same pending row is a no-op;
+ * re-sending after the recipient declined (which deleted the row)
+ * starts a fresh request.
+ */
+export async function sendFriendRequestAction(rawUsername: string) {
+  const me = await getCurrentUser();
+  if (!me) return { ok: false as const, error: "unauthenticated" };
+
+  const parsed = UsernameSchema.safeParse(rawUsername.trim());
+  if (!parsed.success) return { ok: false as const, error: "invalid_username" };
+
+  // Username lookups are case-insensitive; most users type "@Raz"
+  // when they mean "@raz". We lower() both sides for the compare.
+  const target = await db
+    .select({ id: profiles.id, username: profiles.username })
+    .from(profiles)
+    .where(sql`lower(${profiles.username}) = lower(${parsed.data})`)
+    .limit(1);
+
+  if (!target[0]) return { ok: false as const, error: "user_not_found" };
+  const other = target[0].id;
+  if (other === me.id) return { ok: false as const, error: "cannot_friend_self" };
+
+  const existing = await getFriendship(me.id, other);
+  if (existing) {
+    if (existing.status === "accepted")
+      return { ok: false as const, error: "already_friends" };
+    if (existing.status === "pending")
+      return { ok: false as const, error: "already_pending" };
+    if (existing.status === "blocked")
+      return { ok: false as const, error: "blocked" };
+  }
+
+  const { userA, userB } = canonicalPair(me.id, other);
+  await db.insert(friendships).values({
+    userA,
+    userB,
+    status: "pending",
+    requestedBy: me.id,
+    updatedAt: new Date(),
+  });
+
+  revalidatePath("/friends");
+  return { ok: true as const };
+}
+
+/**
+ * Accept an incoming friend request. The `fromUserId` is the
+ * initiator — the one whose row has `requested_by = fromUserId`.
+ * We never let the initiator accept their own request (would
+ * defeat the point), and we require the pending row to actually
+ * exist.
+ */
+export async function acceptFriendRequestAction(fromUserId: string) {
+  const me = await getCurrentUser();
+  if (!me) return { ok: false as const, error: "unauthenticated" };
+
+  const { userA, userB } = canonicalPair(me.id, fromUserId);
+  const updated = await db
+    .update(friendships)
+    .set({ status: "accepted", updatedAt: new Date() })
+    .where(
+      and(
+        eq(friendships.userA, userA),
+        eq(friendships.userB, userB),
+        eq(friendships.status, "pending"),
+        // Only the non-initiator can accept — prevents the
+        // sender from self-accepting via a crafted action call.
+        eq(friendships.requestedBy, fromUserId),
+      ),
+    )
+    .returning({ userA: friendships.userA });
+
+  if (updated.length === 0)
+    return { ok: false as const, error: "request_not_found" };
+
+  revalidatePath("/friends");
+  revalidatePath("/leaderboard");
+  return { ok: true as const };
+}
+
+/**
+ * Decline an incoming request OR cancel an outgoing one OR remove
+ * an accepted friend. All three are modelled as "delete the row"
+ * because the friendship table doesn't keep history beyond the
+ * current state. The caller must be a party; safe against
+ * arbitrary-user deletion because of that `or()` predicate.
+ */
+export async function removeFriendshipAction(otherUserId: string) {
+  const me = await getCurrentUser();
+  if (!me) return { ok: false as const, error: "unauthenticated" };
+
+  const { userA, userB } = canonicalPair(me.id, otherUserId);
+  const deleted = await db
+    .delete(friendships)
+    .where(
+      and(eq(friendships.userA, userA), eq(friendships.userB, userB)),
+    )
+    .returning({ userA: friendships.userA });
+
+  if (deleted.length === 0)
+    return { ok: false as const, error: "not_found" };
+
+  revalidatePath("/friends");
+  revalidatePath("/leaderboard");
+  return { ok: true as const };
 }

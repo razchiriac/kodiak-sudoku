@@ -6,6 +6,8 @@ import {
   getDailyLeaderboard,
   getDailyPuzzle,
 } from "@/lib/db/queries";
+import { getFriendsDailyLeaderboard } from "@/lib/server/friends";
+import { getCurrentUser } from "@/lib/supabase/server";
 import { dailyArchive, difficultyLeaderboards } from "@/lib/flags";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatTime, DIFFICULTY_LABEL } from "@/lib/utils";
@@ -62,12 +64,20 @@ export default async function LeaderboardPage({
 
   const daily = await getDailyPuzzle(date, tier);
 
-  const [pure, all] = daily
+  // RAZ-12: optional Friends tab. We only fetch the friends board
+  // when the user is signed in; the tab itself is hidden for
+  // anonymous visitors so we don't tease a feature they can't use.
+  const user = await getCurrentUser();
+
+  const [pure, all, friendsRows] = daily
     ? await Promise.all([
         getDailyLeaderboard(date, { pure: true, limit: 50, bucket: tier }),
         getDailyLeaderboard(date, { pure: false, limit: 50, bucket: tier }),
+        user
+          ? getFriendsDailyLeaderboard(user.id, date, { bucket: tier, limit: 50 })
+          : Promise.resolve([] as never[]),
       ])
-    : [[], []];
+    : [[], [], []];
 
   const adjacent = archiveEnabled
     ? await getAdjacentDailyDates(date)
@@ -194,10 +204,14 @@ export default async function LeaderboardPage({
         }}
       />
 
+      {/* RAZ-12: the Friends tab is only shown for signed-in users.
+          It always includes the caller so they can see where they
+          rank even before accepting any friend requests. */}
       <Tabs defaultValue="pure">
         <TabsList>
           <TabsTrigger value="pure">Pure</TabsTrigger>
           <TabsTrigger value="all">All</TabsTrigger>
+          {user ? <TabsTrigger value="friends">Friends</TabsTrigger> : null}
         </TabsList>
         <TabsContent value="pure">
           <Board rows={pure} pure />
@@ -205,12 +219,23 @@ export default async function LeaderboardPage({
         <TabsContent value="all">
           <Board rows={all} pure={false} />
         </TabsContent>
+        {user ? (
+          <TabsContent value="friends">
+            <FriendsBoard rows={friendsRows} selfId={user.id} />
+            <p className="mt-3 text-center text-xs text-muted-foreground">
+              <Link href="/friends" className="underline-offset-4 hover:underline">
+                Manage friends →
+              </Link>
+            </p>
+          </TabsContent>
+        ) : null}
       </Tabs>
     </div>
   );
 }
 
 type Row = Awaited<ReturnType<typeof getDailyLeaderboard>>[number];
+type FriendsRow = Awaited<ReturnType<typeof getFriendsDailyLeaderboard>>[number];
 
 function Board({ rows, pure }: { rows: Row[]; pure: boolean }) {
   if (rows.length === 0) {
@@ -240,6 +265,44 @@ function Board({ rows, pure }: { rows: Row[]; pure: boolean }) {
           )}
         </li>
       ))}
+    </ol>
+  );
+}
+
+// RAZ-12: Friends-scoped board. We highlight the caller's own row
+// (selfId) so they can spot themselves at a glance — the list is
+// small, sometimes two rows, and landmarks matter.
+function FriendsBoard({ rows, selfId }: { rows: FriendsRow[]; selfId: string }) {
+  if (rows.length === 0) {
+    return (
+      <p className="rounded-lg border bg-card p-6 text-center text-sm text-muted-foreground">
+        No completions from you or your friends yet on this board.
+      </p>
+    );
+  }
+  return (
+    <ol className="divide-y rounded-lg border bg-card">
+      {rows.map((r, i) => {
+        const isMe = r.userId === selfId;
+        return (
+          <li
+            key={`${r.userId}-${r.completedAt.toString()}`}
+            className={`flex items-center gap-3 p-3 ${isMe ? "bg-accent/40" : ""}`}
+          >
+            <span className="w-6 text-right font-mono text-sm tabular-nums text-muted-foreground">
+              {i + 1}
+            </span>
+            <span className="flex-1 truncate text-sm">
+              {r.displayName ?? r.username ?? "Anonymous"}
+              {isMe ? <span className="ml-2 text-xs text-muted-foreground">(you)</span> : null}
+            </span>
+            <span className="font-mono text-sm tabular-nums">{formatTime(r.timeMs)}</span>
+            <span className="w-12 text-right text-xs text-muted-foreground">
+              {r.hintsUsed > 0 ? `+${r.hintsUsed}h` : ""}
+            </span>
+          </li>
+        );
+      })}
     </ol>
   );
 }

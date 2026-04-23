@@ -17,6 +17,7 @@ import {
   jumpOnPlace,
   longPressNote,
   pbRibbon,
+  printPuzzle,
   quickPlay,
   shareResult,
   showMistakes,
@@ -136,6 +137,11 @@ export default async function PuzzlePage({
     challengeLinkFlag && user ? await getProfileById(user.id) : null;
   const currentUsername = currentProfile?.username ?? null;
 
+  // RAZ-9 / print-puzzle flag. Pure UI gate — when off, the header
+  // printer button is hidden and the /print route 403s. Resolved once
+  // here and forwarded as a plain bool.
+  const printPuzzleEnabled = await printPuzzle();
+
   return (
     <PlayClient
       puzzle={{
@@ -172,6 +178,7 @@ export default async function PuzzlePage({
       challenge={challenge}
       challengeLinkEnabled={challengeLinkFlag}
       currentUsername={currentUsername}
+      printPuzzleEnabled={printPuzzleEnabled}
     />
   );
 }

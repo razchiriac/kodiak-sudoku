@@ -16,6 +16,7 @@ import {
   longPressNote,
   haptics,
   pbRibbon,
+  printPuzzle,
   shareResult,
   showMistakes,
 } from "@/lib/flags";
@@ -87,6 +88,9 @@ export default async function DailyPage() {
   // presence so flipping the toggle here has no visible effect.
   const showMistakesEnabled = await showMistakes();
 
+  // RAZ-9 / print-puzzle flag.
+  const printPuzzleEnabled = await printPuzzle();
+
   // RAZ-5 / daily-archive flag. When on, surface a "Previous day" link
   // above the board so players can reach the archive from anywhere.
   // `next` is always null on today's page because we never advertise
@@ -134,6 +138,7 @@ export default async function DailyPage() {
         longPressNoteEnabled={longPressNoteEnabled}
         jumpOnPlaceEnabled={jumpOnPlaceEnabled}
         showMistakesEnabled={showMistakesEnabled}
+        printPuzzleEnabled={printPuzzleEnabled}
       />
     </>
   );

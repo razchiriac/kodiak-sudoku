@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Keyboard, Settings as SettingsIcon, Swords } from "lucide-react";
+import { Keyboard, Printer, Settings as SettingsIcon, Swords } from "lucide-react";
 import { readPersistedSnapshot, useGameStore } from "@/lib/zustand/game-store";
 import { SudokuGrid } from "@/components/game/sudoku-grid";
 import { NumberPad } from "@/components/game/number-pad";
@@ -13,6 +13,7 @@ import { LiveRegion } from "@/components/game/live-region";
 import { CompletionModal } from "@/components/game/completion-modal";
 import { ShortcutsOverlay } from "@/components/game/shortcuts-overlay";
 import { SettingsDialog } from "@/components/game/settings-dialog";
+import { PrintDialog } from "@/components/game/print-dialog";
 import { Button } from "@/components/ui/button";
 import { saveGameAction, submitCompletionAction, hintAction } from "@/lib/server/actions";
 import { DIFFICULTY_LABEL, formatTime } from "@/lib/utils";
@@ -58,6 +59,7 @@ export function PlayClient({
   challenge = null,
   challengeLinkEnabled = false,
   currentUsername = null,
+  printPuzzleEnabled = false,
 }: {
   puzzle: PuzzleProp;
   savedGame: SavedProp;
@@ -133,6 +135,12 @@ export function PlayClient({
   // `?from=<username>` param the Challenge button copies. Null when
   // anonymous or when the signed-in user hasn't set a username.
   currentUsername?: string | null;
+  // RAZ-9: server-resolved value of `print-puzzle`. Controls whether
+  // the printer icon in the header is rendered and, implicitly,
+  // whether the print dialog is reachable from this view. The route
+  // handler checks the flag again server-side so a direct URL with
+  // the flag off still 403s.
+  printPuzzleEnabled?: boolean;
 }) {
   const startGame = useGameStore((s) => s.startGame);
   const resumeFromSnapshot = useGameStore((s) => s.resumeFromSnapshot);
@@ -367,6 +375,10 @@ export function PlayClient({
 
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // RAZ-9: print dialog visibility. Default closed; opened from the
+  // header button. Kept as a sibling to the other dialog state rather
+  // than hoisted into the store because only this component cares.
+  const [printOpen, setPrintOpen] = useState(false);
 
   if (!meta) return null; // first render before startGame() runs
 
@@ -448,6 +460,21 @@ export function PlayClient({
           >
             <Keyboard />
           </Button>
+          {/* RAZ-9: Print dialog entry point. Hidden for custom
+              (pasted) puzzles because they have no DB row the route
+              handler can fetch — rendering a broken button is worse
+              than hiding the feature. Also hidden when the flag is
+              off, to avoid signposting a 403. */}
+          {printPuzzleEnabled && !isCustom ? (
+            <Button
+              size="icon"
+              variant="ghost"
+              aria-label="Print puzzle"
+              onClick={() => setPrintOpen(true)}
+            >
+              <Printer />
+            </Button>
+          ) : null}
           {/* Settings dialog. Shown on all viewports because it owns
               the RAZ-19 haptics toggle (a mobile-only setting) plus any
               future per-device prefs. Icon-only keeps the header
@@ -490,6 +517,18 @@ export function PlayClient({
       />
       <ShortcutsOverlay open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      {/* RAZ-9: only mount the print dialog when the flag is on AND
+          this isn't a custom puzzle (no DB row to fetch). Mounting
+          it conditionally rather than controlling visibility via the
+          `open` prop saves a bit of initial bundle since the dialog
+          pulls in base64 + serialize helpers. */}
+      {printPuzzleEnabled && !isCustom ? (
+        <PrintDialog
+          open={printOpen}
+          onOpenChange={setPrintOpen}
+          puzzleId={puzzle.id}
+        />
+      ) : null}
     </div>
   );
 }

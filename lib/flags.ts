@@ -215,6 +215,15 @@ export const dailyCompare = declareFlag("daily-compare");
 // board. Random-mode puzzles only. No schema changes.
 export const challengeLink = declareFlag("challenge-link");
 
+// RAZ-9 - Print-friendly puzzle PDF. When on, the play screen surfaces a
+// Printer icon that opens a dialog asking the player to pick board-content
+// (original puzzle vs my progress) and pencil-marks (none, template =
+// computed candidates, or my current notes). The selected combination
+// is forwarded to /print/<puzzleId> which returns a server-rendered PDF
+// via @react-pdf/renderer. Flag off = the icon is hidden and the /print
+// route 404s.
+export const printPuzzle = declareFlag("print-puzzle");
+
 // RAZ-15 - Per-cell mistake indicator. When on, the settings dialog
 // exposes a "Show mistakes" toggle; if the user enables it AND the
 // client has the puzzle solution (i.e. random non-daily puzzles where

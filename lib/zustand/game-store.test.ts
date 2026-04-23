@@ -469,3 +469,26 @@ describe("game-store: RAZ-28 input-event recording", () => {
     expect(s.eventSeq).toBe(0);
   });
 });
+
+describe("game-store: RAZ-42 auto-notes toggle", () => {
+  beforeEach(() => {
+    start();
+    useGameStore.getState().setSetting("autoNotesEnabled", true);
+  });
+
+  it("autoFillNotes no-ops when autoNotesEnabled is false", () => {
+    useGameStore.getState().setSetting("autoNotesEnabled", false);
+    const before = new Uint16Array(useGameStore.getState().notes);
+    useGameStore.getState().autoFillNotes();
+    const after = useGameStore.getState().notes;
+    for (let i = 0; i < 81; i++) expect(after[i]).toBe(before[i]);
+  });
+
+  it("autoFillNotes fills candidates when autoNotesEnabled is true", () => {
+    useGameStore.getState().autoFillNotes();
+    let total = 0;
+    const n = useGameStore.getState().notes;
+    for (let i = 0; i < 81; i++) total += n[i];
+    expect(total).toBeGreaterThan(0);
+  });
+});

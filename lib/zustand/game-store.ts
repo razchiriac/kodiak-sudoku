@@ -145,6 +145,12 @@ type GameState = {
     // only starts on the NEXT mutation after the setting is flipped;
     // we don't backfill pre-opt-in events.
     recordEvents: boolean;
+    // RAZ-42: when false, the play UI hides the "Auto-notes" control
+    // and `autoFillNotes` no-ops. Purists can disable bulk candidate
+    // fill without losing manual notes mode. Default true so existing
+    // players keep the wand; undefined from old persisted state is
+    // treated as enabled everywhere we branch.
+    autoNotesEnabled: boolean;
     // RAZ-25: which color palette to use for the sudoku cells.
     // "default" keeps the shipped blue/red tokens. "okabe-ito" swaps
     // to the Okabe-Ito colorblind-safe palette (sky-blue / yellow /
@@ -387,6 +393,9 @@ const INITIAL: GameState = {
     // before any events are captured. Paired with the `event-log`
     // feature flag at the store layer.
     recordEvents: false,
+    // RAZ-42: default on — the bulk auto-notes action stays available
+    // until the user explicitly turns it off in Settings.
+    autoNotesEnabled: true,
   },
   featureFlags: {
     haptics: false,
@@ -891,6 +900,9 @@ export const useGameStore = create<GameState & GameActions>()(
 
       autoFillNotes: () => {
         const s = get();
+        // RAZ-42: respect the settings toggle even if something
+        // called the action without going through the visible button.
+        if (s.settings.autoNotesEnabled === false) return;
         if (s.isComplete || s.isPaused) return;
         const prevNotes = new Uint16Array(s.notes);
         const nextNotes = computeAllCandidates(s.board, s.meta?.variant);

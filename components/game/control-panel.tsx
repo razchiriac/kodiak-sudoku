@@ -31,6 +31,10 @@ export function ControlPanel({ side }: { side: "left" | "right" }) {
   const mode = useGameStore((s) => s.mode);
   const toggleMode = useGameStore((s) => s.toggleMode);
   const autoFillNotes = useGameStore((s) => s.autoFillNotes);
+  // RAZ-42: bulk auto-notes can be disabled in Settings (persisted).
+  const autoNotesEnabled = useGameStore(
+    (s) => s.settings.autoNotesEnabled !== false,
+  );
   const isComplete = useGameStore((s) => s.isComplete);
   // RAZ-14 — subscribe to the tiered hint session so we can (a) show
   // a "1/3" / "2/3" badge on the Hint button, (b) fire a sonner toast
@@ -150,18 +154,18 @@ export function ControlPanel({ side }: { side: "left" | "right" }) {
               icon={<Lightbulb />}
               active={!!hintSession}
             />
-            {/* Auto-notes: replaces every empty cell's pencil marks
-                with the freshly computed legal candidates. One tap
-                initializes notes; one undo reverts. No keyboard
-                shortcut because this is primarily a touch-screen
-                quality-of-life feature. */}
-            <ControlButton
-              label="Auto-notes"
-              shortcut=""
-              onClick={autoFillNotes}
-              disabled={isComplete}
-              icon={<WandSparkles />}
-            />
+            {/* RAZ-42: optional — hidden when the user turns off "Auto-notes"
+                in Settings (persisted). Replaces every empty cell's pencil
+                marks with legal candidates; one undo reverts. */}
+            {autoNotesEnabled && (
+              <ControlButton
+                label="Auto-notes"
+                shortcut=""
+                onClick={autoFillNotes}
+                disabled={isComplete}
+                icon={<WandSparkles />}
+              />
+            )}
           </>
         )}
       </div>

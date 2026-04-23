@@ -111,6 +111,10 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const recordEventsOn = useGameStore(
     (s) => s.settings.recordEvents === true,
   );
+  // RAZ-42: default-on; undefined from legacy persisted blobs means on.
+  const autoNotesOn = useGameStore(
+    (s) => s.settings.autoNotesEnabled !== false,
+  );
   const setSetting = useGameStore((s) => s.setSetting);
 
   const handleTestHaptic = () => {
@@ -147,6 +151,25 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
         </DialogHeader>
 
         <div className="flex flex-col gap-4 py-2">
+          {/* RAZ-42: always available — hides the wand / bulk-fill control
+              for players who prefer manual pencil marks only. */}
+          <label className="flex items-start justify-between gap-4 text-sm">
+            <span className="flex flex-col">
+              <span className="font-medium text-foreground">Auto-notes</span>
+              <span className="text-xs text-muted-foreground">
+                Show the button that fills pencil marks on every empty cell at
+                once. Turn off for manual notes only.
+              </span>
+            </span>
+            <input
+              type="checkbox"
+              checked={autoNotesOn}
+              onChange={(e) => setSetting("autoNotesEnabled", e.target.checked)}
+              className="mt-1 h-4 w-4 accent-foreground"
+              aria-label="Enable auto-notes button"
+            />
+          </label>
+
           {/* RAZ-19 haptics toggle. Rendered only when the server-side
               feature flag is on; anonymous and signed-in users both see
               it because the feature has no DB side effects. */}
@@ -348,19 +371,6 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             </label>
           )}
 
-          {/* Empty state shown only when every flag is off. Keeps the
-              dialog from looking broken. */}
-          {!hapticsFlag &&
-            !compactFlag &&
-            !dyslexiaFlag &&
-            !jumpFlag &&
-            !mistakesFlag &&
-            !paletteFlag &&
-            !eventLogFlag && (
-              <p className="text-sm text-muted-foreground">
-                No user-configurable options yet.
-              </p>
-            )}
         </div>
       </DialogContent>
     </Dialog>

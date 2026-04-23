@@ -215,6 +215,14 @@ export const dailyCompare = declareFlag("daily-compare");
 // board. Random-mode puzzles only. No schema changes.
 export const challengeLink = declareFlag("challenge-link");
 
+// RAZ-28 - Input-event log for replay + anti-cheat. When on, an
+// opt-in settings toggle ("Record input for replay") appears; when
+// the user opts in, the game store captures {cell, digit, ms} events
+// into a bounded ring buffer and flushes them to `puzzle_attempts`
+// on autosave + completion. Default off — this feature collects
+// behavioral data and should be explicitly rolled out.
+export const eventLog = declareFlag("event-log");
+
 // RAZ-14 - Progressive hint disclosure. Splits the Hint action into
 // three tiers (region nudge → technique + location → place digit) so
 // players can learn WHY a move is forced instead of just seeing the

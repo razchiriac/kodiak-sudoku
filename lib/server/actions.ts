@@ -5,13 +5,13 @@ import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/lib/db/client";
-import { completedGames, savedGames } from "@/lib/db/schema";
+import { completedGames, puzzleAttempts, savedGames } from "@/lib/db/schema";
 import { getCurrentUser } from "@/lib/supabase/server";
 import { getDailyRankContext, getPuzzleById } from "@/lib/db/queries";
 import { findConflicts, isCorrect, isFilled } from "@/lib/sudoku/validate";
 import { parseBoard } from "@/lib/sudoku/board";
 import { nextHint } from "@/lib/sudoku/solver";
-import { dailyCompare, solveTimeSanity } from "@/lib/flags";
+import { dailyCompare, eventLog, solveTimeSanity } from "@/lib/flags";
 
 // All mutations go through Server Actions defined in this file. Every
 // action validates inputs with Zod, derives the user from the cookie
@@ -217,6 +217,92 @@ export async function submitCompletionAction(raw: SubmitInput) {
   }
 
   return { ok: true as const, rankContext };
+}
+
+// RAZ-28 — Flush the in-memory input-event buffer to `puzzle_attempts`.
+// Separate action (rather than piggybacking on saveGameAction /
+// submitCompletionAction) for three reasons:
+//   1. The client gets to decide when to flush independently of
+//      saving — e.g. we can let autosave throttle at 4s while
+//      flushes ride a longer 15s debounce to keep DB write rate low.
+//   2. A flush failure must never block an autosave or a completion
+//      submit. Keeping them separate means the failure blast radius
+//      is local to the event log.
+//   3. Simpler to audit / revert. We can flip the `event-log` flag
+//      off in Edge Config and this endpoint immediately no-ops,
+//      without touching the hot paths.
+//
+// The wire payload is kept small: up to EVENT_BUFFER_CAP events per
+// flush, each ~20-40 bytes on the wire. A typical 200-event attempt
+// therefore costs a single ~8 KB row in puzzle_attempts.
+//
+// Events are inserted with `event='input_batch'` and a jsonb payload
+// of `{seq, completed, events}`. Multiple rows per (user, puzzle) are
+// expected — the server stitches them by (puzzle_id, seq) when
+// reconstructing a replay.
+//
+// The row is allowed to land with `user_id = null` for anonymous
+// players (matches the RLS policy). Signed-in players get their
+// user_id recorded so downstream replay / profile views can filter.
+const InputEventSchema = z.object({
+  c: z.number().int().min(0).max(80),
+  d: z.number().int().min(0).max(9),
+  t: z.number().int().nonnegative().max(24 * 60 * 60 * 1000),
+  k: z.enum(["v", "e", "h"]),
+});
+
+const FlushSchema = z.object({
+  puzzleId: z.number().int().positive(),
+  seq: z.number().int().nonnegative(),
+  completed: z.boolean(),
+  // Match the in-memory EVENT_BUFFER_CAP (1024) — any more per flush
+  // and we'd be accepting more than the client could have captured.
+  // Zod rejects the whole batch if any event is malformed rather
+  // than silently truncating, which is the right tradeoff: a
+  // corrupted batch signals a client bug we want to surface in logs.
+  events: z.array(InputEventSchema).max(1024),
+});
+
+export type FlushInputEventsInput = z.infer<typeof FlushSchema>;
+
+export async function flushInputEventsAction(raw: FlushInputEventsInput) {
+  // Flag gate first — when off we just drop the payload on the floor.
+  // We return ok so the client doesn't retry or surface a spurious
+  // error to the user; the contract for this endpoint is "fire and
+  // forget" from the client's point of view.
+  if (!(await eventLog())) return { ok: true as const, written: false };
+
+  const input = FlushSchema.parse(raw);
+
+  // Tolerate an empty completion-marker flush: the client may want
+  // to mark the end of an attempt even if it already drained the
+  // last events batch. We still insert the row because the `completed`
+  // flag is itself a signal downstream consumers want.
+  if (input.events.length === 0 && !input.completed) {
+    return { ok: true as const, written: false };
+  }
+
+  // Puzzle existence check — same pattern as saveGameAction. Keeps
+  // the table tidy: no events for puzzle_ids we don't have records
+  // for. Cheap because puzzles is small + cached.
+  const puzzle = await getPuzzleById(input.puzzleId);
+  if (!puzzle) return { ok: false as const, error: "puzzle_not_found" };
+
+  // Anonymous writes are legal per RLS; we pass null in that case.
+  const user = await getCurrentUser();
+
+  await db.insert(puzzleAttempts).values({
+    userId: user?.id ?? null,
+    puzzleId: input.puzzleId,
+    event: "input_batch",
+    payload: {
+      seq: input.seq,
+      completed: input.completed,
+      events: input.events,
+    },
+  });
+
+  return { ok: true as const, written: true };
 }
 
 const HintSchema = z.object({

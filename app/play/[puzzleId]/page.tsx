@@ -18,6 +18,7 @@ import {
   longPressNote,
   pbRibbon,
   printPuzzle,
+  eventLog,
   progressiveHints,
   quickPlay,
   shareResult,
@@ -149,6 +150,12 @@ export default async function PuzzlePage({
   // When off, clicking Hint behaves exactly as before.
   const progressiveHintsEnabled = await progressiveHints();
 
+  // RAZ-28 / event-log flag. Kill switch for the input-event log. When
+  // off the settings row is hidden AND the store reducers never
+  // append to the buffer, so there's no network traffic from this
+  // feature.
+  const eventLogEnabled = await eventLog();
+
   return (
     <PlayClient
       puzzle={{
@@ -187,6 +194,7 @@ export default async function PuzzlePage({
       currentUsername={currentUsername}
       printPuzzleEnabled={printPuzzleEnabled}
       progressiveHintsEnabled={progressiveHintsEnabled}
+      eventLogEnabled={eventLogEnabled}
     />
   );
 }

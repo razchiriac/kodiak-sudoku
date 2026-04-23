@@ -102,6 +102,15 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const palette = useGameStore(
     (s) => (s.settings.palette ?? "default") as Palette,
   );
+  // RAZ-28: "record inputs" opt-in. Follows the same flag-gated row
+  // pattern; default off so we never start collecting behavioral data
+  // without an explicit user opt-in. The helper copy explains WHAT
+  // we're recording (placements, erases, hints with timestamps) so the
+  // consent is informed.
+  const eventLogFlag = useGameStore((s) => s.featureFlags.eventLog);
+  const recordEventsOn = useGameStore(
+    (s) => s.settings.recordEvents === true,
+  );
   const setSetting = useGameStore((s) => s.setSetting);
 
   const handleTestHaptic = () => {
@@ -311,6 +320,34 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             </div>
           )}
 
+          {/* RAZ-28 input-event recording. Opt-in because we're
+              capturing a (timestamped) log of every placement / erase /
+              hint — unobjectionable for replays, but still a new kind
+              of data we weren't collecting before. Toggle is flag-gated
+              so we can kill the feature from Edge Config without
+              leaving a misleading UI behind. */}
+          {eventLogFlag && (
+            <label className="flex items-start justify-between gap-4 text-sm">
+              <span className="flex flex-col">
+                <span className="font-medium text-foreground">
+                  Record inputs for replay
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  Save a timestamped log of your placements so completed
+                  puzzles can be replayed. Stays on this device until
+                  you finish a puzzle.
+                </span>
+              </span>
+              <input
+                type="checkbox"
+                checked={recordEventsOn}
+                onChange={(e) => setSetting("recordEvents", e.target.checked)}
+                className="mt-1 h-4 w-4 accent-foreground"
+                aria-label="Record inputs for replay"
+              />
+            </label>
+          )}
+
           {/* Empty state shown only when every flag is off. Keeps the
               dialog from looking broken. */}
           {!hapticsFlag &&
@@ -318,7 +355,8 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             !dyslexiaFlag &&
             !jumpFlag &&
             !mistakesFlag &&
-            !paletteFlag && (
+            !paletteFlag &&
+            !eventLogFlag && (
               <p className="text-sm text-muted-foreground">
                 No user-configurable options yet.
               </p>

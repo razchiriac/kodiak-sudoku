@@ -230,23 +230,18 @@ function PadButton({
         // Flex column owns the layout. The remaining-count is
         // a normal flow child so it never overlaps the digit.
         //
-        // Height strategy:
-        //   - mobile: aspect-square so each button matches its
-        //     column width (thumb-friendly, reads like a phone
-        //     keypad at 374px viewport ~75px per button).
-        //   - sm+:   aspect-auto + h-16 so the pad doesn't
-        //     balloon to 3×112=336px tall at the 560px max
-        //     width, which would squeeze the board on a
-        //     short laptop viewport.
-        // RAZ-23: when compact is on we drop the mobile
-        // aspect-square (which produces ~100px buttons on a
-        // 374px viewport) and lock in a uniform h-14 at every
-        // breakpoint above the min-h floor. Buttons stay thumb-
-        // reachable (56px > Apple's 44pt HIG minimum) while
-        // giving the board ~50% more vertical room.
+        // Height strategy: fixed h-16 (64px) at every breakpoint.
+        // Previously mobile used aspect-square (~75px buttons on
+        // a 374px viewport), but that ate too much vertical space
+        // and left the board tiny on iOS Chrome where the dynamic
+        // viewport height is shorter. 64px still exceeds Apple's
+        // 44pt HIG minimum for comfortable touch targets.
+        //
+        // RAZ-23: compact mode shrinks to h-14 (56px), still above
+        // the 44pt minimum.
         compact
-          ? "flex h-14 min-h-12 flex-col items-center justify-center gap-0.5 rounded-md border bg-card text-2xl font-semibold leading-none transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-30 sm:h-16"
-          : "flex aspect-square min-h-12 flex-col items-center justify-center gap-0.5 rounded-md border bg-card text-2xl font-semibold leading-none transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-30 sm:aspect-auto sm:h-16",
+          ? "flex h-14 min-h-12 flex-col items-center justify-center gap-0.5 rounded-md border bg-card text-2xl font-semibold leading-none transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-30"
+          : "flex h-16 min-h-12 flex-col items-center justify-center gap-0.5 rounded-md border bg-card text-2xl font-semibold leading-none transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-30",
         // Notes mode: a soft ring on every button telegraphs
         // the mode.
         mode === "notes" && "ring-2 ring-primary/40",
@@ -281,10 +276,8 @@ function PadButton({
       aria-pressed={mode === "notes" ? isNoted : isActive ? true : undefined}
     >
       <span>{digit}</span>
-      {/* Remaining-count subscript. We used to hide this below
-          sm because the 9-in-a-row layout left no vertical
-          room; with the 3x3 layout each button is ~74-112px
-          tall, so the count fits everywhere. */}
+      {/* Remaining-count subscript. Fits in h-16 (64px) buttons
+          alongside the digit thanks to the narrow line-height. */}
       <span className="text-[10px] font-normal leading-none text-muted-foreground">
         {remaining}
       </span>

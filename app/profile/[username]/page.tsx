@@ -14,8 +14,11 @@ import { Sparkline } from "@/components/profile/sparkline";
 import { SolveHeatmap } from "@/components/profile/heatmap";
 import { AchievementsRow } from "@/components/profile/achievements-row";
 
+// RAZ-74: `force-dynamic` already opts out of caching and renders
+// on every request, so a `revalidate` window here is at best
+// redundant and at worst pins stale stats for up to N seconds
+// after the user finishes a puzzle (the symptom this ticket fixes).
 export const dynamic = "force-dynamic";
-export const revalidate = 30;
 
 // Public profile: stats per difficulty, daily streak, recent completions.
 // Anyone can view; the underlying queries do not include private data

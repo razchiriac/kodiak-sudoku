@@ -4,9 +4,12 @@ import { getQuickLeaderboardWeekly } from "@/lib/db/queries";
 import { quickPlay } from "@/lib/flags";
 import { formatTime } from "@/lib/utils";
 
-// Refresh once a minute so a fresh solve shows up without hammering the DB.
+// RAZ-74: `force-dynamic` makes this render on every request; the
+// `revalidate = 60` that used to live alongside it was redundant
+// at best and at worst pinned a fresh solve out of the board for
+// up to a minute. The DB cost is fine: we hit a small indexed
+// aggregate per request, and traffic on this route is low.
 export const dynamic = "force-dynamic";
-export const revalidate = 60;
 
 // RAZ-34: Quick-play weekly leaderboard.
 //

@@ -210,9 +210,19 @@ export async function submitCompletionAction(raw: SubmitInput) {
     .where(and(eq(savedGames.userId, user.id), eq(savedGames.puzzleId, input.puzzleId)));
 
   // Invalidate the leaderboard and dashboard caches so the new entry
-  // shows up immediately on the next request.
+  // shows up immediately on the next request. RAZ-74: a plain
+  // `revalidatePath("/profile")` only invalidates the literal
+  // `/profile` segment (a thin redirect page) — it does NOT
+  // propagate to the *dynamic* `/profile/[username]` page where the
+  // stats actually render. Per the Next 15 docs, dynamic segments
+  // need either an explicit `[param]` placeholder + the `"page"`
+  // type, or a `"layout"` revalidation higher up the tree. Same
+  // shape for the per-difficulty + quick leaderboard variants.
   revalidatePath("/leaderboard");
+  revalidatePath("/leaderboard/quick");
+  revalidatePath("/leaderboard/difficulty/[bucket]", "page");
   revalidatePath("/profile");
+  revalidatePath("/profile/[username]", "page");
   revalidatePath("/play");
 
   // RAZ-32: compute a rank context AFTER the insert so the caller is

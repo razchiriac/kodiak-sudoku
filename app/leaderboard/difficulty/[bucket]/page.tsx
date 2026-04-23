@@ -11,10 +11,12 @@ import {
 } from "@/components/ui/tabs";
 import { formatTime, DIFFICULTY_LABEL } from "@/lib/utils";
 
-// Server-rendered; revalidate briefly so fresh solves show up without
-// thundering the DB on every request.
+// RAZ-74: `force-dynamic` already renders on every request — the
+// `revalidate = 60` that used to live here pinned the board for
+// up to a minute, so a player's fresh solve wouldn't show up on
+// their own per-difficulty leaderboard. The DB query is small and
+// indexed; traffic is low; freshness wins.
 export const dynamic = "force-dynamic";
-export const revalidate = 60;
 
 // RAZ-6: Per-difficulty all-time leaderboard.
 //

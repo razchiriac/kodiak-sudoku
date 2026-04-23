@@ -15,6 +15,11 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./"),
+      // RAZ-71: `server-only` is a Next.js build-time guard that
+      // throws when imported into a client bundle. Vitest runs in a
+      // pure node env where the package isn't resolvable. We alias
+      // it to a no-op so server-only modules can be unit-tested.
+      "server-only": path.resolve(__dirname, "./test/stubs/server-only.ts"),
     },
   },
 });

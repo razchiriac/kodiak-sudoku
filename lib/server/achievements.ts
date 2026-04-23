@@ -1,6 +1,7 @@
 import "server-only";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
+import { execRows } from "@/lib/db/exec-rows";
 import {
   achievements,
   completedGames,
@@ -50,14 +51,16 @@ async function loadFacts(userId: string): Promise<AchievementFacts> {
         from ${completedGames}
         where ${completedGames.userId} = ${userId}`,
   );
-  const row = (agg as unknown as {
-    rows: Array<{
-      total: number;
-      has_expert: boolean;
-      has_daily: boolean;
-      fastest_easy_ms: number | null;
-    }>;
-  }).rows[0];
+  // RAZ-71: postgres-js `db.execute` returns the row Array directly.
+  // The previous `.rows` cast was always undefined; `[0]` would throw
+  // TypeError on the next line. `execRows` normalises both the
+  // postgres-js and pg shapes.
+  const row = execRows<{
+    total: number;
+    has_expert: boolean;
+    has_daily: boolean;
+    fastest_easy_ms: number | null;
+  }>(agg)[0];
 
   // Streak facts live on `profiles` (kept in sync by the daily
   // trigger), so one extra cheap PK lookup. Doing it this way

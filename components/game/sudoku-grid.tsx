@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo } from "react";
 import { useGameStore } from "@/lib/zustand/game-store";
-import { computeMistakes, peers, isMainDiag, isAntiDiag } from "@/lib/sudoku/board";
+import { computeMistakes, peers } from "@/lib/sudoku/board";
 import { Cell } from "./cell";
 
 // The 9x9 grid. Subscribes to the slice of state needed for layout-level
@@ -77,22 +77,21 @@ export function SudokuGrid() {
       // chrome (header, padding, title row, the 3-row below-board
       // region of control stacks + 3x3 number pad, footer). The
       // rem subtractions are tuned per breakpoint:
-      //   - mobile (<sm): 30rem. The below-board region now uses
-      //     aspect-square buttons in a 5-col grid, so at a 374px
-      //     viewport each button is ~75px square and the region is
-      //     ~3×75 = 225px tall (vs ~174px in the old row+row
-      //     layout). +~3rem on top of the previous 26rem, rounded
-      //     up for the stacked mobile footer.
-      //   - sm+: 29rem. The number pad drops aspect-square in
-      //     favor of a fixed h-16, so the region is ~3×64+16 =
-      //     208px (vs ~134px before). +~5rem on top of the
-      //     previous 24rem.
-      // 100dvh (dynamic viewport height) handles iOS Safari's
-      // collapsing URL bar so we don't get a sudden overflow when it
-      // shows. On tall phones and typical laptop viewports the
-      // width cap (560px) still binds first; the height cap only
-      // kicks in on shorter screens, where it prevents page scroll.
-      className="relative grid aspect-square w-full max-w-[min(100%,560px,calc(100dvh-30rem))] grid-cols-9 grid-rows-9 overflow-hidden rounded-lg border-2 border-foreground/60 bg-background shadow-sm sm:max-w-[min(560px,calc(100dvh-29rem))]"
+      //   - mobile (<sm): 22rem. Header (3.5rem) + footer (3.5rem)
+      //     + play-page padding/gaps (~4rem) + title row (2.5rem)
+      //     + 3-row control area at h-16 (~12.5rem) = ~26rem
+      //     actual, but 100dvh is the *dynamic* viewport which
+      //     includes the collapsed-bar state. We subtract only 22rem
+      //     to keep the board large on iOS Chrome, where the initial
+      //     dvh is considerably shorter than Safari due to thicker
+      //     toolbars. The page scrolls slightly on the shortest
+      //     phones (SE) — acceptable vs. a tiny board.
+      //   - sm+: 22rem. Number pad uses h-16 buttons; desktops and
+      //     tablets have enough height that the 560px width cap
+      //     almost always binds first.
+      // 100dvh handles iOS Safari's collapsing URL bar so we don't
+      // get a sudden overflow when it shows.
+      className="relative grid aspect-square w-full max-w-[min(100%,560px,calc(100dvh-22rem))] grid-cols-9 grid-rows-9 overflow-hidden rounded-lg border-2 border-foreground/60 bg-background shadow-sm sm:max-w-[min(560px,calc(100dvh-22rem))]"
     >
       {Array.from({ length: 81 }, (_, i) => (
         <Cell

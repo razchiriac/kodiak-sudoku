@@ -208,6 +208,105 @@ describe("game-store: peer-note pruning on value placement", () => {
     expect(useGameStore.getState().board[target]).toBe(5);
   });
 
+  it("RAZ-14: progressive hint steps through three tiers and only increments hintsUsed once", async () => {
+    // Seed with a solution so the local solver path can run (no need
+    // for a remote fetcher). startGame wipes meta.solution so we
+    // replace the whole meta here via a second startGame call.
+    const SOLUTION =
+      "534678912672195348198342567859761423426853791713924856961537284287419635345286179";
+    useGameStore.getState().startGame({
+      meta: {
+        puzzleId: 1,
+        difficultyBucket: 0,
+        mode: "random",
+        solution: SOLUTION,
+      },
+      puzzle: PUZZLE,
+    });
+
+    const { hint, setFeatureFlag } = useGameStore.getState();
+    setFeatureFlag("progressiveHints", true);
+
+    // Tier 1: a fresh click spawns a session, bumps hintsUsed, and
+    // does NOT mutate the board.
+    const boardBefore = Array.from(useGameStore.getState().board);
+    await hint();
+    let s = useGameStore.getState();
+    expect(s.hintsUsed).toBe(1);
+    expect(s.hintSession).not.toBeNull();
+    expect(s.hintSession?.tier).toBe(1);
+    expect(Array.from(s.board)).toEqual(boardBefore);
+
+    // Tier 2: bumps the session to tier 2, leaves everything else alone.
+    await hint();
+    s = useGameStore.getState();
+    expect(s.hintsUsed).toBe(1); // unchanged — still one hint session
+    expect(s.hintSession?.tier).toBe(2);
+    expect(Array.from(s.board)).toEqual(boardBefore);
+
+    // Tier 3: applies the placement and clears the session.
+    const suggestion = s.hintSession!.suggestion;
+    await hint();
+    s = useGameStore.getState();
+    expect(s.hintsUsed).toBe(1); // STILL one — reveal doesn't double-count
+    expect(s.hintSession).toBeNull();
+    expect(s.board[suggestion.index]).toBe(suggestion.digit);
+    expect(s.selection).toBe(suggestion.index);
+  });
+
+  it("RAZ-14: selecting a different cell clears an in-flight hint session", async () => {
+    const SOLUTION =
+      "534678912672195348198342567859761423426853791713924856961537284287419635345286179";
+    useGameStore.getState().startGame({
+      meta: {
+        puzzleId: 1,
+        difficultyBucket: 0,
+        mode: "random",
+        solution: SOLUTION,
+      },
+      puzzle: PUZZLE,
+    });
+
+    const { hint, selectCell, setFeatureFlag } = useGameStore.getState();
+    setFeatureFlag("progressiveHints", true);
+
+    await hint();
+    expect(useGameStore.getState().hintSession).not.toBeNull();
+
+    selectCell(0); // any selection change
+    expect(useGameStore.getState().hintSession).toBeNull();
+  });
+
+  it("RAZ-14: with the flag OFF, hint() places immediately in one click (legacy behavior)", async () => {
+    const SOLUTION =
+      "534678912672195348198342567859761423426853791713924856961537284287419635345286179";
+    useGameStore.getState().startGame({
+      meta: {
+        puzzleId: 1,
+        difficultyBucket: 0,
+        mode: "random",
+        solution: SOLUTION,
+      },
+      puzzle: PUZZLE,
+    });
+
+    const { hint, setFeatureFlag } = useGameStore.getState();
+    setFeatureFlag("progressiveHints", false);
+
+    await hint();
+    const s = useGameStore.getState();
+    expect(s.hintsUsed).toBe(1);
+    // No session is ever populated when the flag is off.
+    expect(s.hintSession).toBeNull();
+    // The board was mutated on the first (and only) click.
+    let placed = 0;
+    for (let i = 0; i < 81; i++) if (s.board[i] !== 0) placed++;
+    // Puzzle clue count + 1 for the placed hint.
+    let clues = 0;
+    for (let i = 0; i < 81; i++) if (PUZZLE[i] !== "0") clues++;
+    expect(placed).toBe(clues + 1);
+  });
+
   it("redo re-prunes peers after an undo", () => {
     const target = 2;
     const samplePeers = emptyPeersOf(target).slice(0, 3);

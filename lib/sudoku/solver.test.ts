@@ -39,6 +39,26 @@ describe("nextHint", () => {
     const board = new Uint8Array(81);
     expect(nextHint(board)).toBeNull();
   });
+
+  it("annotates every suggestion with a unit + unitIndex for RAZ-14 tier-1 messages", () => {
+    // Drive the three technique branches and assert the `unit`
+    // annotation lands in the right range. This is the contract the
+    // hint-tier formatters depend on; a regression here would show
+    // up as a nonsensical tier-1 toast ("try row 9" on an empty
+    // board) without these assertions failing.
+    const typical = nextHint(parseBoard(PUZZLE), { solution: SOLUTION });
+    expect(typical).not.toBeNull();
+    if (!typical) return;
+    expect(["row", "col", "box"]).toContain(typical.unit);
+    expect(typical.unitIndex).toBeGreaterThanOrEqual(0);
+    expect(typical.unitIndex).toBeLessThan(9);
+
+    // from-solution path: empty board. We use `box` as the default
+    // region because the ONLY info we have is the cell index, and
+    // the box is the coarsest 9-cell unit containing the cell.
+    const fallback = nextHint(new Uint8Array(81), { solution: SOLUTION });
+    expect(fallback?.unit).toBe("box");
+  });
 });
 
 describe("solve", () => {

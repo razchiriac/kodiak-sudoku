@@ -15,7 +15,7 @@ import {
   toggleNote,
 } from "@/lib/sudoku/board";
 import { findConflicts, isComplete, isLegalPlacement } from "@/lib/sudoku/validate";
-import { nextHint } from "@/lib/sudoku/solver";
+import { nextHint, type HintSuggestion } from "@/lib/sudoku/solver";
 import {
   emptyHistory,
   pushEntry,
@@ -187,7 +187,30 @@ type GameState = {
     // so flipping the flag off forces everyone back to the default
     // palette regardless of their persisted choice.
     colorPalette: boolean;
+    // RAZ-14: when on, the Hint button steps through three tiers (region
+    // nudge → technique + location → place the digit). When off, every
+    // `hint()` call applies the placement immediately — the pre-RAZ-14
+    // behavior. We also gate the tier-advancing toasts on this flag so
+    // an Edge-Config kill switch instantly reverts everyone.
+    progressiveHints: boolean;
   };
+  // RAZ-14: active progressive-hint session. A hint session starts on the
+  // first click of the Hint button and advances through tiers on
+  // subsequent clicks until tier 3 applies the placement. Any board /
+  // selection change clears the session so a stale "try row 5" toast
+  // never hangs around pointing at the wrong deduction. `hintsUsed`
+  // still increments exactly once per session (on the starting click)
+  // so leaderboard integrity is unchanged — the extra tiers don't count
+  // as additional hints. Null when no session is in flight OR when the
+  // progressive-hints flag is off (legacy mode always places in one
+  // click and never populates this field).
+  hintSession: {
+    suggestion: HintSuggestion;
+    // Currently-displayed tier. 1 = region nudge (we've toasted "try
+    // column 7"); 2 = technique + cell (we've toasted "naked single at
+    // r3c7"). Tier 3 = place the digit, which also CLEARS the session.
+    tier: 1 | 2;
+  } | null;
   // RAZ-16: the digit most recently placed by a value-mode `inputDigit`
   // call, or null if no value has been placed yet (or the feature flag
   // is off). Number pad highlights the matching button. Auto-advances
@@ -311,7 +334,12 @@ const INITIAL: GameState = {
     jumpOnPlace: false,
     showMistakes: false,
     colorPalette: false,
+    // RAZ-14: default false so the legacy one-click-reveal path runs
+    // until PlayClient has mirrored the server-resolved flag value.
+    // The play-client effect hydrates this almost immediately on mount.
+    progressiveHints: false,
   },
+  hintSession: null,
   activeDigit: null,
 };
 
@@ -395,6 +423,59 @@ let remoteHintFetcher:
   | ((board: string, selected: number | null) => Promise<{ index: number; digit: number }>)
   | null = null;
 
+// RAZ-14 — shared placement helper used by BOTH the legacy one-shot
+// hint path AND the tier-3 branch of the progressive hint flow. Lives
+// outside the store factory so both branches share the same undo-entry
+// shape (we regressed on this once before; a single helper guarantees
+// they can't drift). Not exported — callers should call `hint()`.
+//
+// Params:
+//   s                — the full state captured before the placement
+//   suggestion       — {index, digit} to place
+//   opts.incrementCounter — bump `hintsUsed` by 1 (legacy) vs leave it
+//                           alone (tier-3, already bumped at tier-1)
+//   opts.clearSession — wipe the hintSession (tier-3) vs leave it null
+//                       (legacy, which never populated it anyway)
+//   set              — the zustand set callback
+function applyHintPlacement(
+  s: GameState,
+  suggestion: { index: number; digit: number },
+  opts: { incrementCounter: boolean; clearSession: boolean },
+  set: (partial: Partial<GameState>) => void,
+): void {
+  const idx = suggestion.index;
+  const prevValue = s.board[idx];
+  const board = new Uint8Array(s.board);
+  board[idx] = suggestion.digit;
+  const prevNotes = new Uint16Array(s.notes);
+  let notes = clearCellNotes(s.notes, idx);
+  notes = prunePeerNotes(notes, idx, suggestion.digit);
+  const entry: HistoryEntry = {
+    kind: "value",
+    index: idx,
+    prevValue,
+    nextValue: suggestion.digit,
+    prevNotes,
+    nextNotes: notes,
+  };
+  // Hints count as value placements for the pad highlight (they
+  // mutate the board identically). Same flag as inputDigit.
+  const activeDigit = s.featureFlags.autoSwitchDigit
+    ? nextActiveDigit(suggestion.digit, digitCounts(board))
+    : null;
+  set({
+    board,
+    notes,
+    selection: idx,
+    hintsUsed: opts.incrementCounter ? s.hintsUsed + 1 : s.hintsUsed,
+    hintSession: opts.clearSession ? null : s.hintSession,
+    activeDigit,
+    history: pushEntry(s.history, entry),
+    conflicts: findConflicts(board),
+    isComplete: isComplete(board),
+  });
+}
+
 export const useGameStore = create<GameState & GameActions>()(
   persist(
     (set, get) => ({
@@ -462,7 +543,11 @@ export const useGameStore = create<GameState & GameActions>()(
         };
       },
 
-      selectCell: (index) => set({ selection: index }),
+      selectCell: (index) =>
+        // RAZ-14: clearing hintSession when the user re-focuses is an
+        // explicit "I've moved on" signal; otherwise a stale tier-1 toast
+        // would linger pointing at a row the user is no longer inspecting.
+        set({ selection: index, hintSession: null }),
 
       moveSelection: (dx, dy) => {
         const s = get();
@@ -471,7 +556,7 @@ export const useGameStore = create<GameState & GameActions>()(
         const col = cur % 9;
         const nr = (row + dy + 9) % 9;
         const nc = (col + dx + 9) % 9;
-        set({ selection: nr * 9 + nc });
+        set({ selection: nr * 9 + nc, hintSession: null });
       },
 
       setMode: (mode) => set({ mode }),
@@ -497,7 +582,14 @@ export const useGameStore = create<GameState & GameActions>()(
             prevMask,
             nextMask: nextNotes[idx],
           };
-          set({ notes: nextNotes, history: pushEntry(s.history, entry) });
+          set({
+            notes: nextNotes,
+            history: pushEntry(s.history, entry),
+            // RAZ-14: board-affecting action → abandon any pending
+            // progressive hint. The tier-2 "naked single at r3c7"
+            // message would likely be wrong after the user edits notes.
+            hintSession: null,
+          });
           return;
         }
 
@@ -594,6 +686,9 @@ export const useGameStore = create<GameState & GameActions>()(
           ...next,
           conflicts: findConflicts(next.board),
           isComplete: isComplete(next.board),
+          // RAZ-14: a user placement invalidates any in-flight
+          // progressive hint because the whole board state changed.
+          hintSession: null,
         });
       },
 
@@ -624,7 +719,14 @@ export const useGameStore = create<GameState & GameActions>()(
           prevMask,
           nextMask: nextNotes[idx],
         };
-        set({ notes: nextNotes, history: pushEntry(s.history, entry) });
+        // RAZ-14: note toggles invalidate a pending hint for the same
+        // reason inputDigit does — the board-derived suggestion could
+        // now be stale relative to the player's new pencil marks.
+        set({
+          notes: nextNotes,
+          history: pushEntry(s.history, entry),
+          hintSession: null,
+        });
       },
 
       eraseSelection: () => {
@@ -660,6 +762,9 @@ export const useGameStore = create<GameState & GameActions>()(
           history: pushEntry(s.history, entry),
           conflicts: findConflicts(board),
           isComplete: isComplete(board),
+          // RAZ-14: erasing a cell obviously invalidates a pending
+          // hint session.
+          hintSession: null,
         });
       },
 
@@ -689,7 +794,14 @@ export const useGameStore = create<GameState & GameActions>()(
           prevNotes,
           nextNotes,
         };
-        set({ notes: nextNotes, history: pushEntry(s.history, entry) });
+        // RAZ-14: bulk-notes rewrite implies the player wants fresh
+        // candidates — a pre-existing hint session pointing at a cell
+        // whose candidate set just changed would be misleading.
+        set({
+          notes: nextNotes,
+          history: pushEntry(s.history, entry),
+          hintSession: null,
+        });
       },
 
       undo: () => {
@@ -697,6 +809,9 @@ export const useGameStore = create<GameState & GameActions>()(
         const u = undo(s.history);
         if (!u) return;
         const e = u.entry;
+        // RAZ-14: any undo mutates board or notes and therefore
+        // invalidates a pending progressive hint. We clear the session
+        // unconditionally across all three branches.
         if (e.kind === "value") {
           const board = new Uint8Array(s.board);
           board[e.index] = e.prevValue;
@@ -711,16 +826,21 @@ export const useGameStore = create<GameState & GameActions>()(
             history: u.next,
             conflicts: findConflicts(board),
             isComplete: isComplete(board),
+            hintSession: null,
             // Lock isComplete back to false if undoing past the win.
           });
         } else if (e.kind === "note") {
           const notes = new Uint16Array(s.notes);
           notes[e.index] = e.prevMask;
-          set({ notes, history: u.next });
+          set({ notes, history: u.next, hintSession: null });
         } else {
           // notes-bulk: swap the entire notes buffer back. We copy so
           // the stored entry's prevNotes stays immutable for redo.
-          set({ notes: new Uint16Array(e.prevNotes), history: u.next });
+          set({
+            notes: new Uint16Array(e.prevNotes),
+            history: u.next,
+            hintSession: null,
+          });
         }
       },
 
@@ -729,6 +849,7 @@ export const useGameStore = create<GameState & GameActions>()(
         const r = redo(s.history);
         if (!r) return;
         const e = r.entry;
+        // RAZ-14: same invalidation story as undo.
         if (e.kind === "value") {
           const board = new Uint8Array(s.board);
           board[e.index] = e.nextValue;
@@ -742,14 +863,19 @@ export const useGameStore = create<GameState & GameActions>()(
             history: r.next,
             conflicts: findConflicts(board),
             isComplete: isComplete(board),
+            hintSession: null,
           });
         } else if (e.kind === "note") {
           const notes = new Uint16Array(s.notes);
           notes[e.index] = e.nextMask;
-          set({ notes, history: r.next });
+          set({ notes, history: r.next, hintSession: null });
         } else {
           // notes-bulk: re-apply the recomputed candidates.
-          set({ notes: new Uint16Array(e.nextNotes), history: r.next });
+          set({
+            notes: new Uint16Array(e.nextNotes),
+            history: r.next,
+            hintSession: null,
+          });
         }
       },
 
@@ -761,58 +887,88 @@ export const useGameStore = create<GameState & GameActions>()(
         const s = get();
         if (s.isComplete || s.isPaused || !s.meta) return;
 
-        let suggestion: { index: number; digit: number } | null = null;
-        if (s.meta.solution) {
-          const h = nextHint(s.board, {
-            selected: s.selection,
-            solution: s.meta.solution,
-          });
-          if (h) suggestion = { index: h.index, digit: h.digit };
-        } else if (remoteHintFetcher) {
-          const board = Array.from(s.board).join("");
+        // RAZ-14 tier-advance branch. If a progressive session is already
+        // in flight, this click bumps it to the next tier instead of
+        // starting a new one. Only two intermediate tiers exist (1 and
+        // 2); tier 3 is the actual placement which also clears the
+        // session so the next click starts fresh.
+        if (s.hintSession && s.featureFlags.progressiveHints) {
+          if (s.hintSession.tier === 1) {
+            // Advance to tier 2 (technique + cell, digit still hidden).
+            // No placement yet; no undo entry; no counter bump. The
+            // UI layer will read the new session state and emit the
+            // tier-2 message toast.
+            set({
+              hintSession: { ...s.hintSession, tier: 2 },
+            });
+            return;
+          }
+          // tier === 2 → place the digit and clear the session. Falls
+          // through to the placement code below with `suggestion`
+          // already resolved and `incrementCounter: false` because we
+          // already bumped `hintsUsed` at tier 1.
+          return applyHintPlacement(
+            s,
+            {
+              index: s.hintSession.suggestion.index,
+              digit: s.hintSession.suggestion.digit,
+            },
+            { incrementCounter: false, clearSession: true },
+            set,
+          );
+        }
+
+        // No active session: resolve a fresh suggestion. We prefer the
+        // local solver path (it can produce a structured HintSuggestion
+        // with technique + unit info for the tier-1/tier-2 messages),
+        // and fall back to the remote fetcher for daily puzzles whose
+        // solutions stay server-side. For remote hits we fabricate a
+        // "from-solution"-style suggestion so progressive disclosure
+        // still works (tier 1 gets the cell's box; tier 2 shows
+        // "Forced placement at r.c.").
+        let localHint = nextHint(s.board, {
+          selected: s.selection,
+          solution: s.meta.solution,
+        });
+        if (!localHint && !s.meta.solution && remoteHintFetcher) {
+          const boardStr = Array.from(s.board).join("");
           try {
-            suggestion = await remoteHintFetcher(board, s.selection);
+            const remote = await remoteHintFetcher(boardStr, s.selection);
+            localHint = {
+              index: remote.index,
+              digit: remote.digit,
+              technique: "from-solution",
+              unit: "box",
+              // Derive the 0-indexed box from the cell index so the
+              // tier-1 "try box N" message aligns with what a human
+              // would call it. Same math as solver.boxOf.
+              unitIndex:
+                Math.floor(Math.floor(remote.index / 9) / 3) * 3 +
+                Math.floor((remote.index % 9) / 3),
+            };
           } catch {
             return;
           }
         }
-        if (!suggestion) return;
+        if (!localHint) return;
 
-        // Apply the hint as a normal placement so it appears in undo
-        // history and counts toward digit totals.
-        const idx = suggestion.index;
-        const prevValue = s.board[idx];
-        const board = new Uint8Array(s.board);
-        board[idx] = suggestion.digit;
-        // Same snapshot-then-mutate pattern as inputDigit so undo can
-        // restore the full notes buffer (including peer pruning).
-        const prevNotes = new Uint16Array(s.notes);
-        let notes = clearCellNotes(s.notes, idx);
-        notes = prunePeerNotes(notes, idx, suggestion.digit);
-        const entry: HistoryEntry = {
-          kind: "value",
-          index: idx,
-          prevValue,
-          nextValue: suggestion.digit,
-          prevNotes,
-          nextNotes: notes,
-        };
-        // RAZ-16: hints count as value placements for the pad
-        // highlight (they mutate the board the same way user placements
-        // do). Flag-gated identically to `inputDigit`.
-        const activeDigit = s.featureFlags.autoSwitchDigit
-          ? nextActiveDigit(suggestion.digit, digitCounts(board))
-          : null;
-        set({
-          board,
-          notes,
-          selection: idx,
-          hintsUsed: s.hintsUsed + 1,
-          activeDigit,
-          history: pushEntry(s.history, entry),
-          conflicts: findConflicts(board),
-          isComplete: isComplete(board),
-        });
+        // Progressive mode: increment hintsUsed once (this click
+        // "spends" the hint), stash the session, and let the UI toast
+        // tier 1. Legacy mode: place immediately.
+        if (s.featureFlags.progressiveHints) {
+          set({
+            hintsUsed: s.hintsUsed + 1,
+            hintSession: { suggestion: localHint, tier: 1 },
+          });
+          return;
+        }
+
+        return applyHintPlacement(
+          s,
+          { index: localHint.index, digit: localHint.digit },
+          { incrementCounter: true, clearSession: false },
+          set,
+        );
       },
 
   togglePause: () =>

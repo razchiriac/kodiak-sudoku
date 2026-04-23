@@ -232,6 +232,22 @@ export const FLAG_REGISTRY: readonly FlagSpec[] = [
     linearId: "RAZ-13",
   },
   {
+    // RAZ-14: Progressive hint disclosure. When on, clicking the
+    // Hint button steps through three tiers: (1) a region nudge
+    // ("try looking at column 7"), (2) a technique + location
+    // callout ("naked single at r3c7"), (3) the actual placement.
+    // `hintsUsed` is still incremented exactly once per suggestion
+    // (on the first click that starts a new hint cycle) so
+    // leaderboard integrity is preserved. When off, the Hint button
+    // behaves exactly as before: one click places the digit.
+    key: "progressive-hints",
+    envKey: "FLAG_PROGRESSIVE_HINTS",
+    defaultValue: true,
+    description:
+      "Three-tier hint disclosure on the Hint button: region nudge → technique + location → place the digit. `hintsUsed` still increments once per hint cycle.",
+    linearId: "RAZ-14",
+  },
+  {
     // RAZ-9: Print-friendly puzzle PDF. When on, the play screen
     // surfaces a Printer icon next to the settings button. Clicking
     // it opens a small dialog with two radio groups (board content

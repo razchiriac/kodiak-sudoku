@@ -4,11 +4,38 @@ import { isLegalPlacement } from "./validate";
 // A "next-step" hint suggestion. Either we identified a confident placement
 // using a basic technique, or we fell back to revealing a cell from the
 // known solution (always correct but pedagogically less interesting).
+//
+// `unit` + `unitIndex` describe the Sudoku unit (row/column/box) the player
+// should focus on for a "look here" nudge — the coarsest public information
+// about a hint that still reduces their search space meaningfully.
+//
+//   - hidden-single: unit is set to the specific unit that forced the
+//     deduction (the row, column, OR box where only one cell can hold the
+//     digit). This is the most natural tier-1 message.
+//   - naked-single & from-solution: we only know one cell, so we default to
+//     the cell's box (3×3 sub-grid) — a small enough region to narrow the
+//     search but not as revealing as the exact row+col would be.
+//
+// `unitIndex` is 0-indexed internally. The UI converts to 1-indexed for
+// display so players don't see "column 0" which is jarring.
+export type HintUnit = "row" | "col" | "box";
+
 export type HintSuggestion = {
   index: CellIndex;
   digit: number;
   technique: "naked-single" | "hidden-single" | "from-solution";
+  unit: HintUnit;
+  unitIndex: number;
 };
+
+// Helper: which 3x3 box contains the given cell index? Used as the default
+// region for techniques that don't carry an explicit unit (naked-single,
+// from-solution).
+function boxOf(index: CellIndex): number {
+  const r = Math.floor(index / 9);
+  const c = index % 9;
+  return Math.floor(r / 3) * 3 + Math.floor(c / 3);
+}
 
 // Compute candidate digits for every empty cell as a Uint16 bitmask.
 // We export this so the UI can offer "auto-notes" without re-implementing
@@ -37,7 +64,13 @@ function findNakedSingle(board: Board, candidates: Uint16Array): HintSuggestion 
     // popcount === 1 check: mask is a power of two
     if ((mask & (mask - 1)) === 0) {
       const digit = Math.log2(mask) + 1;
-      return { index: i, digit, technique: "naked-single" };
+      return {
+        index: i,
+        digit,
+        technique: "naked-single",
+        unit: "box",
+        unitIndex: boxOf(i),
+      };
     }
   }
   return null;
@@ -47,25 +80,27 @@ function findNakedSingle(board: Board, candidates: Uint16Array): HintSuggestion 
 // only legally go in one cell within a unit. Slightly harder for humans to
 // spot than a naked single, so we try naked first.
 function findHiddenSingle(board: Board, candidates: Uint16Array): HintSuggestion | null {
-  // Build all 27 units (9 rows + 9 cols + 9 boxes) once.
-  const units: CellIndex[][] = [];
+  // Build all 27 units once, each tagged with its kind + index so a match
+  // carries enough info for the tier-1 region nudge.
+  type TaggedUnit = { kind: HintUnit; idx: number; cells: CellIndex[] };
+  const units: TaggedUnit[] = [];
   for (let r = 0; r < 9; r++) {
-    const row: CellIndex[] = [];
-    for (let c = 0; c < 9; c++) row.push(r * 9 + c);
-    units.push(row);
+    const cells: CellIndex[] = [];
+    for (let c = 0; c < 9; c++) cells.push(r * 9 + c);
+    units.push({ kind: "row", idx: r, cells });
   }
   for (let c = 0; c < 9; c++) {
-    const col: CellIndex[] = [];
-    for (let r = 0; r < 9; r++) col.push(r * 9 + c);
-    units.push(col);
+    const cells: CellIndex[] = [];
+    for (let r = 0; r < 9; r++) cells.push(r * 9 + c);
+    units.push({ kind: "col", idx: c, cells });
   }
   for (let br = 0; br < 3; br++) {
     for (let bc = 0; bc < 3; bc++) {
-      const box: CellIndex[] = [];
+      const cells: CellIndex[] = [];
       for (let r = br * 3; r < br * 3 + 3; r++) {
-        for (let c = bc * 3; c < bc * 3 + 3; c++) box.push(r * 9 + c);
+        for (let c = bc * 3; c < bc * 3 + 3; c++) cells.push(r * 9 + c);
       }
-      units.push(box);
+      units.push({ kind: "box", idx: br * 3 + bc, cells });
     }
   }
 
@@ -74,7 +109,7 @@ function findHiddenSingle(board: Board, candidates: Uint16Array): HintSuggestion
       const bit = 1 << (digit - 1);
       let count = 0;
       let where: CellIndex = -1;
-      for (const idx of unit) {
+      for (const idx of unit.cells) {
         if (board[idx] === digit) {
           count = -1; // already placed in this unit
           break;
@@ -86,7 +121,13 @@ function findHiddenSingle(board: Board, candidates: Uint16Array): HintSuggestion
         }
       }
       if (count === 1 && where !== -1) {
-        return { index: where, digit, technique: "hidden-single" };
+        return {
+          index: where,
+          digit,
+          technique: "hidden-single",
+          unit: unit.kind,
+          unitIndex: unit.idx,
+        };
       }
     }
   }
@@ -114,6 +155,8 @@ export function nextHint(
         index: options.selected,
         digit: Math.log2(mask) + 1,
         technique: "naked-single",
+        unit: "box",
+        unitIndex: boxOf(options.selected),
       };
     }
   }
@@ -138,7 +181,13 @@ function fromSolution(
     const ch = solution[selected];
     const digit = ch.charCodeAt(0) - 48;
     if (digit >= 1 && digit <= 9 && isLegalPlacement(board, selected, digit)) {
-      return { index: selected, digit, technique: "from-solution" };
+      return {
+        index: selected,
+        digit,
+        technique: "from-solution",
+        unit: "box",
+        unitIndex: boxOf(selected),
+      };
     }
   }
   for (let i = 0; i < BOARD_SIZE; i++) {
@@ -146,7 +195,13 @@ function fromSolution(
     const ch = solution[i];
     const digit = ch.charCodeAt(0) - 48;
     if (digit >= 1 && digit <= 9 && isLegalPlacement(board, i, digit)) {
-      return { index: i, digit, technique: "from-solution" };
+      return {
+        index: i,
+        digit,
+        technique: "from-solution",
+        unit: "box",
+        unitIndex: boxOf(i),
+      };
     }
   }
   return null;

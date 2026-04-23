@@ -1,6 +1,7 @@
 import "server-only";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "./client";
+import { execRows } from "./exec-rows";
 import {
   completedGames,
   dailyPuzzles,
@@ -31,7 +32,11 @@ export async function getRandomPuzzleByBucket(
           and ${puzzles.variant} = ${variant}
         limit 1`,
   );
-  const first = (sample as unknown as { rows: Puzzle[] }).rows?.[0];
+  // RAZ-71: `db.execute` returns a plain Array under postgres-js, so we
+  // funnel through `execRows` rather than the historical `.rows` cast
+  // (which silently produced undefined and made this call always fall
+  // through to the slow fallback path).
+  const first = execRows<Puzzle>(sample)[0];
   if (first) return first;
 
   const fallback = await db
@@ -116,8 +121,10 @@ export async function getAdjacentDailyDates(
           (min(puzzle_date) filter (where puzzle_date > ${date} and puzzle_date <= ${today}))::text as next
         from ${dailyPuzzles}`,
   );
-  const row = (rows as unknown as { rows: { prev: string | null; next: string | null }[] })
-    .rows?.[0];
+  // RAZ-71: see `execRows` doc — pre-fix this read was always
+  // returning `undefined`, which silently disabled the prev/next
+  // archive nav. Fix is to read the result as the array it really is.
+  const row = execRows<{ prev: string | null; next: string | null }>(rows)[0];
   return { prev: row?.prev ?? null, next: row?.next ?? null };
 }
 
@@ -397,9 +404,11 @@ export async function getDailyRankContext(
           and ${completedGames.dailyDate} = ${date}
           ${bucket !== undefined ? sql`and ${completedGames.difficultyBucket} = ${bucket}` : sql``}`,
   );
-  const first =
-    (rows as unknown as { rows: { total: number; slower: number }[] }).rows?.[0] ??
-    { total: 0, slower: 0 };
+  // RAZ-71: see `execRows` doc — was always silently `undefined`.
+  const first = execRows<{ total: number; slower: number }>(rows)[0] ?? {
+    total: 0,
+    slower: 0,
+  };
   const total = Number(first.total) || 0;
   const slower = Number(first.slower) || 0;
   const percentile =
@@ -437,8 +446,11 @@ export async function getRecentTimesByBucket(
         ) recent
         order by completed_at asc`,
   );
-  const list = (rows as unknown as { rows: { time_ms: number; completed_at: Date }[] })
-    .rows;
+  // RAZ-71: this used to crash the profile page for any user whose
+  // recent-times bucket actually returned rows — `(rows).rows` is
+  // `undefined` under postgres-js, then `undefined.map(...)` throws
+  // a TypeError that bubbles up as a 500 on /profile/[username].
+  const list = execRows<{ time_ms: number; completed_at: Date }>(rows);
   return list.map((r) => ({ timeMs: r.time_ms, completedAt: r.completed_at }));
 }
 
@@ -475,7 +487,10 @@ export async function getSolveTimestamps(
         ) recent
         order by completed_at asc`,
   );
-  const list = (rows as unknown as { rows: { completed_at: Date }[] }).rows;
+  // RAZ-71: same shape bug as `getRecentTimesByBucket` above — the
+  // profile heatmap section was 500-ing for any user with completions
+  // (and silently returning undefined for users without any).
+  const list = execRows<{ completed_at: Date }>(rows);
   return list.map((r) => r.completed_at);
 }
 

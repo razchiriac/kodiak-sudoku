@@ -1,6 +1,7 @@
 import "server-only";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
+import { execRows } from "@/lib/db/exec-rows";
 import { completedGames, friendships, profiles } from "@/lib/db/schema";
 import { canonicalPair } from "./friends-pair";
 
@@ -61,23 +62,29 @@ export async function listFriends(userId: string) {
     display_name: string | null;
     since: Date;
   }>(
+    // RAZ-71: must reference the table via its alias `f`. Drizzle's
+    // `${friendships.status}` interpolates as the bare table name
+    // (`friendships.status`), but Postgres requires the alias once
+    // one is set in the FROM clause — otherwise it errors with
+    // "invalid reference to FROM-clause entry for table 'friendships'"
+    // and bubbles up as a 500 on /leaderboard for any signed-in user.
     sql`select
           p.id, p.username, p.display_name,
           f.updated_at as since
         from ${friendships} f
         join ${profiles} p on p.id = case when f.user_a = ${userId} then f.user_b else f.user_a end
-        where ${friendships.status} = 'accepted'
-          and (${friendships.userA} = ${userId} or ${friendships.userB} = ${userId})
+        where f.status = 'accepted'
+          and (f.user_a = ${userId} or f.user_b = ${userId})
         order by p.username asc nulls last, p.id asc`,
   );
-  const list = (rows as unknown as {
-    rows: Array<{
-      id: string;
-      username: string | null;
-      display_name: string | null;
-      since: Date;
-    }>;
-  }).rows;
+  // RAZ-71: postgres-js returns the row Array directly; the legacy
+  // `.rows` cast was always undefined and threw a TypeError on .map.
+  const list = execRows<{
+    id: string;
+    username: string | null;
+    display_name: string | null;
+    since: Date;
+  }>(rows);
   return list.map((r) => ({
     id: r.id,
     username: r.username,
@@ -94,24 +101,24 @@ export async function listIncomingRequests(userId: string) {
     display_name: string | null;
     requested_at: Date;
   }>(
+    // RAZ-71: alias-qualified WHERE clause — see `listFriends`.
     sql`select
           p.id, p.username, p.display_name,
           f.created_at as requested_at
         from ${friendships} f
         join ${profiles} p on p.id = f.requested_by
-        where ${friendships.status} = 'pending'
-          and (${friendships.userA} = ${userId} or ${friendships.userB} = ${userId})
-          and ${friendships.requestedBy} <> ${userId}
+        where f.status = 'pending'
+          and (f.user_a = ${userId} or f.user_b = ${userId})
+          and f.requested_by <> ${userId}
         order by f.created_at desc`,
   );
-  const list = (rows as unknown as {
-    rows: Array<{
-      id: string;
-      username: string | null;
-      display_name: string | null;
-      requested_at: Date;
-    }>;
-  }).rows;
+  // RAZ-71: shape-normalise — see `listFriends`.
+  const list = execRows<{
+    id: string;
+    username: string | null;
+    display_name: string | null;
+    requested_at: Date;
+  }>(rows);
   return list.map((r) => ({
     id: r.id,
     username: r.username,
@@ -128,24 +135,24 @@ export async function listOutgoingRequests(userId: string) {
     display_name: string | null;
     requested_at: Date;
   }>(
+    // RAZ-71: alias-qualified WHERE clause — see `listFriends`.
     sql`select
           p.id, p.username, p.display_name,
           f.created_at as requested_at
         from ${friendships} f
         join ${profiles} p on p.id = case when f.user_a = ${userId} then f.user_b else f.user_a end
-        where ${friendships.status} = 'pending'
-          and (${friendships.userA} = ${userId} or ${friendships.userB} = ${userId})
-          and ${friendships.requestedBy} = ${userId}
+        where f.status = 'pending'
+          and (f.user_a = ${userId} or f.user_b = ${userId})
+          and f.requested_by = ${userId}
         order by f.created_at desc`,
   );
-  const list = (rows as unknown as {
-    rows: Array<{
-      id: string;
-      username: string | null;
-      display_name: string | null;
-      requested_at: Date;
-    }>;
-  }).rows;
+  // RAZ-71: shape-normalise — see `listFriends`.
+  const list = execRows<{
+    id: string;
+    username: string | null;
+    display_name: string | null;
+    requested_at: Date;
+  }>(rows);
   return list.map((r) => ({
     id: r.id,
     username: r.username,

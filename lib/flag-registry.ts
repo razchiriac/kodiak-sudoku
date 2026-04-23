@@ -187,6 +187,21 @@ export const FLAG_REGISTRY: readonly FlagSpec[] = [
     linearId: "RAZ-6",
   },
   {
+    // RAZ-35: Paste-a-puzzle import. When on, /play/custom exposes
+    // a form that accepts 81 chars of `0..9` or `.` (with any
+    // whitespace/pipe/dash separators stripped), validates it with
+    // the backtracking solver, and redirects to /play/custom/[hash]
+    // for a practice session. No DB writes: the session never
+    // persists to saved_games and never submits to completed_games.
+    // Flag off = both routes 404 and the nav entry point is hidden.
+    key: "custom-paste",
+    envKey: "FLAG_CUSTOM_PASTE",
+    defaultValue: true,
+    description:
+      "Expose /play/custom paste-a-puzzle import (practice-only; no leaderboard, no autosave).",
+    linearId: "RAZ-35",
+  },
+  {
     // RAZ-32: Compare-to-field on daily completion. When on, a
     // successful daily submit returns a {total, slower, percentile}
     // rank context the completion modal renders as "You beat 73% of

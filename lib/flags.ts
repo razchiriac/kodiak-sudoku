@@ -191,6 +191,14 @@ export const colorPalette = declareFlag("color-palette");
 // and the cross-links disappear; daily board is untouched.
 export const difficultyLeaderboards = declareFlag("difficulty-leaderboards");
 
+// RAZ-35 - Paste-a-puzzle import. When on, /play/custom exposes a
+// form that accepts 81 chars of 0..9/. (any whitespace/pipe/dash
+// separators stripped), runs the backtracking solver to verify a
+// solution exists, and redirects to /play/custom/[hash] for a
+// practice session. No DB writes — no saved_games row, no
+// completed_games submit, no leaderboard impact.
+export const customPaste = declareFlag("custom-paste");
+
 // RAZ-32 - Compare-to-field on daily completion. When on,
 // `submitCompletionAction` computes a rank context for daily
 // submits (total solvers so far today + how many the user beat on

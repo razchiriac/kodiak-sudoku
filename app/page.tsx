@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { Route } from "next";
 import { Calendar, Keyboard, Trophy, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { quickPlay } from "@/lib/flags";
+import { customPaste, quickPlay } from "@/lib/flags";
 
 // Landing page. Server Component; the only interactive bits are the CTA
 // links. We deliberately keep this page tiny so first-paint is fast and
@@ -13,7 +13,10 @@ import { quickPlay } from "@/lib/flags";
 // feature card pointing at the weekly count-based leaderboard. Flag off
 // = zero visual change, so we can ship safely.
 export default async function HomePage() {
-  const quickPlayFlag = await quickPlay();
+  const [quickPlayFlag, customPasteFlag] = await Promise.all([
+    quickPlay(),
+    customPaste(),
+  ]);
   return (
     <div className="container flex flex-col items-center gap-12 py-16">
       <section className="flex max-w-2xl flex-col items-center gap-6 text-center">
@@ -40,6 +43,19 @@ export default async function HomePage() {
             </Button>
           ) : null}
         </div>
+        {/* RAZ-35: a small tertiary CTA for players who want to import
+            a puzzle from a book, newspaper, or another app. Kept as a
+            plain text link (not a Button) so it stays visually secondary
+            — paste-a-puzzle is a power-user feature. Feature-flag gated
+            so we can hide it instantly if needed. */}
+        {customPasteFlag ? (
+          <Link
+            href="/play/custom"
+            className="text-sm text-muted-foreground underline-offset-4 hover:underline"
+          >
+            Have a puzzle in mind? Paste it →
+          </Link>
+        ) : null}
       </section>
 
       <section

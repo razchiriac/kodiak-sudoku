@@ -66,6 +66,44 @@ export function boxOf(index: CellIndex): number {
   return Math.floor(rowOf(index) / BOX_DIM) * BOX_DIM + Math.floor(colOf(index) / BOX_DIM);
 }
 
+// RAZ-35 — Normalize a user-pasted puzzle string. Players copy from
+// all kinds of sources: books with `.` as the empty marker, forums
+// with ascii-grid decorations (`+---+---+---+`, `| 5 3 . |`),
+// even spreadsheets (tabs + newlines). We strip any character that
+// is not 0–9 or `.`, then treat `.` as 0, producing the canonical
+// 81-char digit string this codebase uses everywhere.
+//
+// Returns:
+//   - { ok: true, digits } — normalized, validated 81-char string.
+//   - { ok: false, error } — descriptive string for the form to
+//     surface inline. Errors are intentionally specific so users
+//     understand what failed (wrong length vs invalid characters
+//     AFTER stripping separators).
+//
+// Pure function — no I/O, no solver call. The caller is expected
+// to run `solve()` separately to confirm the puzzle is actually
+// solvable before routing to the play page.
+export function normalizePastedPuzzle(
+  raw: string,
+): { ok: true; digits: string } | { ok: false; error: string } {
+  if (typeof raw !== "string") return { ok: false, error: "expected_string" };
+  // Strip anything that's not a digit or `.`. This handles common
+  // decorations: spaces, newlines, tabs, `|`, `-`, `+`, `,`. Users
+  // pasting from PDF or printed grids get a lot of that.
+  const filtered = raw.replace(/[^0-9.]/g, "");
+  if (filtered.length !== BOARD_SIZE) {
+    return {
+      ok: false,
+      error: `Expected 81 cells (0-9 or .), got ${filtered.length}.`,
+    };
+  }
+  // Canonicalize: `.` → `0`. After the filter above the only possible
+  // characters are already 0-9 or `.`, so no further validation is
+  // needed beyond the length check.
+  const digits = filtered.replace(/\./g, "0");
+  return { ok: true, digits };
+}
+
 // Parse the canonical 81-character puzzle string used in the Kaggle dataset
 // and our DB. Accepts both `0` and `.` as empty markers so we are tolerant
 // of either source format.

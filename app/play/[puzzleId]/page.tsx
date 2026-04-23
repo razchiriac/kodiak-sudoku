@@ -163,6 +163,7 @@ export default async function PuzzlePage({
         puzzle: puzzle.puzzle.trim(),
         solution: puzzle.solution.trim(),
         difficultyBucket: puzzle.difficultyBucket,
+        variant: puzzle.variant,
       }}
       savedGame={
         saved

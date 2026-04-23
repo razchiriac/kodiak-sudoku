@@ -1,14 +1,17 @@
-import { BOARD_SIZE, type Board, type CellIndex, peers } from "./board";
+import { BOARD_SIZE, type Board, type CellIndex, type Variant, peers } from "./board";
 
 // Find every cell that conflicts with at least one peer (same row, col, or
 // box has a duplicate digit). Returns a Set so callers can check membership
 // in O(1) when rendering each cell.
-export function findConflicts(board: Board): Set<CellIndex> {
+//
+// RAZ-18: Accepts an optional `variant` so diagonal conflicts are
+// detected for diagonal puzzles.
+export function findConflicts(board: Board, variant?: Variant): Set<CellIndex> {
   const conflicts = new Set<CellIndex>();
   for (let i = 0; i < BOARD_SIZE; i++) {
     const v = board[i];
     if (v === 0) continue;
-    for (const p of peers(i)) {
+    for (const p of peers(i, variant)) {
       if (board[p] === v) {
         conflicts.add(i);
         conflicts.add(p);
@@ -29,9 +32,9 @@ export function isFilled(board: Board): boolean {
 // Returns true iff the board is filled and has no conflicts. This is the
 // pure-Sudoku win condition; we still verify against the stored solution
 // server-side before recording a completion.
-export function isComplete(board: Board): boolean {
+export function isComplete(board: Board, variant?: Variant): boolean {
   if (!isFilled(board)) return false;
-  return findConflicts(board).size === 0;
+  return findConflicts(board, variant).size === 0;
 }
 
 // Strict equality with a known solution (also an 81-char string or Board).
@@ -50,8 +53,8 @@ export function isCorrect(board: Board, solution: Board | string): boolean {
 
 // Returns true iff placing `digit` in `index` would create no immediate
 // conflict with peers. Used by the "strict" mode to prevent invalid moves.
-export function isLegalPlacement(board: Board, index: CellIndex, digit: number): boolean {
+export function isLegalPlacement(board: Board, index: CellIndex, digit: number, variant?: Variant): boolean {
   if (digit < 1 || digit > 9) return false;
-  for (const p of peers(index)) if (board[p] === digit) return false;
+  for (const p of peers(index, variant)) if (board[p] === digit) return false;
   return true;
 }

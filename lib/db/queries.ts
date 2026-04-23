@@ -18,11 +18,17 @@ import {
 // SYSTEM_ROWS, which is constant-time and avoids the OFFSET trap. If the
 // sample misses (rare with our 30k+ rows per bucket), fall back to a
 // random ordered scan so the UX never breaks.
-export async function getRandomPuzzleByBucket(bucket: number): Promise<Puzzle | null> {
+// RAZ-18: accepts optional `variant` to filter by puzzle variant.
+// Default is "standard" so existing callers don't break.
+export async function getRandomPuzzleByBucket(
+  bucket: number,
+  variant: string = "standard",
+): Promise<Puzzle | null> {
   const sample = await db.execute<Puzzle>(
     sql`select * from ${puzzles}
         tablesample system_rows(20)
         where ${puzzles.difficultyBucket} = ${bucket}
+          and ${puzzles.variant} = ${variant}
         limit 1`,
   );
   const first = (sample as unknown as { rows: Puzzle[] }).rows?.[0];
@@ -31,7 +37,7 @@ export async function getRandomPuzzleByBucket(bucket: number): Promise<Puzzle | 
   const fallback = await db
     .select()
     .from(puzzles)
-    .where(eq(puzzles.difficultyBucket, bucket))
+    .where(and(eq(puzzles.difficultyBucket, bucket), eq(puzzles.variant, variant)))
     .orderBy(sql`random()`)
     .limit(1);
   return fallback[0] ?? null;

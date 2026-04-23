@@ -62,12 +62,18 @@ export const puzzles = pgTable(
     // 1=Easy, 2=Medium, 3=Hard, 4=Expert. Stored as smallint (not enum) so
     // we can re-bucket post-launch with a single UPDATE.
     difficultyBucket: smallint("difficulty_bucket").notNull(),
+    // RAZ-18: Puzzle variant. "standard" for classic 9x9; "diagonal"
+    // adds two diagonal constraint units. Text per project convention
+    // so we can extend without a migration.
+    variant: text("variant").notNull().default("standard"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("puzzles_difficulty_idx").on(t.difficultyBucket),
+    index("puzzles_variant_difficulty_idx").on(t.variant, t.difficultyBucket),
     check("puzzles_difficulty_range", sql`${t.difficultyBucket} between 1 and 4`),
     check("puzzles_clue_range", sql`${t.clueCount} between 17 and 40`),
+    check("puzzles_variant_check", sql`${t.variant} in ('standard', 'diagonal')`),
   ],
 );
 

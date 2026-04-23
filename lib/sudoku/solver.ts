@@ -1,4 +1,4 @@
-import { BOARD_SIZE, type Board, type CellIndex, peers } from "./board";
+import { BOARD_SIZE, type Board, type CellIndex, type Variant, peers } from "./board";
 import { isLegalPlacement } from "./validate";
 
 // A "next-step" hint suggestion. Either we identified a confident placement
@@ -18,7 +18,10 @@ import { isLegalPlacement } from "./validate";
 //
 // `unitIndex` is 0-indexed internally. The UI converts to 1-indexed for
 // display so players don't see "column 0" which is jarring.
-export type HintUnit = "row" | "col" | "box";
+// RAZ-18: "diag" covers both the main and anti-diagonal for hint
+// messaging. The UI can render "look at the diagonal" without
+// distinguishing which one — a single nudge per step is enough.
+export type HintUnit = "row" | "col" | "box" | "diag";
 
 export type HintSuggestion = {
   index: CellIndex;
@@ -40,12 +43,12 @@ function boxOf(index: CellIndex): number {
 // Compute candidate digits for every empty cell as a Uint16 bitmask.
 // We export this so the UI can offer "auto-notes" without re-implementing
 // the logic in the React layer.
-export function computeCandidates(board: Board): Uint16Array {
+export function computeCandidates(board: Board, variant?: Variant): Uint16Array {
   const candidates = new Uint16Array(BOARD_SIZE);
   for (let i = 0; i < BOARD_SIZE; i++) {
     if (board[i] !== 0) continue;
     let mask = 0b111111111; // digits 1..9
-    for (const p of peers(i)) {
+    for (const p of peers(i, variant)) {
       if (board[p] !== 0) mask &= ~(1 << (board[p] - 1));
     }
     candidates[i] = mask;
@@ -76,11 +79,12 @@ function findNakedSingle(board: Board, candidates: Uint16Array): HintSuggestion 
   return null;
 }
 
-// Look for a hidden single in rows, columns, and boxes: a digit that can
-// only legally go in one cell within a unit. Slightly harder for humans to
-// spot than a naked single, so we try naked first.
-function findHiddenSingle(board: Board, candidates: Uint16Array): HintSuggestion | null {
-  // Build all 27 units once, each tagged with its kind + index so a match
+// Look for a hidden single in rows, columns, and boxes (+ diagonals
+// for the diagonal variant): a digit that can only legally go in one
+// cell within a unit. Slightly harder for humans to spot than a
+// naked single, so we try naked first.
+function findHiddenSingle(board: Board, candidates: Uint16Array, variant?: Variant): HintSuggestion | null {
+  // Build the units once, each tagged with its kind + index so a match
   // carries enough info for the tier-1 region nudge.
   type TaggedUnit = { kind: HintUnit; idx: number; cells: CellIndex[] };
   const units: TaggedUnit[] = [];
@@ -102,6 +106,17 @@ function findHiddenSingle(board: Board, candidates: Uint16Array): HintSuggestion
       }
       units.push({ kind: "box", idx: br * 3 + bc, cells });
     }
+  }
+  // RAZ-18: Add diagonal units for the diagonal variant.
+  if (variant === "diagonal") {
+    const mainDiag: CellIndex[] = [];
+    const antiDiag: CellIndex[] = [];
+    for (let k = 0; k < 9; k++) {
+      mainDiag.push(k * 9 + k);
+      antiDiag.push(k * 9 + (8 - k));
+    }
+    units.push({ kind: "diag", idx: 0, cells: mainDiag });
+    units.push({ kind: "diag", idx: 1, cells: antiDiag });
   }
 
   for (const unit of units) {
@@ -143,9 +158,10 @@ function findHiddenSingle(board: Board, candidates: Uint16Array): HintSuggestion
 //      have the solution for daily puzzles).
 export function nextHint(
   board: Board,
-  options: { selected?: CellIndex | null; solution?: string | null } = {},
+  options: { selected?: CellIndex | null; solution?: string | null; variant?: Variant } = {},
 ): HintSuggestion | null {
-  const candidates = computeCandidates(board);
+  const v = options.variant;
+  const candidates = computeCandidates(board, v);
 
   // Prefer the selected cell if it's empty and has exactly one candidate.
   if (options.selected != null && board[options.selected] === 0) {
@@ -163,8 +179,8 @@ export function nextHint(
 
   return (
     findNakedSingle(board, candidates) ??
-    findHiddenSingle(board, candidates) ??
-    fromSolution(board, options.solution ?? null, options.selected ?? null)
+    findHiddenSingle(board, candidates, v) ??
+    fromSolution(board, options.solution ?? null, options.selected ?? null, v)
   );
 }
 
@@ -175,12 +191,13 @@ function fromSolution(
   board: Board,
   solution: string | null,
   selected: CellIndex | null,
+  variant?: Variant,
 ): HintSuggestion | null {
   if (!solution || solution.length !== BOARD_SIZE) return null;
   if (selected != null && board[selected] === 0) {
     const ch = solution[selected];
     const digit = ch.charCodeAt(0) - 48;
-    if (digit >= 1 && digit <= 9 && isLegalPlacement(board, selected, digit)) {
+    if (digit >= 1 && digit <= 9 && isLegalPlacement(board, selected, digit, variant)) {
       return {
         index: selected,
         digit,
@@ -194,7 +211,7 @@ function fromSolution(
     if (board[i] !== 0) continue;
     const ch = solution[i];
     const digit = ch.charCodeAt(0) - 48;
-    if (digit >= 1 && digit <= 9 && isLegalPlacement(board, i, digit)) {
+    if (digit >= 1 && digit <= 9 && isLegalPlacement(board, i, digit, variant)) {
       return {
         index: i,
         digit,
@@ -210,13 +227,13 @@ function fromSolution(
 // Backtracking solver used by the import script to validate a solution
 // matches a puzzle. Not used at runtime by the UI. Returns the first
 // solution found (the dataset is assumed to have unique solutions).
-export function solve(board: Board): Board | null {
+export function solve(board: Board, variant?: Variant): Board | null {
   const work = new Uint8Array(board);
-  const ok = backtrack(work);
+  const ok = backtrack(work, variant);
   return ok ? work : null;
 }
 
-function backtrack(work: Board): boolean {
+function backtrack(work: Board, variant?: Variant): boolean {
   // Pick the empty cell with the fewest candidates (MRV heuristic). This
   // makes worst-case puzzles tractable in milliseconds.
   let bestIdx = -1;
@@ -225,7 +242,7 @@ function backtrack(work: Board): boolean {
   for (let i = 0; i < BOARD_SIZE; i++) {
     if (work[i] !== 0) continue;
     let mask = 0b111111111;
-    for (const p of peers(i)) if (work[p] !== 0) mask &= ~(1 << (work[p] - 1));
+    for (const p of peers(i, variant)) if (work[p] !== 0) mask &= ~(1 << (work[p] - 1));
     let count = 0;
     let m = mask;
     while (m) {
@@ -244,7 +261,7 @@ function backtrack(work: Board): boolean {
   for (let d = 1; d <= 9; d++) {
     if ((bestMask & (1 << (d - 1))) === 0) continue;
     work[bestIdx] = d;
-    if (backtrack(work)) return true;
+    if (backtrack(work, variant)) return true;
   }
   work[bestIdx] = 0;
   return false;

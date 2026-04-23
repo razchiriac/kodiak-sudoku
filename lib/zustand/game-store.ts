@@ -4,6 +4,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import {
   BOARD_SIZE,
+  type Variant,
   buildFixedMask,
   clearCellNotes,
   computeAllCandidates,
@@ -60,6 +61,10 @@ export type GameMeta = {
   // Solution for client-side hints. NULL for daily puzzles where the
   // server keeps the solution private.
   solution: string | null;
+  // RAZ-18: Puzzle variant. "standard" is the classic 9x9 Sudoku;
+  // "diagonal" adds two extra constraint diagonals. Defaults to
+  // "standard" for backwards compatibility with existing saved games.
+  variant?: import("@/lib/sudoku/board").Variant;
 };
 
 export type GameSnapshot = {
@@ -437,8 +442,9 @@ function nextEmptyPeer(
   placedIndex: number,
   board: Uint8Array,
   fixed: Uint8Array,
+  variant?: Variant,
 ): number | null {
-  const candidates = peers(placedIndex);
+  const candidates = peers(placedIndex, variant);
   for (const p of candidates) {
     if (fixed[p]) continue;
     if (board[p] !== 0) continue;
@@ -534,13 +540,14 @@ function applyHintPlacement(
   opts: { incrementCounter: boolean; clearSession: boolean },
   set: (partial: Partial<GameState>) => void,
 ): void {
+  const v = s.meta?.variant;
   const idx = suggestion.index;
   const prevValue = s.board[idx];
   const board = new Uint8Array(s.board);
   board[idx] = suggestion.digit;
   const prevNotes = new Uint16Array(s.notes);
   let notes = clearCellNotes(s.notes, idx);
-  notes = prunePeerNotes(notes, idx, suggestion.digit);
+  notes = prunePeerNotes(notes, idx, suggestion.digit, v);
   const entry: HistoryEntry = {
     kind: "value",
     index: idx,
@@ -549,8 +556,6 @@ function applyHintPlacement(
     prevNotes,
     nextNotes: notes,
   };
-  // Hints count as value placements for the pad highlight (they
-  // mutate the board identically). Same flag as inputDigit.
   const activeDigit = s.featureFlags.autoSwitchDigit
     ? nextActiveDigit(suggestion.digit, digitCounts(board))
     : null;
@@ -562,8 +567,8 @@ function applyHintPlacement(
     hintSession: opts.clearSession ? null : s.hintSession,
     activeDigit,
     history: pushEntry(s.history, entry),
-    conflicts: findConflicts(board),
-    isComplete: isComplete(board),
+    conflicts: findConflicts(board, v),
+    isComplete: isComplete(board, v),
     // RAZ-28: log hint-driven placements under kind "h" so replay /
     // anti-cheat analysis can distinguish them from the player's own
     // placements (e.g. a "perfect run with zero hints" signal relies
@@ -633,7 +638,7 @@ export const useGameStore = create<GameState & GameActions>()(
           settings: get().settings,
           featureFlags: get().featureFlags,
         });
-        set((s) => ({ ...s, conflicts: findConflicts(s.board) }));
+        set((s) => ({ ...s, conflicts: findConflicts(s.board, s.meta?.variant) }));
       },
 
       snapshot: () => {
@@ -673,6 +678,7 @@ export const useGameStore = create<GameState & GameActions>()(
 
       inputDigit: (digit) => {
         const s = get();
+        const v = s.meta?.variant;
         if (s.isComplete || s.isPaused) return;
         const idx = s.selection;
         if (idx == null) return;
@@ -703,7 +709,7 @@ export const useGameStore = create<GameState & GameActions>()(
         }
 
         // Value mode: maybe block if strict + illegal.
-        if (s.settings.strict && !isLegalPlacement(s.board, idx, digit)) return;
+        if (s.settings.strict && !isLegalPlacement(s.board, idx, digit, v)) return;
 
         const prevValue = s.board[idx];
         if (prevValue === digit) return; // no-op
@@ -721,12 +727,10 @@ export const useGameStore = create<GameState & GameActions>()(
         // unconditional: placing a digit always invalidates that digit
         // as a candidate in its row, column, and box.
         let notes = clearCellNotes(s.notes, idx);
-        notes = prunePeerNotes(notes, idx, digit);
+        notes = prunePeerNotes(notes, idx, digit, v);
 
-        // Increment mistakes if the placement creates a conflict. We use
-        // the local validator because it's instant and the server check
-        // at completion is the source of truth for correctness.
-        const isConflict = !isLegalPlacement(s.board, idx, digit);
+        // Increment mistakes if the placement creates a conflict.
+        const isConflict = !isLegalPlacement(s.board, idx, digit, v);
         let mistakes = s.mistakes;
         if (isConflict) mistakes++;
 
@@ -777,9 +781,9 @@ export const useGameStore = create<GameState & GameActions>()(
           s.featureFlags.jumpOnPlace &&
           s.settings.jumpOnPlace === true &&
           !isConflict &&
-          !isComplete(board);
+          !isComplete(board, v);
         const nextSelection = shouldJump
-          ? nextEmptyPeer(idx, board, s.fixed) ?? s.selection
+          ? nextEmptyPeer(idx, board, s.fixed, v) ?? s.selection
           : s.selection;
 
         const next = {
@@ -793,8 +797,8 @@ export const useGameStore = create<GameState & GameActions>()(
         };
         set({
           ...next,
-          conflicts: findConflicts(next.board),
-          isComplete: isComplete(next.board),
+          conflicts: findConflicts(next.board, v),
+          isComplete: isComplete(next.board, v),
           // RAZ-14: a user placement invalidates any in-flight
           // progressive hint because the whole board state changed.
           hintSession: null,
@@ -845,6 +849,7 @@ export const useGameStore = create<GameState & GameActions>()(
 
       eraseSelection: () => {
         const s = get();
+        const v = s.meta?.variant;
         if (s.isComplete || s.isPaused) return;
         const idx = s.selection;
         if (idx == null) return;
@@ -858,10 +863,6 @@ export const useGameStore = create<GameState & GameActions>()(
         const prevNotes = new Uint16Array(s.notes);
         const notes = clearCellNotes(s.notes, idx);
 
-        // Erase is recorded as a value edit so undo restores both. Erase
-        // doesn't touch peer notes — the snapshots only differ in the
-        // erased cell — but we use the same buffer-swap entry shape for
-        // uniformity with placements.
         const entry: HistoryEntry = {
           kind: "value",
           index: idx,
@@ -874,8 +875,8 @@ export const useGameStore = create<GameState & GameActions>()(
           board,
           notes,
           history: pushEntry(s.history, entry),
-          conflicts: findConflicts(board),
-          isComplete: isComplete(board),
+          conflicts: findConflicts(board, v),
+          isComplete: isComplete(board, v),
           // RAZ-14: erasing a cell obviously invalidates a pending
           // hint session.
           hintSession: null,
@@ -891,12 +892,8 @@ export const useGameStore = create<GameState & GameActions>()(
       autoFillNotes: () => {
         const s = get();
         if (s.isComplete || s.isPaused) return;
-        // Snapshot the current notes so undo can restore them in one
-        // step. We freeze the prev buffer by copying it; computeAll
-        // already returns a fresh buffer so nextNotes is safe to keep
-        // by reference.
         const prevNotes = new Uint16Array(s.notes);
-        const nextNotes = computeAllCandidates(s.board);
+        const nextNotes = computeAllCandidates(s.board, s.meta?.variant);
 
         // Skip if nothing actually changed — avoids polluting the undo
         // stack with no-op entries (e.g. tapping the button twice).
@@ -926,26 +923,20 @@ export const useGameStore = create<GameState & GameActions>()(
 
       undo: () => {
         const s = get();
+        const v = s.meta?.variant;
         const u = undo(s.history);
         if (!u) return;
         const e = u.entry;
-        // RAZ-14: any undo mutates board or notes and therefore
-        // invalidates a pending progressive hint. We clear the session
-        // unconditionally across all three branches.
         if (e.kind === "value") {
           const board = new Uint8Array(s.board);
           board[e.index] = e.prevValue;
-          // Restore the entire pre-placement notes buffer in one shot.
-          // This includes both the placed cell's notes AND any peer
-          // candidates that were pruned. Copy so the stored entry stays
-          // immutable for redo (same convention as notes-bulk).
           const notes = new Uint16Array(e.prevNotes);
           set({
             board,
             notes,
             history: u.next,
-            conflicts: findConflicts(board),
-            isComplete: isComplete(board),
+            conflicts: findConflicts(board, v),
+            isComplete: isComplete(board, v),
             hintSession: null,
             // Lock isComplete back to false if undoing past the win.
           });
@@ -966,23 +957,20 @@ export const useGameStore = create<GameState & GameActions>()(
 
       redo: () => {
         const s = get();
+        const v = s.meta?.variant;
         const r = redo(s.history);
         if (!r) return;
         const e = r.entry;
-        // RAZ-14: same invalidation story as undo.
         if (e.kind === "value") {
           const board = new Uint8Array(s.board);
           board[e.index] = e.nextValue;
-          // Re-apply the post-placement notes buffer wholesale (cleared
-          // cell + pruned peers). Copy for the same immutability reason
-          // as undo above.
           const notes = new Uint16Array(e.nextNotes);
           set({
             board,
             notes,
             history: r.next,
-            conflicts: findConflicts(board),
-            isComplete: isComplete(board),
+            conflicts: findConflicts(board, v),
+            isComplete: isComplete(board, v),
             hintSession: null,
           });
         } else if (e.kind === "note") {
@@ -1049,6 +1037,7 @@ export const useGameStore = create<GameState & GameActions>()(
         let localHint = nextHint(s.board, {
           selected: s.selection,
           solution: s.meta.solution,
+          variant: s.meta.variant,
         });
         if (!localHint && !s.meta.solution && remoteHintFetcher) {
           const boardStr = Array.from(s.board).join("");

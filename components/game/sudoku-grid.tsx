@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo } from "react";
 import { useGameStore } from "@/lib/zustand/game-store";
-import { computeMistakes, peers } from "@/lib/sudoku/board";
+import { computeMistakes, peers, isMainDiag, isAntiDiag } from "@/lib/sudoku/board";
 import { Cell } from "./cell";
 
 // The 9x9 grid. Subscribes to the slice of state needed for layout-level
@@ -32,14 +32,16 @@ export function SudokuGrid() {
   const showMistakes =
     showMistakesFlag && showMistakesSetting && solution !== null;
 
+  // RAZ-18: read the variant so peer highlighting respects diagonals.
+  const variant = useGameStore((s) => s.meta?.variant);
   const handleSelect = useCallback((i: number) => selectCell(i), [selectCell]);
 
   // Pre-compute the peer set for the current selection. Cheap (20 entries)
   // and saves us re-running peers() inside every Cell on each render.
   const peerSet = useMemo(() => {
     if (selection == null) return new Set<number>();
-    return new Set(peers(selection));
-  }, [selection]);
+    return new Set(peers(selection, variant));
+  }, [selection, variant]);
 
   // Build the mistake set once per render. Wraps the pure helper so
   // the result is memoized against board / fixed / solution references
@@ -117,8 +119,41 @@ export function SudokuGrid() {
           onSelect={handleSelect}
         />
       ))}
+      {/* RAZ-18: subtle diagonal lines when playing diagonal variant.
+          SVG overlay with two lines spanning corner to corner. The
+          `pointer-events-none` ensures clicks pass through to cells. */}
+      {variant === "diagonal" && <DiagonalOverlay />}
       {isPaused && <PauseOverlay />}
     </div>
+  );
+}
+
+// RAZ-18: SVG overlay that draws the two diagonal constraint lines.
+// Uses a `viewBox="0 0 9 9"` so each cell is 1x1 unit, making the
+// coordinates trivial. The lines are semi-transparent and thin so
+// they don't obscure digits.
+function DiagonalOverlay() {
+  return (
+    <svg
+      viewBox="0 0 9 9"
+      className="pointer-events-none absolute inset-0 h-full w-full"
+      aria-hidden="true"
+    >
+      {/* Main diagonal: (0,0) → (9,9) */}
+      <line
+        x1="0" y1="0" x2="9" y2="9"
+        stroke="currentColor"
+        strokeWidth="0.06"
+        className="text-primary/30"
+      />
+      {/* Anti-diagonal: (9,0) → (0,9) */}
+      <line
+        x1="9" y1="0" x2="0" y2="9"
+        stroke="currentColor"
+        strokeWidth="0.06"
+        className="text-primary/30"
+      />
+    </svg>
   );
 }
 

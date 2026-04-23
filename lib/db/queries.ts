@@ -394,6 +394,43 @@ export async function getRecentTimesByBucket(
   return list.map((r) => ({ timeMs: r.time_ms, completedAt: r.completed_at }));
 }
 
+// RAZ-31: Solve-timestamp stream for the profile heatmap.
+//
+// Returns the `completed_at` timestamps of a user's N most-recent
+// solves, ordered ascending (oldest first) so the client can draw
+// a timeline if it wants to.
+//
+// We deliberately do NOT bucket by (weekday, hour) in SQL. Doing
+// so would force a choice of timezone server-side — either UTC
+// (which misplaces "fastest at 7am" for every non-UTC user), or
+// the server's tz (same problem), or a stored per-user tz (which
+// we don't have). Bucketing on the client uses the viewer's
+// browser timezone, which is a strictly better default for the
+// self-view case (the overwhelmingly common one).
+//
+// The 3000-row cap keeps the payload small (~72 KB of raw Date
+// values) while still covering multiple years of aggressive play.
+// Index used: `completed_games_user_completed_idx` (user_id,
+// completed_at desc), then a sort flip in the outer select.
+export async function getSolveTimestamps(
+  userId: string,
+  limit = 3000,
+): Promise<Date[]> {
+  const rows = await db.execute<{ completed_at: Date }>(
+    sql`select completed_at
+        from (
+          select completed_at
+          from ${completedGames}
+          where ${completedGames.userId} = ${userId}
+          order by ${completedGames.completedAt} desc
+          limit ${limit}
+        ) recent
+        order by completed_at asc`,
+  );
+  const list = (rows as unknown as { rows: { completed_at: Date }[] }).rows;
+  return list.map((r) => r.completed_at);
+}
+
 // RAZ-13: Sender's best time on a given random puzzle, resolved by
 // username. Powers the "Beat @USERNAME's time of 4:12" banner that
 // appears when a visitor opens /play/<id>?from=<username>.

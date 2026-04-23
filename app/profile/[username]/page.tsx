@@ -4,11 +4,13 @@ import { Flame, Snowflake, Trophy } from "lucide-react";
 import {
   getProfileByUsername,
   getRecentTimesByBucket,
+  getSolveTimestamps,
   listRecentCompletions,
   getUserStats,
 } from "@/lib/db/queries";
 import { DIFFICULTY_LABEL, formatTime } from "@/lib/utils";
 import { Sparkline } from "@/components/profile/sparkline";
+import { SolveHeatmap } from "@/components/profile/heatmap";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 30;
@@ -29,15 +31,26 @@ export default async function ProfilePage({
   // fetch the last 20 solve times per difficulty so each card can
   // render a sparkline. Four parallel queries is fine — each hits the
   // (user_id, completed_at desc) index and returns at most 20 rows.
-  const [stats, recent, trendEasy, trendMedium, trendHard, trendExpert] =
-    await Promise.all([
-      getUserStats(profile.id),
-      listRecentCompletions(profile.id, 20),
-      getRecentTimesByBucket(profile.id, 1, 20),
-      getRecentTimesByBucket(profile.id, 2, 20),
-      getRecentTimesByBucket(profile.id, 3, 20),
-      getRecentTimesByBucket(profile.id, 4, 20),
-    ]);
+  const [
+    stats,
+    recent,
+    trendEasy,
+    trendMedium,
+    trendHard,
+    trendExpert,
+    heatmapTimestamps,
+  ] = await Promise.all([
+    getUserStats(profile.id),
+    listRecentCompletions(profile.id, 20),
+    getRecentTimesByBucket(profile.id, 1, 20),
+    getRecentTimesByBucket(profile.id, 2, 20),
+    getRecentTimesByBucket(profile.id, 3, 20),
+    getRecentTimesByBucket(profile.id, 4, 20),
+    // RAZ-31: up to 3000 recent solve timestamps for the heatmap.
+    // Client bucketing (see SolveHeatmap) uses the viewer's
+    // local timezone so hour labels feel right.
+    getSolveTimestamps(profile.id, 3000),
+  ]);
   // Index trends by bucket so the difficulty map below can look each
   // one up by number without a chain of conditionals.
   const trendsByBucket: Record<number, { timeMs: number }[]> = {
@@ -113,6 +126,20 @@ export default async function ProfilePage({
           );
         })}
       </section>
+
+      {/* RAZ-31: solve heatmap. Only shown when there's at least
+          one solve — the SolveHeatmap component itself renders an
+          empty-state, but we skip the section heading when there
+          is no data to avoid a visually lonely "Activity" label
+          on a brand-new profile. */}
+      {heatmapTimestamps.length > 0 ? (
+        <section className="mb-8">
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Activity
+          </h2>
+          <SolveHeatmap timestamps={heatmapTimestamps} />
+        </section>
+      ) : null}
 
       <section>
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">

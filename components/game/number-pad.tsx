@@ -3,6 +3,9 @@
 import { useRef } from "react";
 import { useGameStore } from "@/lib/zustand/game-store";
 import { cn } from "@/lib/utils";
+// RAZ-72: long-press confirm now goes through the central haptic
+// dispatcher so its strength scales with the active intensity profile.
+import { playHaptic, type HapticProfileId } from "@/lib/haptics/patterns";
 
 // Number pad. Renders as a 3x3 grid below the board (matches the
 // visual rhythm of a phone keypad and gives chunky tap targets on
@@ -30,25 +33,14 @@ import { cn } from "@/lib/utils";
 // the tap, longer feels sluggish.
 const LONG_PRESS_MS = 400;
 
-// Short vibration confirming the long-press fired. Best-effort; if
-// navigator.vibrate is absent (desktop, iOS Safari) we silently skip.
-// Gated by the haptics feature flag AND user setting so players who
-// disabled haptics globally don't get a buzz on long-press either.
-function maybeVibrate(hapticsOn: boolean) {
-  if (!hapticsOn) return;
-  if (typeof navigator === "undefined") return;
-  const nav = navigator as Navigator & {
-    vibrate?: (pattern: number | number[]) => boolean;
-  };
-  if (typeof nav.vibrate !== "function") return;
-  try {
-    // Single 30ms tap — deliberately shorter than the 40ms
-    // placement/conflict pulses in game-store.ts so the user can
-    // distinguish "note toggled" from "value placed" by feel.
-    nav.vibrate([30]);
-  } catch {
-    // Some browsers throw without prior activation; swallow.
-  }
+// RAZ-72: long-press confirm now uses the centralised haptic
+// dispatcher with the "noteToggle" event. The pattern itself is owned
+// by `lib/haptics/patterns.ts` (per-profile), so the strength scales
+// with whatever profile the player picked in settings — a "subtle"
+// player gets a softer tap, a "strong" player gets a more pronounced
+// one — without any logic here needing to change.
+function maybeVibrate(hapticsOn: boolean, profile: HapticProfileId) {
+  playHaptic("noteToggle", profile, hapticsOn);
 }
 
 export function NumberPad() {
@@ -77,6 +69,13 @@ export function NumberPad() {
   // is a single switch for the whole game.
   const hapticsOn = useGameStore(
     (s) => s.featureFlags.haptics && s.settings.haptics !== false,
+  );
+  // RAZ-72: read the active haptic profile so the long-press confirm
+  // matches whatever intensity the player picked. `?? "standard"` so
+  // pre-RAZ-72 persisted state (no `hapticProfile` key) gets the
+  // legacy feel without a persist version migration.
+  const hapticProfile = useGameStore(
+    (s) => s.settings.hapticProfile ?? "standard",
   );
 
   // Live digit counts. Recomputed on every render but cheap (single
@@ -125,6 +124,7 @@ export function NumberPad() {
             compact={compact}
             longPressEnabled={longPressEnabled}
             hapticsOn={hapticsOn}
+            hapticProfile={hapticProfile}
             onTap={() => inputDigit(digit)}
             onLongPress={() => toggleNoteOnSelection(digit)}
           />
@@ -147,6 +147,9 @@ type PadButtonProps = {
   compact: boolean;
   longPressEnabled: boolean;
   hapticsOn: boolean;
+  // RAZ-72: per-button copy of the active profile id so each
+  // PadButton's long-press confirm fires the right pattern.
+  hapticProfile: HapticProfileId;
   onTap: () => void;
   onLongPress: () => void;
 };
@@ -165,6 +168,7 @@ function PadButton({
   compact,
   longPressEnabled,
   hapticsOn,
+  hapticProfile,
   onTap,
   onLongPress,
 }: PadButtonProps) {
@@ -199,7 +203,7 @@ function PadButton({
     timerRef.current = setTimeout(() => {
       firedRef.current = true;
       onLongPress();
-      maybeVibrate(hapticsOn);
+      maybeVibrate(hapticsOn, hapticProfile);
     }, LONG_PRESS_MS);
   };
 

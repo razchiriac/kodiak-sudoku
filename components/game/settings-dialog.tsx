@@ -4,6 +4,16 @@ import { toast } from "sonner";
 import { PALETTES, type Palette, useGameStore } from "@/lib/zustand/game-store";
 import { ModePresetPicker } from "@/components/game/mode-preset-picker";
 import { Button } from "@/components/ui/button";
+// RAZ-72: profile metadata + per-event dispatcher for the new haptic
+// picker rendered inside the haptics block. Using the centralised
+// table here means the labels in the UI can never drift from the
+// patterns the dispatcher actually fires.
+import {
+  PROFILES,
+  playHaptic,
+  type HapticEvent,
+  type HapticProfileId,
+} from "@/lib/haptics/patterns";
 import {
   Dialog,
   DialogContent,
@@ -25,6 +35,27 @@ type SettingsDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 };
+
+// RAZ-72: short labels for the per-event "Test" buttons in the
+// haptics section. Co-located with the dialog rather than in the
+// patterns module because these strings are PROBE labels, not the
+// canonical event names — a future redesign of the picker can reword
+// them without touching the dispatcher.
+const HAPTIC_EVENT_LABEL: Record<HapticEvent, string> = {
+  place: "Place",
+  conflict: "Mistake",
+  hint: "Hint",
+  complete: "Win",
+  noteToggle: "Note",
+};
+
+const HAPTIC_EVENT_ORDER: HapticEvent[] = [
+  "place",
+  "conflict",
+  "hint",
+  "noteToggle",
+  "complete",
+];
 
 // RAZ-25: human-readable labels for each palette. Kept as a record
 // keyed on Palette so the compiler flags new palette options that
@@ -72,6 +103,12 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   // a user who already has localStorage from before this release
   // doesn't accidentally get the toggle rendered as off on first paint.
   const hapticsOn = useGameStore((s) => s.settings.haptics !== false);
+  // RAZ-72: active intensity profile. `?? "standard"` so persisted
+  // state from before this field existed renders the legacy default
+  // selected without a persist version migration.
+  const hapticProfile = useGameStore(
+    (s) => (s.settings.hapticProfile ?? "standard") as HapticProfileId,
+  );
   // RAZ-23: compact controls toggle. Only rendered when the flag is on;
   // defaults to false so existing players see no layout change.
   const compactFlag = useGameStore((s) => s.featureFlags.compactControls);
@@ -219,6 +256,82 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
               >
                 Test vibration
               </Button>
+
+              {/* RAZ-72: intensity profile picker. Only rendered when
+                  haptics is actually enabled — picking a strength is
+                  meaningless when the master toggle is off. Using a
+                  radio group rather than a select so all three options
+                  are immediately scannable on mobile. */}
+              {hapticsOn && (
+                <div className="flex flex-col gap-2 rounded-md border bg-muted/30 p-3">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Intensity
+                  </span>
+                  <div
+                    role="radiogroup"
+                    aria-label="Haptic intensity profile"
+                    className="flex flex-col gap-1"
+                  >
+                    {PROFILES.map((profile) => (
+                      <label
+                        key={profile.id}
+                        className="flex cursor-pointer items-start gap-2 rounded-md p-1 text-sm hover:bg-accent"
+                      >
+                        <input
+                          type="radio"
+                          name="haptic-profile"
+                          value={profile.id}
+                          checked={hapticProfile === profile.id}
+                          onChange={() =>
+                            setSetting("hapticProfile", profile.id)
+                          }
+                          className="mt-1 h-4 w-4 accent-foreground"
+                          aria-label={profile.label}
+                        />
+                        <span className="flex flex-col">
+                          <span className="font-medium text-foreground">
+                            {profile.label}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {profile.description}
+                          </span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+
+                  {/* Per-event test strip. Each button fires the
+                      pattern for its event under the CURRENTLY-SELECTED
+                      profile, so a player can compare how each event
+                      feels before deciding which profile to keep. We
+                      call playHaptic directly inside the click handler
+                      (rather than dispatching through the store) so the
+                      Web Vibration API's user-activation requirement is
+                      satisfied by the click itself — same reason
+                      `fireTestPulse` lives in this file. */}
+                  <div className="flex flex-col gap-1.5 pt-1">
+                    <span className="text-xs text-muted-foreground">
+                      Try each event with the selected intensity:
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {HAPTIC_EVENT_ORDER.map((event) => (
+                        <Button
+                          key={event}
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-7 px-2 text-xs"
+                          onClick={() =>
+                            playHaptic(event, hapticProfile, true)
+                          }
+                        >
+                          {HAPTIC_EVENT_LABEL[event]}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

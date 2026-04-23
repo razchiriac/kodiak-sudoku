@@ -38,6 +38,14 @@ import {
   type PresetId,
   PRESET_DEFINITIONS,
 } from "./presets";
+// RAZ-72: centralised haptic dispatcher + profile types. The store
+// no longer owns vibration patterns directly — `playHaptic` reads the
+// active profile and looks up the right pattern in lib/haptics.
+import {
+  playHaptic,
+  type HapticEvent,
+  type HapticProfileId,
+} from "@/lib/haptics/patterns";
 
 // Single Zustand store that owns ALL transient gameplay state. UI
 // components subscribe to slices of this store; nothing about the game
@@ -117,6 +125,13 @@ type GameState = {
     // on so the PWA feels native out of the box; a player can still
     // mute it from the settings dialog.
     haptics: boolean;
+    // RAZ-72: which intensity profile to use for vibrations when
+    // `haptics` is on. "standard" preserves the patterns that shipped
+    // before this field existed, so users with persisted state from
+    // before RAZ-72 (no `hapticProfile` key → undefined after rehydrate)
+    // get the legacy feel via the fallback inside `getProfile`. Persists
+    // across sessions per device, like the rest of the settings slice.
+    hapticProfile: HapticProfileId;
     // RAZ-23: compact controls. When true, the number pad uses a
     // uniform h-14 instead of the default aspect-square on mobile, so
     // the board gets more vertical room on ultra-tall phones. Default
@@ -417,6 +432,10 @@ const INITIAL: GameState = {
     // Haptics default ON because the whole feature is flag-gated anyway;
     // if the flag is off we never vibrate regardless of this bool.
     haptics: true,
+    // RAZ-72: default to "standard" so existing players experience the
+    // exact same patterns shipped before profiles existed. The picker
+    // in the settings dialog lets them try "subtle" or "strong".
+    hapticProfile: "standard",
     // RAZ-23: default off so we don't surprise existing players with a
     // smaller pad; the setting is fully opt-in via the settings dialog.
     compactControls: false,
@@ -525,40 +544,21 @@ function nextEmptyPeer(
 }
 
 // Fire a short haptic pulse on a successful placement, a longer one
-// when the placement creates a conflict. Everything here is best-effort:
-// feature-detected (navigator.vibrate only exists on mobile Chrome-ish
-// browsers), gated by the feature flag AND the user setting, and
-// wrapped in try/catch because some browsers throw if called from an
-// un-engaged page (no prior user gesture). Any error is swallowed —
-// haptics failing should never break a placement.
-function triggerHapticFeedback(isConflict: boolean) {
-  if (typeof navigator === "undefined") return;
-  // Older iOS Safari and all desktop browsers lack vibrate; feature-
-  // detecting keeps the call safe on those. We narrow with a typeof
-  // check and then bind the method so TypeScript picks up the right
-  // overload (calling via `.call` confuses the union argument type).
-  const nav = navigator as Navigator & {
-    vibrate?: (pattern: number | number[]) => boolean;
-  };
-  if (typeof nav.vibrate !== "function") return;
-  try {
-    // Durations tuned for Chrome Android (Pixel and similar). The web
-    // Vibration API passes through to VibrationEffect.createOneShot,
-    // and most Android haptic motors can't render pulses shorter than
-    // ~15-20ms reliably - many reports of 5ms being completely
-    // imperceptible on modern Pixels, even though the call returns
-    // true. We therefore use:
-    //   - 20ms single pulse for a legal placement (subtle tick)
-    //   - [40, 60, 40] double pulse for a conflict (clearly longer +
-    //     two bumps, distinguishable by feel alone)
-    // Both are passed as arrays because a couple of Chromium versions
-    // have been flaky with the scalar overload even though the spec
-    // allows it.
-    const pattern: number[] = isConflict ? [40, 60, 40] : [20];
-    nav.vibrate(pattern);
-  } catch {
-    // Intentionally ignored - see note above.
-  }
+// when the placement creates a conflict. RAZ-72 moved the actual
+// vibration patterns into `lib/haptics/patterns.ts` — this helper now
+// just resolves the gate (flag + setting) and forwards to `playHaptic`.
+// Keeping a single chokepoint in the store means every gameplay event
+// that wants to vibrate goes through the same enable check, so a future
+// kill-switch only needs to change one place.
+function fireGameHaptic(state: GameState, event: HapticEvent) {
+  const enabled =
+    state.featureFlags.haptics && state.settings.haptics !== false;
+  // playHaptic handles the navigator-undefined / no-vibrate / throw
+  // cases internally, so we don't repeat that defensive code here.
+  // `!== false` rather than `=== true` so existing players whose
+  // persisted settings blob predates the haptics field still get the
+  // default-on behavior without needing a persist version migration.
+  playHaptic(event, state.settings.hapticProfile ?? "standard", enabled);
 }
 
 let remoteHintFetcher:
@@ -630,6 +630,12 @@ function applyHintPlacement(
   const activeDigit = s.featureFlags.autoSwitchDigit
     ? nextActiveDigit(suggestion.digit, digitCounts(board))
     : null;
+  // RAZ-72: a hint-applied placement that solves the puzzle should
+  // still fire the celebratory "complete" pattern; otherwise we fire
+  // the dedicated "hint" pattern so the player can tell by feel that
+  // the move came from the assistant rather than their own placement.
+  const completed = isComplete(board, v);
+  fireGameHaptic(s, completed ? "complete" : "hint");
   set({
     board,
     notes,
@@ -639,7 +645,7 @@ function applyHintPlacement(
     activeDigit,
     history: pushEntry(s.history, entry),
     conflicts: findConflicts(board, v),
-    isComplete: isComplete(board, v),
+    isComplete: completed,
     // RAZ-28: log hint-driven placements under kind "h" so replay /
     // anti-cheat analysis can distinguish them from the player's own
     // placements (e.g. a "perfect run with zero hints" signal relies
@@ -805,20 +811,22 @@ export const useGameStore = create<GameState & GameActions>()(
         let mistakes = s.mistakes;
         if (isConflict) mistakes++;
 
-        // RAZ-19 haptics. Gated by BOTH the server-driven feature flag
-        // AND the user's setting so a player can opt out even when the
-        // feature is rolled out. Feature-detection for navigator.vibrate
-        // happens inside triggerHapticFeedback. Fired before set() so
-        // the perceptual "feel" of placing lines up with the visual
-        // update (vibrate is async anyway — the UI doesn't wait).
-        //
-        // `!== false` rather than `=== true` so existing players whose
-        // persisted settings blob predates this field (no `haptics`
-        // key → value is undefined after rehydrate) get the default-on
-        // behavior without needing a persist version migration.
-        if (s.featureFlags.haptics && s.settings.haptics !== false) {
-          triggerHapticFeedback(isConflict);
-        }
+        // RAZ-19 + RAZ-72 haptics. We fire one of three events:
+        //   - "complete" when this placement just finished the puzzle
+        //     (most celebratory pattern; takes precedence over the
+        //     "place" tick since the player just won).
+        //   - "conflict" when the placement creates a rule violation.
+        //   - "place" otherwise (the normal subtle tick).
+        // `fireGameHaptic` handles flag/setting/feature-detect gating
+        // and looks up the active profile's pattern from
+        // lib/haptics/patterns.
+        const willComplete = !isConflict && isComplete(board, v);
+        const event: HapticEvent = willComplete
+          ? "complete"
+          : isConflict
+            ? "conflict"
+            : "place";
+        fireGameHaptic(s, event);
 
         // RAZ-16: compute the next active digit for the number pad. We
         // do this after `board` has been updated so the post-placement

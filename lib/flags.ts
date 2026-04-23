@@ -239,6 +239,14 @@ export const progressiveHints = declareFlag("progressive-hints");
 // route 404s.
 export const printPuzzle = declareFlag("print-puzzle");
 
+// RAZ-45 - Post-Game Breakdown. When on, the CompletionModal renders
+// a deterministic insights panel summarising the run (pace, accuracy,
+// assistance buckets) plus one concrete recommendation for what to
+// try next. Pure client-side compute (see lib/sudoku/breakdown.ts) so
+// flipping the flag off requires no other changes — the panel simply
+// stops rendering.
+export const postGameBreakdown = declareFlag("post-game-breakdown");
+
 // RAZ-54 - Mode Presets (Learn / Classic / Speed / Zen). When on, the
 // play home and the in-game settings dialog surface a one-tap preset
 // picker that projects a deterministic settings bundle onto the

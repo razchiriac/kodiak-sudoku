@@ -310,6 +310,22 @@ export const FLAG_REGISTRY: readonly FlagSpec[] = [
     linearId: "RAZ-54",
   },
   {
+    // RAZ-48: Stuck Detection + Smart Rescue. When on, a tiny
+    // detector loop in PlayClient watches the player's recent input
+    // events and conflict state; if any of (conflict-too-old,
+    // same-cell-oscillation, idle-too-long) trips, a small
+    // dismissible chip appears offering a hint. Pure deterministic
+    // logic in `lib/sudoku/stuck-detection.ts`. Flipping the flag
+    // off stops the chip from ever rendering — no other side
+    // effects on gameplay.
+    key: "stuck-rescue",
+    envKey: "FLAG_STUCK_RESCUE",
+    defaultValue: true,
+    description:
+      "Show a small dismissible rescue chip when deterministic stuck detectors trip (conflict-too-old / oscillation / idle).",
+    linearId: "RAZ-48",
+  },
+  {
     // RAZ-15: Per-cell mistake indicator. When the user opts in and the
     // client has the puzzle solution (random non-daily puzzles only),
     // any cell whose placed value doesn't match the solution tints red

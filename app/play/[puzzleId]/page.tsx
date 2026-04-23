@@ -20,6 +20,7 @@ import {
   pbRibbon,
   postGameBreakdown,
   printPuzzle,
+  stuckRescue,
   eventLog,
   progressiveHints,
   quickPlay,
@@ -171,6 +172,11 @@ export default async function PuzzlePage({
   // conditions.
   const breakdownEnabled = await postGameBreakdown();
 
+  // RAZ-48 / stuck-rescue flag. Pure UI gate forwarded to PlayClient
+  // which mirrors it into the store; the rescue chip never mounts
+  // when the flag is off.
+  const stuckRescueEnabled = await stuckRescue();
+
   return (
     <PlayClient
       puzzle={{
@@ -213,6 +219,7 @@ export default async function PuzzlePage({
       eventLogEnabled={eventLogEnabled}
       modePresetsEnabled={modePresetsEnabled}
       breakdownEnabled={breakdownEnabled}
+      stuckRescueEnabled={stuckRescueEnabled}
     />
   );
 }

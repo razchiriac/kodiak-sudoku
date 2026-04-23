@@ -64,6 +64,13 @@ export function MobileNav() {
           >
             Leaderboard
           </Link>
+          <Link
+            href="/friends"
+            onClick={() => setOpen(false)}
+            className="rounded-md px-3 py-3 text-base font-medium text-foreground hover:bg-accent"
+          >
+            Friends
+          </Link>
         </nav>
       </DialogContent>
     </Dialog>

@@ -2,6 +2,12 @@ import "server-only";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { completedGames, friendships, profiles } from "@/lib/db/schema";
+import { canonicalPair } from "./friends-pair";
+
+// Re-export so existing callers (actions.ts etc.) don't have to
+// change their imports just because we split the pure helper out
+// for testability.
+export { canonicalPair };
 
 // RAZ-12 — Server-side helpers for the friends / private
 // leaderboards feature. Called by server actions (for writes) and
@@ -12,14 +18,6 @@ import { completedGames, friendships, profiles } from "@/lib/db/schema";
 //   user_a < user_b. Every call site that writes must go through
 //   `canonicalPair()` to pick the right column ordering, or the
 //   PK / check constraint will refuse the row.
-
-/** Order two user ids so `user_a < user_b` by lexicographic compare. */
-export function canonicalPair(a: string, b: string): {
-  userA: string;
-  userB: string;
-} {
-  return a < b ? { userA: a, userB: b } : { userA: b, userB: a };
-}
 
 /**
  * Read the friendship row between two users (or null when none).

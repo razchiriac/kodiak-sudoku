@@ -28,6 +28,9 @@ export function Header() {
           <Link href="/leaderboard" className="text-muted-foreground hover:text-foreground">
             Leaderboard
           </Link>
+          <Link href="/friends" className="text-muted-foreground hover:text-foreground">
+            Friends
+          </Link>
         </nav>
         <div className="flex items-center gap-2">
           <ThemeToggle />

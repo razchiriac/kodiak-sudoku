@@ -2,7 +2,7 @@
 
 import "server-only";
 import { revalidatePath } from "next/cache";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/lib/db/client";
 import { completedGames, friendships, profiles, puzzleAttempts, savedGames } from "@/lib/db/schema";
@@ -521,12 +521,12 @@ export async function sendFriendRequestAction(rawUsername: string) {
   const parsed = UsernameSchema.safeParse(rawUsername.trim());
   if (!parsed.success) return { ok: false as const, error: "invalid_username" };
 
+  // Username lookups are case-insensitive; most users type "@Raz"
+  // when they mean "@raz". We lower() both sides for the compare.
   const target = await db
     .select({ id: profiles.id, username: profiles.username })
     .from(profiles)
-    // Username lookups are case-insensitive; most users type "@Raz"
-    // when they mean "@raz".
-    .where(eq(profiles.username, parsed.data))
+    .where(sql`lower(${profiles.username}) = lower(${parsed.data})`)
     .limit(1);
 
   if (!target[0]) return { ok: false as const, error: "user_not_found" };

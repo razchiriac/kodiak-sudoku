@@ -319,6 +319,56 @@ export async function getQuickLeaderboardWeekly(
   return rows;
 }
 
+// RAZ-13: Sender's best time on a given random puzzle, resolved by
+// username. Powers the "Beat @USERNAME's time of 4:12" banner that
+// appears when a visitor opens /play/<id>?from=<username>.
+//
+// Returns null when:
+//   - the username does not match any profile,
+//   - the profile has no completions of the puzzle (including daily
+//     completions of a puzzle that also happens to exist in the
+//     random pool — we intentionally ignore those),
+// i.e. the banner silently disappears for any garbage input. The
+// caller treats null as "no challenge info available" and renders
+// the play page as normal.
+//
+// Scoped to `mode='random'` so the banner only shows the sender's
+// random-mode time; it would be weird to show "beat their daily
+// time" on a random play of the same underlying puzzle.
+export async function getBestOnPuzzleByUsername(
+  username: string,
+  puzzleId: number,
+): Promise<{
+  username: string;
+  displayName: string | null;
+  bestTimeMs: number;
+} | null> {
+  const rows = await db
+    .select({
+      username: profiles.username,
+      displayName: profiles.displayName,
+      bestTimeMs: sql<number>`min(${completedGames.timeMs})::int`,
+    })
+    .from(completedGames)
+    .innerJoin(profiles, eq(profiles.id, completedGames.userId))
+    .where(
+      and(
+        eq(profiles.username, username),
+        eq(completedGames.puzzleId, puzzleId),
+        eq(completedGames.mode, "random"),
+      ),
+    )
+    .groupBy(profiles.username, profiles.displayName)
+    .limit(1);
+  const row = rows[0];
+  if (!row || row.bestTimeMs == null) return null;
+  return {
+    username: row.username!,
+    displayName: row.displayName,
+    bestTimeMs: row.bestTimeMs,
+  };
+}
+
 // Resolve a profile by username. Used by /profile/[username].
 export async function getProfileByUsername(username: string) {
   const rows = await db.select().from(profiles).where(eq(profiles.username, username)).limit(1);

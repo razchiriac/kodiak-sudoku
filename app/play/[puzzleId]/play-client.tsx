@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Keyboard, Settings as SettingsIcon } from "lucide-react";
+import { Keyboard, Settings as SettingsIcon, Swords } from "lucide-react";
 import { readPersistedSnapshot, useGameStore } from "@/lib/zustand/game-store";
 import { SudokuGrid } from "@/components/game/sudoku-grid";
 import { NumberPad } from "@/components/game/number-pad";
@@ -15,7 +15,7 @@ import { ShortcutsOverlay } from "@/components/game/shortcuts-overlay";
 import { SettingsDialog } from "@/components/game/settings-dialog";
 import { Button } from "@/components/ui/button";
 import { saveGameAction, submitCompletionAction, hintAction } from "@/lib/server/actions";
-import { DIFFICULTY_LABEL } from "@/lib/utils";
+import { DIFFICULTY_LABEL, formatTime } from "@/lib/utils";
 
 // The interactive Sudoku page. Drives the Zustand store, wires up
 // autosave, completion submission, and the shortcuts overlay.
@@ -54,6 +54,9 @@ export function PlayClient({
   showMistakesEnabled = false,
   isQuickPlay = false,
   isArchive = false,
+  challenge = null,
+  challengeLinkEnabled = false,
+  currentUsername = null,
 }: {
   puzzle: PuzzleProp;
   savedGame: SavedProp;
@@ -107,6 +110,24 @@ export function PlayClient({
   // /play/quick for another random Easy, and to link the leaderboard
   // button at /leaderboard/quick rather than the daily board.
   isQuickPlay?: boolean;
+  // RAZ-13: challenge metadata. When the URL arrived with `?from=<user>`
+  // and that user has a valid random-mode best time for this puzzle,
+  // the server resolves it and forwards the payload here. Rendered as
+  // a small banner above the board. Null = no challenge, no banner.
+  challenge?: {
+    username: string;
+    displayName: string | null;
+    bestTimeMs: number;
+  } | null;
+  // RAZ-13: whether the feature flag is on. When false the completion
+  // modal's Challenge action is hidden AND the banner is not rendered
+  // even if `challenge` somehow arrived non-null (defensive — the page
+  // nulls it server-side too).
+  challengeLinkEnabled?: boolean;
+  // RAZ-13: current viewer's username, used to seed the
+  // `?from=<username>` param the Challenge button copies. Null when
+  // anonymous or when the signed-in user hasn't set a username.
+  currentUsername?: string | null;
 }) {
   const startGame = useGameStore((s) => s.startGame);
   const resumeFromSnapshot = useGameStore((s) => s.resumeFromSnapshot);
@@ -333,6 +354,31 @@ export function PlayClient({
           changes and conflict onset/resolution. Zero visible DOM; the
           element reads as sr-only. Sighted users get no layout impact. */}
       <LiveRegion />
+      {/* RAZ-13: challenge banner. Rendered above the header row so
+          it's the first thing the player sees when they open a shared
+          puzzle. `aria-live="polite"` is not set because the banner
+          is static for the lifetime of the page and doesn't need to
+          re-announce. The `Swords` icon echoes the "friendly duel"
+          framing from the share button copy in the modal. */}
+      {challengeLinkEnabled && challenge ? (
+        <div
+          className="flex w-full max-w-[560px] items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-sm"
+          role="note"
+          aria-label={`Challenge from ${challenge.displayName ?? challenge.username}`}
+        >
+          <Swords className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+          <span>
+            Beat{" "}
+            <span className="font-semibold">
+              @{challenge.displayName ?? challenge.username}
+            </span>
+            &apos;s time of{" "}
+            <span className="font-mono tabular-nums">
+              {formatTime(challenge.bestTimeMs)}
+            </span>
+          </span>
+        </div>
+      ) : null}
       <div className="flex w-full max-w-[560px] items-center justify-between">
         <div className="flex flex-col text-sm text-muted-foreground">
           <span>
@@ -399,6 +445,9 @@ export function PlayClient({
         shareEnabled={shareEnabled}
         dailyDate={dailyDate}
         isQuickPlay={isQuickPlay}
+        challenge={challenge}
+        challengeLinkEnabled={challengeLinkEnabled}
+        currentUsername={currentUsername}
       />
       <ShortcutsOverlay open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />

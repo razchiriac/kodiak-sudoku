@@ -187,6 +187,22 @@ export const FLAG_REGISTRY: readonly FlagSpec[] = [
     linearId: "RAZ-6",
   },
   {
+    // RAZ-13: Share-a-puzzle challenge link. When on, the completion
+    // modal adds a "Challenge a friend" action that copies a URL of
+    // the form `/play/<id>?from=<username>` to the clipboard. When
+    // someone lands on a puzzle with `?from=<username>`, the play
+    // page fetches the sender's best time on that puzzle and renders
+    // a small "Beat @<username>'s time of M:SS" banner above the
+    // board. Scoped to random-mode puzzles only (daily URLs don't
+    // carry a puzzleId). Uses existing schema — no new tables.
+    key: "challenge-link",
+    envKey: "FLAG_CHALLENGE_LINK",
+    defaultValue: true,
+    description:
+      "Expose a `Challenge a friend` share action on the completion modal and show a `Beat @user's time` banner when opening a puzzle via `?from=<username>`.",
+    linearId: "RAZ-13",
+  },
+  {
     // RAZ-15: Per-cell mistake indicator. When the user opts in and the
     // client has the puzzle solution (random non-daily puzzles only),
     // any cell whose placed value doesn't match the solution tints red

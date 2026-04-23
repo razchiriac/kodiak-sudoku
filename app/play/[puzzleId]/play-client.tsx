@@ -72,6 +72,7 @@ export function PlayClient({
   progressiveHintsEnabled = false,
   eventLogEnabled = false,
   modePresetsEnabled = false,
+  breakdownEnabled = false,
 }: {
   puzzle: PuzzleProp;
   savedGame: SavedProp;
@@ -172,6 +173,12 @@ export function PlayClient({
   // future surfaces) gate on the same source of truth without prop-
   // drilling. When false, the picker is hidden everywhere.
   modePresetsEnabled?: boolean;
+  // RAZ-45: server-resolved value of `post-game-breakdown`. Forwarded
+  // straight to the CompletionModal which renders / hides the
+  // BreakdownPanel based on it. No store mirror needed because the
+  // panel is a one-time render at completion — no other surface
+  // gates on this flag.
+  breakdownEnabled?: boolean;
 }) {
   const startGame = useGameStore((s) => s.startGame);
   const resumeFromSnapshot = useGameStore((s) => s.resumeFromSnapshot);
@@ -686,6 +693,7 @@ export function PlayClient({
         challengeLinkEnabled={challengeLinkEnabled}
         currentUsername={currentUsername}
         rankContext={rankContext}
+        breakdownEnabled={breakdownEnabled}
       />
       <ShortcutsOverlay open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />

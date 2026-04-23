@@ -64,14 +64,21 @@ export async function getDailyPuzzle(date: string): Promise<{ puzzle: Puzzle; da
 // leaks tomorrow's puzzle). The single SQL round-trip uses two
 // conditional aggregates so the index on puzzle_date is enough and we
 // avoid two separate queries from the caller.
+//
+// RAZ-37: The FILTER clause is part of the aggregate call syntax in
+// Postgres, so it must come immediately after `max(...)` / `min(...)`
+// and BEFORE any cast. Earlier code wrote `max(col)::text filter (...)`
+// which is a 42601 syntax error — the cast would apply to the
+// aggregate result and leave `filter` hanging as an unknown token.
+// The fix is to wrap the aggregate + filter in parens, then cast.
 export async function getAdjacentDailyDates(
   date: string,
 ): Promise<{ prev: string | null; next: string | null }> {
   const today = new Date().toISOString().slice(0, 10);
   const rows = await db.execute<{ prev: string | null; next: string | null }>(
     sql`select
-          max(puzzle_date)::text filter (where puzzle_date < ${date}) as prev,
-          min(puzzle_date)::text filter (where puzzle_date > ${date} and puzzle_date <= ${today}) as next
+          (max(puzzle_date) filter (where puzzle_date < ${date}))::text as prev,
+          (min(puzzle_date) filter (where puzzle_date > ${date} and puzzle_date <= ${today}))::text as next
         from ${dailyPuzzles}`,
   );
   const row = (rows as unknown as { rows: { prev: string | null; next: string | null }[] })

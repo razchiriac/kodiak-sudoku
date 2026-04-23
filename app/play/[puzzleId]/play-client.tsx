@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Keyboard, Printer, Settings as SettingsIcon, Swords } from "lucide-react";
+import { toast } from "sonner";
 import { readPersistedSnapshot, useGameStore } from "@/lib/zustand/game-store";
 import { SudokuGrid } from "@/components/game/sudoku-grid";
 import { NumberPad } from "@/components/game/number-pad";
@@ -256,7 +257,20 @@ export function PlayClient({
   useEffect(() => {
     setRemoteHintFetcher(async (board, selected) => {
       const res = await hintAction({ puzzleId: puzzle.id, board, selected });
-      if (!res.ok) throw new Error(res.error);
+      if (!res.ok) {
+        // RAZ-29: the hint endpoint throttles at 3/min, 30/hr. Surface
+        // a friendly toast explaining which cap was hit rather than
+        // silently dropping the click. The store's hint() swallows
+        // the throw below so the toast is the ONLY feedback the user
+        // gets — without this, a rate-limited daily-puzzle click feels
+        // like a dead button.
+        if (res.error === "rate_limited") {
+          toast("Too many hint requests.", {
+            description: `Try again soon — limit is ${res.limit}.`,
+          });
+        }
+        throw new Error(res.error);
+      }
       return { index: res.index, digit: res.digit };
     });
   }, [puzzle.id, setRemoteHintFetcher]);

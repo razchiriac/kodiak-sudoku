@@ -8,9 +8,11 @@ import {
   listRecentCompletions,
   getUserStats,
 } from "@/lib/db/queries";
+import { listEarnedAchievements } from "@/lib/server/achievements";
 import { DIFFICULTY_LABEL, formatTime } from "@/lib/utils";
 import { Sparkline } from "@/components/profile/sparkline";
 import { SolveHeatmap } from "@/components/profile/heatmap";
+import { AchievementsRow } from "@/components/profile/achievements-row";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 30;
@@ -39,6 +41,7 @@ export default async function ProfilePage({
     trendHard,
     trendExpert,
     heatmapTimestamps,
+    earnedAchievements,
   ] = await Promise.all([
     getUserStats(profile.id),
     listRecentCompletions(profile.id, 20),
@@ -50,6 +53,10 @@ export default async function ProfilePage({
     // Client bucketing (see SolveHeatmap) uses the viewer's
     // local timezone so hour labels feel right.
     getSolveTimestamps(profile.id, 3000),
+    // RAZ-10: earned achievement rows. The component itself
+    // renders locked badges too, so we don't need the catalog
+    // here — just the earned list.
+    listEarnedAchievements(profile.id),
   ]);
   // Index trends by bucket so the difficulty map below can look each
   // one up by number without a chain of conditionals.
@@ -125,6 +132,12 @@ export default async function ProfilePage({
             </div>
           );
         })}
+      </section>
+
+      {/* RAZ-10: achievements row — always shown, locked badges
+          included, so new users have a visible goal list. */}
+      <section className="mb-8">
+        <AchievementsRow earned={earnedAchievements} />
       </section>
 
       {/* RAZ-31: solve heatmap. Only shown when there's at least

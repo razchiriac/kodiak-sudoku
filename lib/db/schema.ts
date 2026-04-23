@@ -10,6 +10,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   real,
   smallint,
   text,
@@ -186,6 +187,26 @@ export const rateLimitEvents = pgTable(
   },
   (t) => [
     index("rate_limit_events_lookup_idx").on(t.bucket, t.key, t.createdAt),
+  ],
+);
+
+// RAZ-10: Achievements. One row per (user, key); keys live in
+// lib/server/achievements.ts so we can add new badges without a
+// migration. The profile page reads this table directly.
+export const achievements = pgTable(
+  "achievements",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    key: text("key").notNull(),
+    earnedAt: timestamp("earned_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.key] }),
+    index("achievements_user_earned_idx").on(t.userId, t.earnedAt.desc()),
   ],
 );
 

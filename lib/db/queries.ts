@@ -319,6 +319,41 @@ export async function getQuickLeaderboardWeekly(
   return rows;
 }
 
+// RAZ-30: Recent solve times in a single difficulty bucket for a
+// user, oldest-first so a sparkline reads left→right chronologically.
+// Returns at most `limit` entries (default 20). Includes both random
+// and daily completions — both contribute to the player's perceived
+// "am I improving at Hard?" trend, and the schema stores them in the
+// same bucket.
+//
+// We pull the most recent N by `completed_at desc` and reverse in SQL
+// (`order by completed_at asc` over the windowed subquery) so the
+// caller gets a chronological array ready for rendering. Index usage:
+// `completed_games_user_completed_idx (user_id, completed_at desc)`
+// supports the outer filter; the bucket predicate is cheap even if
+// it isn't indexed because we've already narrowed to one user.
+export async function getRecentTimesByBucket(
+  userId: string,
+  bucket: number,
+  limit = 20,
+): Promise<{ timeMs: number; completedAt: Date }[]> {
+  const rows = await db.execute<{ time_ms: number; completed_at: Date }>(
+    sql`select time_ms, completed_at
+        from (
+          select time_ms, completed_at
+          from ${completedGames}
+          where ${completedGames.userId} = ${userId}
+            and ${completedGames.difficultyBucket} = ${bucket}
+          order by ${completedGames.completedAt} desc
+          limit ${limit}
+        ) recent
+        order by completed_at asc`,
+  );
+  const list = (rows as unknown as { rows: { time_ms: number; completed_at: Date }[] })
+    .rows;
+  return list.map((r) => ({ timeMs: r.time_ms, completedAt: r.completed_at }));
+}
+
 // RAZ-13: Sender's best time on a given random puzzle, resolved by
 // username. Powers the "Beat @USERNAME's time of 4:12" banner that
 // appears when a visitor opens /play/<id>?from=<username>.

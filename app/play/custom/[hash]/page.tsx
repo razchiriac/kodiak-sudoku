@@ -7,6 +7,7 @@ import {
   haptics,
   jumpOnPlace,
   longPressNote,
+  eventLog,
   progressiveHints,
   showMistakes,
 } from "@/lib/flags";
@@ -68,6 +69,7 @@ export default async function CustomPlayPage({
     jumpOnPlaceEnabled,
     showMistakesEnabled,
     progressiveHintsEnabled,
+    eventLogEnabled,
   ] = await Promise.all([
     haptics(),
     autoSwitchDigit(),
@@ -77,6 +79,7 @@ export default async function CustomPlayPage({
     jumpOnPlace(),
     showMistakes(),
     progressiveHints(),
+    eventLog(),
   ]);
 
   return (
@@ -109,6 +112,7 @@ export default async function CustomPlayPage({
       jumpOnPlaceEnabled={jumpOnPlaceEnabled}
       showMistakesEnabled={showMistakesEnabled}
       progressiveHintsEnabled={progressiveHintsEnabled}
+      eventLogEnabled={eventLogEnabled}
       isCustom
     />
   );

@@ -232,6 +232,22 @@ export const FLAG_REGISTRY: readonly FlagSpec[] = [
     linearId: "RAZ-13",
   },
   {
+    // RAZ-28: Input-event log for replay + anti-cheat. When on, the
+    // settings dialog surfaces an opt-in toggle ("Record input for
+    // replay"); when a user opts in AND the flag is on, the game
+    // store captures one event per value placement / erase / hint
+    // into a bounded ring buffer, flushed to `puzzle_attempts` on
+    // autosave and completion. When the flag is off, the setting is
+    // hidden AND no events are captured regardless of the persisted
+    // setting — instant kill switch from Edge Config.
+    key: "event-log",
+    envKey: "FLAG_EVENT_LOG",
+    defaultValue: false,
+    description:
+      "Record value placements / erases / hints to puzzle_attempts for replay + anti-cheat analysis. Opt-in per user.",
+    linearId: "RAZ-28",
+  },
+  {
     // RAZ-14: Progressive hint disclosure. When on, clicking the
     // Hint button steps through three tiers: (1) a region nudge
     // ("try looking at column 7"), (2) a technique + location

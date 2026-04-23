@@ -15,7 +15,12 @@ import { ShortcutsOverlay } from "@/components/game/shortcuts-overlay";
 import { SettingsDialog } from "@/components/game/settings-dialog";
 import { PrintDialog } from "@/components/game/print-dialog";
 import { Button } from "@/components/ui/button";
-import { saveGameAction, submitCompletionAction, hintAction } from "@/lib/server/actions";
+import {
+  flushInputEventsAction,
+  hintAction,
+  saveGameAction,
+  submitCompletionAction,
+} from "@/lib/server/actions";
 import { DIFFICULTY_LABEL, formatTime } from "@/lib/utils";
 
 // The interactive Sudoku page. Drives the Zustand store, wires up
@@ -61,6 +66,7 @@ export function PlayClient({
   currentUsername = null,
   printPuzzleEnabled = false,
   progressiveHintsEnabled = false,
+  eventLogEnabled = false,
 }: {
   puzzle: PuzzleProp;
   savedGame: SavedProp;
@@ -147,6 +153,15 @@ export function PlayClient({
   // the three-tier disclosure vs. the legacy one-shot reveal. The
   // ControlPanel also reads the store to show a tier indicator.
   progressiveHintsEnabled?: boolean;
+  // RAZ-28: server-resolved value of `event-log`. Mirrored into the
+  // store so the mutation reducers check this flag (in addition to the
+  // per-user `recordEvents` setting) before appending to the events
+  // ring buffer. ALSO gates the periodic flush effect below — when
+  // off, we skip even calling the server action so there's zero
+  // network traffic from this feature in the default state. The
+  // SettingsDialog reads the same flag to decide whether to render
+  // the opt-in toggle.
+  eventLogEnabled?: boolean;
 }) {
   const startGame = useGameStore((s) => s.startGame);
   const resumeFromSnapshot = useGameStore((s) => s.resumeFromSnapshot);
@@ -294,6 +309,15 @@ export function PlayClient({
     setFeatureFlag("progressiveHints", progressiveHintsEnabled);
   }, [progressiveHintsEnabled, setFeatureFlag]);
 
+  // RAZ-28 event-log mirror. The store gates recording on this flag AND
+  // the per-user `recordEvents` setting, so flipping this to false in
+  // Edge Config stops recording instantly — even for users who had
+  // previously opted in. Their pref stays persisted and will reactivate
+  // the moment the flag is flipped back on.
+  useEffect(() => {
+    setFeatureFlag("eventLog", eventLogEnabled);
+  }, [eventLogEnabled, setFeatureFlag]);
+
   // Autosave: every time the relevant slice of state changes, debounce a
   // server action call. Only signed-in users autosave to the server;
   // anonymous players rely on the Zustand persist middleware.
@@ -389,6 +413,93 @@ export function PlayClient({
       if (res.rankContext) setRankContext(res.rankContext);
     })();
   }, [isComplete, meta, isSignedIn, snapshot, dailyDate, isArchive, isCustom]);
+
+  // RAZ-28 — Periodic flush of the in-memory input-event ring buffer
+  // to the server. We fire under three triggers: every ~15 seconds
+  // of activity, on completion, and on page-hide (pagehide fires on
+  // both real navigations and iOS app backgrounding). Keeping the
+  // cadence well above the 4s autosave means a flush typically rides
+  // alongside at most one autosave rather than spamming the network.
+  //
+  // Why debounce on `board + elapsedMs` instead of `events.length`:
+  // reading `events` would subscribe this component to every single
+  // keystroke, causing a rerender per placement. We piggyback on
+  // already-subscribed slices and rely on drainEvents() to no-op when
+  // the buffer is empty.
+  const drainEvents = useGameStore((s) => s.drainEvents);
+  const flushTimer = useRef<number | null>(null);
+  useEffect(() => {
+    if (!eventLogEnabled) return;
+    // RAZ-35: custom puzzles have no DB row; the flush endpoint would
+    // reject with puzzle_not_found every time. Skip cleanly.
+    if (isCustom) return;
+    if (!meta) return;
+    if (flushTimer.current) window.clearTimeout(flushTimer.current);
+    flushTimer.current = window.setTimeout(() => {
+      const batch = drainEvents();
+      if (batch.events.length === 0) return;
+      void flushInputEventsAction({
+        puzzleId: meta.puzzleId,
+        seq: batch.seq,
+        completed: false,
+        events: batch.events,
+      });
+    }, 15000);
+    return () => {
+      if (flushTimer.current) window.clearTimeout(flushTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [board, elapsedMs, meta, isCustom, eventLogEnabled]);
+
+  // Flush once on completion, tagged with completed=true so consumers
+  // know this is the terminal batch for the attempt. This runs in
+  // addition to the submitCompletionAction path — keeping the two
+  // separate means a flush failure can't block the completion (which
+  // is the bit that lands on the leaderboard).
+  useEffect(() => {
+    if (!eventLogEnabled) return;
+    if (!isComplete || !meta) return;
+    if (isCustom) return;
+    const batch = drainEvents();
+    void flushInputEventsAction({
+      puzzleId: meta.puzzleId,
+      seq: batch.seq,
+      completed: true,
+      events: batch.events,
+    });
+  }, [isComplete, meta, drainEvents, eventLogEnabled, isCustom]);
+
+  // Best-effort flush when the tab is hidden or the page is unloading.
+  // `pagehide` is the canonical event (works on iOS where `beforeunload`
+  // is unreliable); we also listen to `visibilitychange` so a user
+  // switching apps mid-puzzle doesn't lose the last buffered batch.
+  // Fire-and-forget — we can't await a promise here and the server
+  // action happens to be fast enough to usually complete before the
+  // page unload. Worst case we lose one batch.
+  useEffect(() => {
+    if (!eventLogEnabled) return;
+    if (isCustom) return;
+    if (!meta) return;
+    const onHide = () => {
+      const batch = drainEvents();
+      if (batch.events.length === 0) return;
+      void flushInputEventsAction({
+        puzzleId: meta.puzzleId,
+        seq: batch.seq,
+        completed: false,
+        events: batch.events,
+      });
+    };
+    const onVis = () => {
+      if (document.visibilityState === "hidden") onHide();
+    };
+    window.addEventListener("pagehide", onHide);
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.removeEventListener("pagehide", onHide);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [drainEvents, eventLogEnabled, isCustom, meta]);
 
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);

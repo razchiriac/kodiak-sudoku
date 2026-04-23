@@ -17,6 +17,7 @@ import {
   haptics,
   pbRibbon,
   printPuzzle,
+  eventLog,
   progressiveHints,
   shareResult,
   showMistakes,
@@ -94,6 +95,7 @@ export default async function DailyPage() {
 
   // RAZ-14 / progressive-hints flag.
   const progressiveHintsEnabled = await progressiveHints();
+  const eventLogEnabled = await eventLog();
 
   // RAZ-5 / daily-archive flag. When on, surface a "Previous day" link
   // above the board so players can reach the archive from anywhere.
@@ -144,6 +146,7 @@ export default async function DailyPage() {
         showMistakesEnabled={showMistakesEnabled}
         printPuzzleEnabled={printPuzzleEnabled}
         progressiveHintsEnabled={progressiveHintsEnabled}
+        eventLogEnabled={eventLogEnabled}
       />
     </>
   );

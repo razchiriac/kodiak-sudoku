@@ -331,3 +331,141 @@ describe("game-store: peer-note pruning on value placement", () => {
     expect(useGameStore.getState().board[target]).toBe(5);
   });
 });
+
+// RAZ-28 — verify that the mutation reducers feed the input-event ring
+// buffer, the buffer gates on BOTH the flag AND the per-user opt-in,
+// and drainEvents behaves as a non-overlapping FIFO flush.
+describe("game-store: RAZ-28 input-event recording", () => {
+  beforeEach(start);
+
+  it("does not record when the flag is off, even if the user opted in", () => {
+    const { selectCell, inputDigit, setSetting, setFeatureFlag } =
+      useGameStore.getState();
+
+    setFeatureFlag("eventLog", false);
+    setSetting("recordEvents", true);
+
+    selectCell(2);
+    inputDigit(5);
+    expect(useGameStore.getState().events.length).toBe(0);
+  });
+
+  it("does not record when the user has not opted in, even if the flag is on", () => {
+    const { selectCell, inputDigit, setSetting, setFeatureFlag } =
+      useGameStore.getState();
+
+    setFeatureFlag("eventLog", true);
+    // Explicitly reset — settings are persisted across the test file
+    // because Zustand's store is a module-level singleton. A previous
+    // test may have opted us in.
+    setSetting("recordEvents", false);
+
+    selectCell(2);
+    inputDigit(5);
+    expect(useGameStore.getState().events.length).toBe(0);
+  });
+
+  it("records value, erase, and hint events when flag + opt-in are both on", async () => {
+    const SOLUTION =
+      "534678912672195348198342567859761423426853791713924856961537284287419635345286179";
+    useGameStore.getState().startGame({
+      meta: {
+        puzzleId: 1,
+        difficultyBucket: 0,
+        mode: "random",
+        solution: SOLUTION,
+      },
+      puzzle: PUZZLE,
+    });
+    const {
+      selectCell,
+      inputDigit,
+      eraseSelection,
+      hint,
+      setSetting,
+      setFeatureFlag,
+    } = useGameStore.getState();
+
+    setFeatureFlag("eventLog", true);
+    // Turn progressiveHints OFF so `hint()` applies the placement in
+    // one call — keeps the test focused on event logging rather than
+    // the tier state machine.
+    setFeatureFlag("progressiveHints", false);
+    setSetting("recordEvents", true);
+
+    // Value placement → "v"
+    selectCell(2);
+    inputDigit(5);
+    // Erase → "e" with digit 0
+    eraseSelection();
+    // Hint placement → "h" with the suggested digit
+    await hint();
+
+    const s = useGameStore.getState();
+    expect(s.events.length).toBe(3);
+    expect(s.events[0].k).toBe("v");
+    expect(s.events[0].c).toBe(2);
+    expect(s.events[0].d).toBe(5);
+    expect(s.events[1].k).toBe("e");
+    expect(s.events[1].d).toBe(0);
+    expect(s.events[2].k).toBe("h");
+    // Timestamps are monotonically non-decreasing.
+    expect(s.events[1].t).toBeGreaterThanOrEqual(s.events[0].t);
+  });
+
+  it("drainEvents returns the buffer and resets it; seq increments", () => {
+    const { selectCell, inputDigit, setSetting, setFeatureFlag, drainEvents } =
+      useGameStore.getState();
+
+    setFeatureFlag("eventLog", true);
+    setSetting("recordEvents", true);
+
+    selectCell(2);
+    inputDigit(5);
+    selectCell(3);
+    inputDigit(7);
+
+    const first = drainEvents();
+    expect(first.events.length).toBe(2);
+    expect(first.seq).toBe(0);
+
+    // Buffer is now empty; seq has advanced.
+    let s = useGameStore.getState();
+    expect(s.events.length).toBe(0);
+    expect(s.eventSeq).toBe(1);
+
+    // A subsequent drain on an empty buffer returns empty + the new seq,
+    // confirming seq numbers remain monotonic even across no-op drains.
+    const second = drainEvents();
+    expect(second.events.length).toBe(0);
+    expect(second.seq).toBe(1);
+    s = useGameStore.getState();
+    expect(s.eventSeq).toBe(2);
+  });
+
+  it("startGame resets the event buffer and sequence", () => {
+    const { selectCell, inputDigit, setSetting, setFeatureFlag } =
+      useGameStore.getState();
+
+    setFeatureFlag("eventLog", true);
+    setSetting("recordEvents", true);
+
+    selectCell(2);
+    inputDigit(5);
+    expect(useGameStore.getState().events.length).toBe(1);
+
+    useGameStore.getState().startGame({
+      meta: {
+        puzzleId: 2,
+        difficultyBucket: 0,
+        mode: "random",
+        solution: null,
+      },
+      puzzle: PUZZLE,
+    });
+
+    const s = useGameStore.getState();
+    expect(s.events.length).toBe(0);
+    expect(s.eventSeq).toBe(0);
+  });
+});

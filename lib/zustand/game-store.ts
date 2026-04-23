@@ -24,6 +24,11 @@ import {
   type HistoryEntry,
 } from "@/lib/sudoku/history";
 import { decodeNotes, encodeNotes } from "@/lib/sudoku/notes-codec";
+import {
+  appendEvent,
+  type InputEvent,
+  type InputEventKind,
+} from "@/lib/sudoku/input-events";
 
 // Single Zustand store that owns ALL transient gameplay state. UI
 // components subscribe to slices of this store; nothing about the game
@@ -126,6 +131,15 @@ type GameState = {
     // populated (random puzzles); daily puzzles keep the solution
     // server-side so the flag has no visible effect there.
     showMistakes: boolean;
+    // RAZ-28: opt-in toggle for the input-event log. When true AND
+    // the `event-log` feature flag is on, the store appends a compact
+    // event record per value placement / erase / hint-placement into
+    // the `events` ring buffer. Persisted so the choice survives
+    // reloads. Default false — explicit opt-in as required by the
+    // ticket because we're recording behavioral data. The `recording`
+    // only starts on the NEXT mutation after the setting is flipped;
+    // we don't backfill pre-opt-in events.
+    recordEvents: boolean;
     // RAZ-25: which color palette to use for the sudoku cells.
     // "default" keeps the shipped blue/red tokens. "okabe-ito" swaps
     // to the Okabe-Ito colorblind-safe palette (sky-blue / yellow /
@@ -187,6 +201,15 @@ type GameState = {
     // so flipping the flag off forces everyone back to the default
     // palette regardless of their persisted choice.
     colorPalette: boolean;
+    // RAZ-28: when on, the settings dialog renders the "Record input
+    // for replay" toggle AND the store's mutation reducers append to
+    // the events ring buffer. Flipping the flag off in Edge Config
+    // hides the toggle AND stops recording immediately (the `events`
+    // array simply stops growing on the next placement). Any events
+    // already captured but not yet flushed stay in memory until the
+    // next explicit drain call; that's fine — they'll be discarded
+    // on the next startGame.
+    eventLog: boolean;
     // RAZ-14: when on, the Hint button steps through three tiers (region
     // nudge → technique + location → place the digit). When off, every
     // `hint()` call applies the placement immediately — the pre-RAZ-14
@@ -211,6 +234,26 @@ type GameState = {
     // r3c7"). Tier 3 = place the digit, which also CLEARS the session.
     tier: 1 | 2;
   } | null;
+  // RAZ-28: in-memory ring buffer of user input events. Capped at
+  // EVENT_BUFFER_CAP entries (see input-events.ts). Contents are
+  // drained to the server on save / submit via `drainEvents()`.
+  // NOT persisted — the buffer's whole point is "since last flush",
+  // and rehydrating events across page reloads would double-count
+  // them. We treat a page reload as an implicit flush point where
+  // anything in-memory is gone. Follow-up work could persist the
+  // buffer across reloads for more resilient replays; out of scope
+  // for v1.
+  //
+  // The buffer is immutable: each append returns a fresh array ref
+  // so React subscribers re-render correctly. Performance is fine
+  // even with n=1024 because this path runs once per user click.
+  events: InputEvent[];
+  // RAZ-28: monotonic sequence number incremented by `drainEvents()`.
+  // Attached to each flush's payload so the server can order multiple
+  // rows belonging to the same attempt in the right sequence without
+  // relying on `created_at` clock precision. Resets to 0 on
+  // startGame / resumeFromSnapshot.
+  eventSeq: number;
   // RAZ-16: the digit most recently placed by a value-mode `inputDigit`
   // call, or null if no value has been placed yet (or the feature flag
   // is off). Number pad highlights the matching button. Auto-advances
@@ -282,6 +325,16 @@ type GameActions = {
   // Returns counts for digits 1..9 currently placed on the board. Used by
   // the number pad to show "remaining" badges.
   getDigitCounts: () => number[];
+
+  // RAZ-28 — Extract the current event buffer and clear it. Returns a
+  // tuple of the events AND the sequence number at the time of drain,
+  // so callers can hand them to the server action verbatim. The seq
+  // is bumped AFTER the drain so a subsequent drain reflects the
+  // NEXT batch's seq (i.e. drain #0 has seq=0, drain #1 has seq=1).
+  // No-op returning an empty batch when the buffer is empty — callers
+  // can still send a "completion" marker with an empty events array
+  // if they want to mark the end of an attempt.
+  drainEvents: () => { events: InputEvent[]; seq: number };
 };
 
 const INITIAL: GameState = {
@@ -324,6 +377,11 @@ const INITIAL: GameState = {
     // colorblind-safe or high-contrast palette explicitly. Persisted
     // so the choice survives reloads.
     palette: "default",
+    // RAZ-28: default off — ticket explicitly calls this an opt-in
+    // feature, so a user has to flip it on from the settings dialog
+    // before any events are captured. Paired with the `event-log`
+    // feature flag at the store layer.
+    recordEvents: false,
   },
   featureFlags: {
     haptics: false,
@@ -338,8 +396,15 @@ const INITIAL: GameState = {
     // until PlayClient has mirrored the server-resolved flag value.
     // The play-client effect hydrates this almost immediately on mount.
     progressiveHints: false,
+    // RAZ-28: default false — feature is off by default and hydrates
+    // to the resolved Edge Config value on mount. When it flips on
+    // mid-session, recording starts on the NEXT mutation (no
+    // retroactive capture of moves the user made before opting in).
+    eventLog: false,
   },
   hintSession: null,
+  events: [],
+  eventSeq: 0,
   activeDigit: null,
 };
 
@@ -423,6 +488,32 @@ let remoteHintFetcher:
   | ((board: string, selected: number | null) => Promise<{ index: number; digit: number }>)
   | null = null;
 
+// RAZ-28 — Pure helper the reducers use to decide whether to push a
+// new event onto the buffer. Both the feature flag AND the per-user
+// setting must be true. Returns the next events array (or the same
+// reference when recording is disabled, so callers can write
+// `events: maybeRecord(s, ...)` without a conditional branch in
+// every reducer). Takes only the slice of state it needs rather than
+// the whole state object so it stays easy to unit-test.
+function maybeRecord(
+  s: Pick<
+    GameState,
+    "events" | "elapsedMs" | "featureFlags" | "settings"
+  >,
+  kind: InputEventKind,
+  cell: number,
+  digit: number,
+): InputEvent[] {
+  if (!s.featureFlags.eventLog) return s.events;
+  if (!s.settings.recordEvents) return s.events;
+  return appendEvent(s.events, {
+    c: cell,
+    d: digit,
+    t: s.elapsedMs,
+    k: kind,
+  });
+}
+
 // RAZ-14 — shared placement helper used by BOTH the legacy one-shot
 // hint path AND the tier-3 branch of the progressive hint flow. Lives
 // outside the store factory so both branches share the same undo-entry
@@ -473,6 +564,11 @@ function applyHintPlacement(
     history: pushEntry(s.history, entry),
     conflicts: findConflicts(board),
     isComplete: isComplete(board),
+    // RAZ-28: log hint-driven placements under kind "h" so replay /
+    // anti-cheat analysis can distinguish them from the player's own
+    // placements (e.g. a "perfect run with zero hints" signal relies
+    // on being able to filter these out).
+    events: maybeRecord(s, "h", idx, suggestion.digit),
   });
 }
 
@@ -495,6 +591,12 @@ export const useGameStore = create<GameState & GameActions>()(
           history: emptyHistory(),
           conflicts: new Set(),
           startedAt: Date.now(),
+          // RAZ-28: fresh attempt starts with an empty buffer and
+          // resets the flush sequence. Any pending events from a
+          // previous attempt are discarded — they're either already
+          // flushed or belong to an abandoned game.
+          events: [],
+          eventSeq: 0,
           settings: get().settings, // preserve user prefs across games
           // Feature flags are server-driven and re-applied on mount, but
           // preserving them avoids a one-frame flicker where a flag
@@ -521,6 +623,13 @@ export const useGameStore = create<GameState & GameActions>()(
           isPaused: snapshot.isPaused,
           isComplete: snapshot.isComplete,
           startedAt: snapshot.startedAt,
+          // RAZ-28: resumed attempts start with an empty event buffer.
+          // We can't replay the events the previous session captured
+          // because they're either already flushed to the server OR
+          // were lost to a refresh; either way we begin recording
+          // fresh from here.
+          events: [],
+          eventSeq: 0,
           settings: get().settings,
           featureFlags: get().featureFlags,
         });
@@ -689,6 +798,11 @@ export const useGameStore = create<GameState & GameActions>()(
           // RAZ-14: a user placement invalidates any in-flight
           // progressive hint because the whole board state changed.
           hintSession: null,
+          // RAZ-28: record a "v" event for every user-driven value
+          // placement. Conflicting placements ARE recorded because
+          // the anti-cheat / replay analysis cares about the full
+          // stream of clicks, not just the correct ones.
+          events: maybeRecord(s, "v", idx, digit),
         });
       },
 
@@ -765,6 +879,12 @@ export const useGameStore = create<GameState & GameActions>()(
           // RAZ-14: erasing a cell obviously invalidates a pending
           // hint session.
           hintSession: null,
+          // RAZ-28: erase is a real input event — record with digit=0
+          // as the "empty cell" marker. Useful for replays so the
+          // playback can re-blank the cell, and for anti-cheat rate
+          // analysis (an unusually fast erase-then-fill pattern is a
+          // telltale of a brute-force script).
+          events: maybeRecord(s, "e", idx, 0),
         });
       },
 
@@ -1005,6 +1125,17 @@ export const useGameStore = create<GameState & GameActions>()(
         ),
 
       getDigitCounts: () => digitCounts(get().board),
+
+      drainEvents: () => {
+        const s = get();
+        const batch = { events: s.events, seq: s.eventSeq };
+        // Reset buffer immediately so any events captured between now
+        // and the server round-trip's completion belong to the NEXT
+        // flush, not this one. Keeping batches non-overlapping is
+        // what makes the seq numbers usable as an ordering key.
+        set({ events: [], eventSeq: s.eventSeq + 1 });
+        return batch;
+      },
     }),
     {
       name: "sudoku-game",

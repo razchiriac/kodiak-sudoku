@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { execRows } from "@/lib/db/exec-rows";
 import { completedGames, friendships, profiles } from "@/lib/db/schema";
@@ -173,15 +173,24 @@ export async function getFriendsDailyLeaderboard(
 ) {
   const limit = opts.limit ?? 50;
   // The scope is: me + users I'm accepted-friends with. We build
-  // the id set once (Postgres can inline it as an ANY clause)
-  // and reuse it as the leaderboard filter.
+  // the id set once and use Drizzle's `inArray` so the binding goes
+  // through the driver's array-aware path.
+  //
+  // RAZ-76: previously this used a hand-rolled
+  // `sql\`${col} = any(${ids})\`` template, which postgres-js binds
+  // by `JSON.stringify(ids)` (a string like `["uuid"]`). Postgres
+  // then tries to read that as an `uuid[]` and throws
+  // `PostgresError: malformed array literal: "[\"uuid\"]"`, 500-ing
+  // the entire `/leaderboard` page for any signed-in user.
+  // `inArray()` expands to `IN ($1, $2, ...)` with each id as a
+  // separate parameter — no array literal needed at all.
   const friends = await listFriends(userId);
   const ids = [userId, ...friends.map((f) => f.id)];
 
   const conds = [
     eq(completedGames.mode, "daily"),
     eq(completedGames.dailyDate, date),
-    sql`${completedGames.userId} = any(${ids})`,
+    inArray(completedGames.userId, ids),
   ];
   if (opts.pure) conds.push(eq(completedGames.hintsUsed, 0));
   if (opts.bucket !== undefined)

@@ -443,38 +443,73 @@ export function PlayClient({
     }
     submitted.current = true;
     setSubmitting(true);
+    // RAZ-76: previously this IIFE had NO try/catch, so any rejection
+    // from `submitCompletionAction` (a thrown server-side error, a
+    // serialization fault, even a transient Edge Config blip) was
+    // silently swallowed: `setSubmitting(false)` and `setSubmitError`
+    // never ran, so the modal happily rendered "Solved!" while the
+    // server actually wrote nothing. The user then saw zero stats on
+    // their profile and had no clue why. We now treat a rejection
+    // identically to an `ok:false` result — surface the error in the
+    // modal AND raise a sonner toast, AND also flip a ref so the
+    // effect can retry on the next state-change tick (e.g. if the
+    // user re-navigates to the same puzzle).
     void (async () => {
-      const snap = snapshot();
-      if (!snap) {
-        setSubmitting(false);
-        return;
-      }
-      const res = await submitCompletionAction({
-        puzzleId: snap.meta.puzzleId,
-        board: snap.board,
-        elapsedMs: snap.elapsedMs,
-        mistakes: snap.mistakes,
-        hintsUsed: snap.hintsUsed,
-        mode: snap.meta.mode,
-        dailyDate: dailyDate ?? null,
-      });
-      setSubmitting(false);
-      if (!res.ok) {
-        setSubmitError(res.error);
-        return;
-      }
-      // RAZ-32: stash the rank context so the modal can render
-      // "You beat 73% of today's solvers". Null for random mode.
-      if (res.rankContext) setRankContext(res.rankContext);
-      // RAZ-10: surface newly-earned achievements as a series of
-      // toasts. We fan them out one at a time (rather than a
-      // single combined toast) so the player feels the individual
-      // pop for each one. Capped at 3 to avoid spamming on the
-      // rare first-solve case that unlocks multiple at once.
-      if (res.newlyEarned && res.newlyEarned.length > 0) {
-        for (const badge of res.newlyEarned.slice(0, 3)) {
-          toast.success(`Achievement unlocked: ${badge.title}`);
+      try {
+        const snap = snapshot();
+        if (!snap) {
+          setSubmitting(false);
+          return;
         }
+        const res = await submitCompletionAction({
+          puzzleId: snap.meta.puzzleId,
+          board: snap.board,
+          elapsedMs: snap.elapsedMs,
+          mistakes: snap.mistakes,
+          hintsUsed: snap.hintsUsed,
+          mode: snap.meta.mode,
+          dailyDate: dailyDate ?? null,
+        });
+        setSubmitting(false);
+        if (!res.ok) {
+          setSubmitError(res.error);
+          // Failure modes the user can actually act on get a sonner
+          // toast in addition to the modal text. The modal text is
+          // small and easy to miss when the user is celebrating, so
+          // the toast is the safety net that ensures they know.
+          toast.error(`Could not record completion: ${res.error}`);
+          // Allow a retry on the next render tick. The effect dep
+          // array re-fires on state changes (selection, paused,
+          // etc.), so this is essentially "try once more if anything
+          // changes" — cheap and self-healing in the common case.
+          submitted.current = false;
+          return;
+        }
+        // RAZ-32: stash the rank context so the modal can render
+        // "You beat 73% of today's solvers". Null for random mode.
+        if (res.rankContext) setRankContext(res.rankContext);
+        // RAZ-10: surface newly-earned achievements as a series of
+        // toasts. We fan them out one at a time (rather than a
+        // single combined toast) so the player feels the individual
+        // pop for each one. Capped at 3 to avoid spamming on the
+        // rare first-solve case that unlocks multiple at once.
+        if (res.newlyEarned && res.newlyEarned.length > 0) {
+          for (const badge of res.newlyEarned.slice(0, 3)) {
+            toast.success(`Achievement unlocked: ${badge.title}`);
+          }
+        }
+      } catch (err) {
+        // Server action threw — either a real exception in the action
+        // body or a Next.js-level serialization fault. Without this
+        // catch the rejection is silently dropped (see RAZ-76 root
+        // cause). Log to console so it shows up in the browser
+        // devtools, surface to the modal AND a toast, and clear the
+        // submitted ref so the effect can retry.
+        console.error("submitCompletionAction threw", err);
+        setSubmitting(false);
+        setSubmitError("submit_failed");
+        toast.error("Could not record completion. Please try again.");
+        submitted.current = false;
       }
     })();
   }, [isComplete, meta, isSignedIn, snapshot, dailyDate, isArchive, isCustom]);

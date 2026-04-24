@@ -28,6 +28,13 @@ export function AuthMenu() {
       setUser(session?.user ?? null);
       // First time we see a session in this tab → migrate any anonymous
       // progress. Server action is idempotent and cheap.
+      //
+      // RAZ-76: include `mode` (and `dailyDate` when applicable) so
+      // the migrate action can decide whether to promote a fully-
+      // solved local snapshot into a real completion. Without these
+      // fields the action defaults to "random" mode, which is safer
+      // than guessing — but for daily puzzles we want the action to
+      // know so it can apply the right validation.
       if (event === "SIGNED_IN") {
         const snap = readPersistedSnapshot();
         const saved = snap
@@ -39,6 +46,13 @@ export function AuthMenu() {
               mistakes: snap.mistakes,
               hintsUsed: snap.hintsUsed,
               isPaused: snap.isPaused,
+              mode: snap.meta.mode,
+              // The persisted GameMeta does not currently carry the
+              // dailyDate (the daily page resolves it server-side),
+              // so we leave this null. If we need stricter daily
+              // gating on migration in the future, we'd plumb the
+              // date into the persisted snapshot too.
+              dailyDate: null,
             }
           : null;
         void migrateLocalProgressAction({ saved });

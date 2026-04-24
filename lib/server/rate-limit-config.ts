@@ -32,3 +32,24 @@ export const HINT_LIMITS: RateLimitWindow[] = [
   { windowMs: 60 * 1000, max: 3, label: "3 per minute" },
   { windowMs: 60 * 60 * 1000, max: 30, label: "30 per hour" },
 ];
+
+// RAZ-61 — AI debrief generation bucket. Same shape as HINT_LIMITS but
+// far stricter caps: each call hits a paid OpenAI endpoint, so we want
+// a hard ceiling on cost per actor even if the UI somehow misbehaves
+// and re-fires the action.
+//
+// Why these numbers:
+//   * 5/minute lets a player retry a debrief once or twice (e.g. they
+//     toggle the modal closed + reopen + the localStorage cache misses)
+//     without ever hitting the limit on a real human session.
+//   * 30/hour is generous (~one every two minutes) and keeps a
+//     pathological hot-key scenario from running up a $X bill before
+//     anyone notices.
+// Both numbers are tunable; the rate-limit log gives us the data to
+// retighten if we see abuse.
+export const DEBRIEF_BUCKET = "ai-debrief";
+
+export const DEBRIEF_LIMITS: RateLimitWindow[] = [
+  { windowMs: 60 * 1000, max: 5, label: "5 per minute" },
+  { windowMs: 60 * 60 * 1000, max: 30, label: "30 per hour" },
+];

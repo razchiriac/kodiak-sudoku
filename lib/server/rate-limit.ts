@@ -5,7 +5,13 @@ import { db } from "@/lib/db/client";
 import { rateLimitEvents } from "@/lib/db/schema";
 import type { RateLimitWindow } from "./rate-limit-config";
 
-export { HINT_BUCKET, HINT_LIMITS, type RateLimitWindow } from "./rate-limit-config";
+export {
+  HINT_BUCKET,
+  HINT_LIMITS,
+  DEBRIEF_BUCKET,
+  DEBRIEF_LIMITS,
+  type RateLimitWindow,
+} from "./rate-limit-config";
 
 // RAZ-29 — Simple sliding-window rate limiter backed by Postgres.
 //

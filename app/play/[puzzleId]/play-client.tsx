@@ -74,6 +74,7 @@ export function PlayClient({
   eventLogEnabled = false,
   modePresetsEnabled = false,
   breakdownEnabled = false,
+  aiDebriefEnabled = false,
   stuckRescueEnabled = false,
 }: {
   puzzle: PuzzleProp;
@@ -181,6 +182,11 @@ export function PlayClient({
   // panel is a one-time render at completion — no other surface
   // gates on this flag.
   breakdownEnabled?: boolean;
+  // RAZ-61: server-resolved value of `ai-debrief`. Forwarded straight
+  // to the CompletionModal which renders / hides the AiDebriefCard
+  // based on it. The card is responsible for firing its own server
+  // action; the prop is just a render gate.
+  aiDebriefEnabled?: boolean;
   // RAZ-48: server-resolved value of `stuck-rescue`. Mirrored into
   // the store so `useStuckDetector` can short-circuit instantly when
   // the flag is flipped off via Edge Config.
@@ -893,6 +899,7 @@ export function PlayClient({
         currentUsername={currentUsername}
         rankContext={rankContext}
         breakdownEnabled={breakdownEnabled}
+        aiDebriefEnabled={aiDebriefEnabled}
       />
       <ShortcutsOverlay open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />

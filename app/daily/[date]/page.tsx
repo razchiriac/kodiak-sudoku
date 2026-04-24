@@ -24,6 +24,7 @@ import {
   modePresets,
   pbRibbon,
   postGameBreakdown,
+  aiDebrief,
   printPuzzle,
   stuckRescue,
   eventLog,
@@ -151,6 +152,10 @@ export default async function DailyArchivePage({
   const modePresetsEnabled = await modePresets();
   // RAZ-45 / post-game-breakdown flag. Forwarded to CompletionModal.
   const breakdownEnabled = await postGameBreakdown();
+  // RAZ-61 / ai-debrief flag. Same render-gate semantics as
+  // breakdownEnabled — the modal hides the AI card with no flicker
+  // when the kill-switch flips.
+  const aiDebriefEnabled = await aiDebrief();
   // RAZ-48 / stuck-rescue flag. Forwarded to PlayClient.
   const stuckRescueEnabled = await stuckRescue();
   const adjacent = await getAdjacentDailyDates(date);
@@ -209,6 +214,7 @@ export default async function DailyArchivePage({
         eventLogEnabled={eventLogEnabled}
         modePresetsEnabled={modePresetsEnabled}
         breakdownEnabled={breakdownEnabled}
+        aiDebriefEnabled={aiDebriefEnabled}
         stuckRescueEnabled={stuckRescueEnabled}
         isArchive
       />

@@ -9,6 +9,7 @@ import {
   longPressNote,
   modePresets,
   postGameBreakdown,
+  aiDebrief,
   stuckRescue,
   eventLog,
   progressiveHints,
@@ -75,6 +76,7 @@ export default async function CustomPlayPage({
     eventLogEnabled,
     modePresetsEnabled,
     breakdownEnabled,
+    aiDebriefEnabled,
     stuckRescueEnabled,
   ] = await Promise.all([
     haptics(),
@@ -88,6 +90,7 @@ export default async function CustomPlayPage({
     eventLog(),
     modePresets(),
     postGameBreakdown(),
+    aiDebrief(),
     stuckRescue(),
   ]);
 
@@ -124,6 +127,7 @@ export default async function CustomPlayPage({
       eventLogEnabled={eventLogEnabled}
       modePresetsEnabled={modePresetsEnabled}
       breakdownEnabled={breakdownEnabled}
+      aiDebriefEnabled={aiDebriefEnabled}
       stuckRescueEnabled={stuckRescueEnabled}
       isCustom
     />

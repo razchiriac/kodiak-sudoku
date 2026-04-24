@@ -19,6 +19,7 @@ import {
   modePresets,
   pbRibbon,
   postGameBreakdown,
+  aiDebrief,
   printPuzzle,
   stuckRescue,
   eventLog,
@@ -172,6 +173,12 @@ export default async function PuzzlePage({
   // conditions.
   const breakdownEnabled = await postGameBreakdown();
 
+  // RAZ-61 / ai-debrief flag. Server-resolved here so the modal hides
+  // the AiDebriefCard with zero client flicker when the kill-switch
+  // is flipped via Edge Config. The card itself is still responsible
+  // for the (paid) action call — the prop is just a render gate.
+  const aiDebriefEnabled = await aiDebrief();
+
   // RAZ-48 / stuck-rescue flag. Pure UI gate forwarded to PlayClient
   // which mirrors it into the store; the rescue chip never mounts
   // when the flag is off.
@@ -219,6 +226,7 @@ export default async function PuzzlePage({
       eventLogEnabled={eventLogEnabled}
       modePresetsEnabled={modePresetsEnabled}
       breakdownEnabled={breakdownEnabled}
+      aiDebriefEnabled={aiDebriefEnabled}
       stuckRescueEnabled={stuckRescueEnabled}
     />
   );

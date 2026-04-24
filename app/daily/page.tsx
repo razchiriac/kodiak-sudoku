@@ -24,6 +24,7 @@ import {
   modePresets,
   pbRibbon,
   postGameBreakdown,
+  aiDebrief,
   printPuzzle,
   stuckRescue,
   eventLog,
@@ -128,6 +129,12 @@ export default async function DailyPage({
   // server-side ripple effects.
   const breakdownEnabled = await postGameBreakdown();
 
+  // RAZ-61 / ai-debrief flag. Pure render gate forwarded to the
+  // CompletionModal — the AI card itself owns the (cached) action
+  // call, so this prop just hides the surface when the kill-switch
+  // is flipped via Edge Config.
+  const aiDebriefEnabled = await aiDebrief();
+
   // RAZ-48 / stuck-rescue flag. Forwarded to PlayClient.
   const stuckRescueEnabled = await stuckRescue();
 
@@ -193,6 +200,7 @@ export default async function DailyPage({
         eventLogEnabled={eventLogEnabled}
         modePresetsEnabled={modePresetsEnabled}
         breakdownEnabled={breakdownEnabled}
+        aiDebriefEnabled={aiDebriefEnabled}
         stuckRescueEnabled={stuckRescueEnabled}
       />
     </>

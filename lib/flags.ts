@@ -277,6 +277,16 @@ export const modePresets = declareFlag("mode-presets");
 // hub CTA disappears entirely.
 export const techniqueJourney = declareFlag("technique-journey");
 
+// RAZ-61 - Post-Game AI Debrief. When on, the completion modal renders
+// an AI debrief card with three short bullets + a suggested next
+// action, computed from the same deterministic breakdown the
+// BreakdownPanel renders today. The flag is the UI-render gate; the
+// actual model call is independently gated by the presence of
+// OPENAI_API_KEY on the server, so flag-on-without-key shows the
+// deterministic fallback copy (no tokens burned). NEVER sends the
+// puzzle solution to the model.
+export const aiDebrief = declareFlag("ai-debrief");
+
 // RAZ-15 - Per-cell mistake indicator. When on, the settings dialog
 // exposes a "Show mistakes" toggle; if the user enables it AND the
 // client has the puzzle solution (i.e. random non-daily puzzles where

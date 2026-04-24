@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Share2, Sparkles, Swords, Trophy, Users } from "lucide-react";
+import { RotateCcw, Share2, Sparkles, Swords, Trophy, Users } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -18,6 +18,22 @@ import { useGameStore } from "@/lib/zustand/game-store";
 import { DIFFICULTY_LABEL, formatTime } from "@/lib/utils";
 import { buildShareBlock, buildShareText, buildShareUrl } from "@/lib/share/format";
 
+// RAZ-78: map of submitCompletionAction error codes to user-facing
+// copy. Anything not in the map falls through to "Couldn't save:
+// <code>" so a regression doesn't strand us with a blank message.
+// Keep the entries short — the modal is a small surface and the
+// player has just earned a "Solved!" celebration; we don't want to
+// drown that in apology text.
+const ERROR_COPY: Record<string, string> = {
+  timed_out:
+    "Server didn't respond in 30 seconds — your network may be slow. Tap Retry.",
+  submit_failed: "Something went wrong recording your time. Tap Retry.",
+  schema_invalid: "Couldn't read your completion locally. Tap Retry.",
+  unauthenticated: "Please sign in to record this completion.",
+  puzzle_not_found: "We couldn't find this puzzle on the server.",
+  rate_limited: "Too many submissions in a row. Wait a few seconds and retry.",
+};
+
 // Shown automatically when the player completes the puzzle. Submission
 // to the server happens in the parent play page via an effect that
 // watches `isComplete`; this component is purely presentational.
@@ -26,6 +42,7 @@ export function CompletionModal({
   onOpenChange,
   submitting,
   submitError,
+  onRetry,
   previousBestMs,
   shareEnabled = false,
   dailyDate,
@@ -40,6 +57,14 @@ export function CompletionModal({
   onOpenChange: (open: boolean) => void;
   submitting: boolean;
   submitError: string | null;
+  // RAZ-78: optional Retry callback. Wired by PlayClient to the
+  // shared `runSubmit` so the player can re-attempt a failed
+  // submission without leaving the modal. Only rendered when a
+  // submitError is set AND we're not currently submitting (so a
+  // double-tap on a slow network doesn't spawn parallel requests).
+  // Optional so existing callers (no failure paths to retry) stay
+  // valid without a code change.
+  onRetry?: () => void | Promise<void>;
   // RAZ-22 / pb-ribbon: previous best time (ms) for this user in this
   // difficulty, or null when the flag is off / the user is anonymous /
   // they have no prior completions in this bucket. When non-null AND
@@ -331,7 +356,33 @@ export function CompletionModal({
         ) : null}
 
         {submitError && (
-          <p className="text-center text-sm text-destructive">{submitError}</p>
+          // RAZ-78: friendlier error copy than the raw error code
+          // we used to render. The raw codes (e.g. "schema_invalid",
+          // "timed_out") were for debugging, not for end users.
+          // Map the small set we actually surface to plain English
+          // and fall back to the raw code for anything unexpected.
+          <div className="space-y-2">
+            <p className="text-center text-sm text-destructive">
+              {ERROR_COPY[submitError] ?? `Couldn't save: ${submitError}`}
+            </p>
+            {/* Retry button — only when we have a handler AND we're
+                not already mid-submit. Prevents the player from
+                kicking off a parallel request by tapping during a
+                pending retry. */}
+            {onRetry && !submitting ? (
+              <div className="flex justify-center">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void onRetry()}
+                  aria-label="Retry recording your completion"
+                >
+                  <RotateCcw className="mr-2 h-4 w-4" aria-hidden />
+                  Retry
+                </Button>
+              </div>
+            ) : null}
+          </div>
         )}
         {submitting && (
           <p className="text-center text-sm text-muted-foreground">Saving your time...</p>

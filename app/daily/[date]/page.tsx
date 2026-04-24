@@ -28,6 +28,7 @@ import {
   aiCoach,
   printPuzzle,
   stuckRescue,
+  adaptiveCoach,
   eventLog,
   progressiveHints,
   shareResult,
@@ -162,6 +163,8 @@ export default async function DailyArchivePage({
   const aiCoachEnabled = await aiCoach();
   // RAZ-48 / stuck-rescue flag. Forwarded to PlayClient.
   const stuckRescueEnabled = await stuckRescue();
+  // RAZ-49 / adaptive-coach flag. Forwarded to PlayClient.
+  const adaptiveCoachEnabled = await adaptiveCoach();
   const adjacent = await getAdjacentDailyDates(date);
 
   return (
@@ -221,6 +224,7 @@ export default async function DailyArchivePage({
         aiDebriefEnabled={aiDebriefEnabled}
         aiCoachEnabled={aiCoachEnabled}
         stuckRescueEnabled={stuckRescueEnabled}
+        adaptiveCoachEnabled={adaptiveCoachEnabled}
         isArchive
       />
     </>

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
+import { inArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { pushSubscriptions } from "@/lib/db/schema";
 import { sendPush, isWebPushConfigured } from "@/lib/server/push";
@@ -86,10 +86,14 @@ export async function GET(request: Request) {
   }
 
   // Batch-delete expired subscriptions.
+  // RAZ-76: was `sql\`... = any(${expired})\`` which postgres-js
+  // serialises as JSON, producing a "malformed array literal" 500.
+  // `inArray` expands to per-element parameters, which works on
+  // every driver shape we care about.
   if (expired.length > 0) {
     await db
       .delete(pushSubscriptions)
-      .where(sql`${pushSubscriptions.id} = any(${expired})`);
+      .where(inArray(pushSubscriptions.id, expired));
   }
 
   return NextResponse.json({

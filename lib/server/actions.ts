@@ -129,25 +129,72 @@ const SOLVE_TIME_ABS_SLACK_MS = 2_000;
 // the user actually solve it". We compare the submitted board against the
 // stored solution before recording anything.
 export async function submitCompletionAction(raw: SubmitInput) {
-  const user = await getCurrentUser();
-  if (!user) return { ok: false as const, error: "unauthenticated" };
+  // RAZ-76: tagged logger so Vercel runtime logs show a clear trail
+  // for every code path through this action. Without these we were
+  // chasing a silent "completion modal showed but row never inserted"
+  // bug across two database tables and three potential fail points
+  // with literally zero server-side breadcrumbs (Vercel just showed
+  // `POST /daily 200`). Every early-return now logs the error code
+  // and the input puzzleId / mode so we can correlate against the
+  // user's saved_games row.
+  function log(stage: string, extra?: Record<string, unknown>) {
+    console.log(
+      `[submitCompletion] ${stage}`,
+      JSON.stringify({
+        puzzleId: raw?.puzzleId,
+        mode: raw?.mode,
+        elapsedMs: raw?.elapsedMs,
+        ...extra,
+      }),
+    );
+  }
+  function fail<E extends string>(error: E, extra?: Record<string, unknown>) {
+    console.warn(
+      `[submitCompletion] reject:${error}`,
+      JSON.stringify({
+        puzzleId: raw?.puzzleId,
+        mode: raw?.mode,
+        elapsedMs: raw?.elapsedMs,
+        ...extra,
+      }),
+    );
+    return { ok: false as const, error };
+  }
 
-  const input = SubmitSchema.parse(raw);
+  const user = await getCurrentUser();
+  if (!user) return fail("unauthenticated");
+
+  let input: SubmitInput;
+  try {
+    input = SubmitSchema.parse(raw);
+  } catch (err) {
+    // Schema parse rejections previously bubbled as a thrown server
+    // action error (HTTP 500-ish), which the client's IIFE then
+    // silently swallowed because it had no try/catch. Convert to a
+    // structured ok:false so the client's modal can show what went
+    // wrong (e.g. dailyDate not in YYYY-MM-DD form).
+    console.warn("[submitCompletion] reject:schema_invalid", err);
+    return { ok: false as const, error: "schema_invalid" };
+  }
 
   const puzzle = await getPuzzleById(input.puzzleId);
-  if (!puzzle) return { ok: false as const, error: "puzzle_not_found" };
+  if (!puzzle) return fail("puzzle_not_found");
 
   // Verify the submitted board. RAZ-18: use the puzzle's variant for
   // conflict detection so diagonal puzzles are validated correctly.
   const variant = (puzzle.variant ?? "standard") as import("@/lib/sudoku/board").Variant;
   const board = parseBoard(input.board);
   if (!isFilled(board) || findConflicts(board, variant).size > 0 || !isCorrect(board, puzzle.solution)) {
-    return { ok: false as const, error: "incorrect_solution" };
+    return fail("incorrect_solution", {
+      filled: isFilled(board),
+      conflicts: findConflicts(board, variant).size,
+      variant,
+    });
   }
 
   // Time floor sanity check.
   if (input.elapsedMs < TIME_FLOOR_MS[puzzle.difficultyBucket]) {
-    return { ok: false as const, error: "time_floor" };
+    return fail("time_floor", { difficultyBucket: puzzle.difficultyBucket });
   }
 
   // RAZ-27: cross-check the client timer against server wall-clock
@@ -167,7 +214,10 @@ export async function submitCompletionAction(raw: SubmitInput) {
       const wallClockMs = Date.now() - startedAt.getTime();
       const maxAllowedMs = wallClockMs * SOLVE_TIME_MULT_SLACK + SOLVE_TIME_ABS_SLACK_MS;
       if (input.elapsedMs > maxAllowedMs) {
-        return { ok: false as const, error: "solve_time_mismatch" };
+        return fail("solve_time_mismatch", {
+          wallClockMs,
+          maxAllowedMs,
+        });
       }
     }
   }
@@ -176,9 +226,14 @@ export async function submitCompletionAction(raw: SubmitInput) {
   // a player can't backdate a daily completion to a different day).
   let dailyDate: string | null = null;
   if (input.mode === "daily") {
-    if (!input.dailyDate) return { ok: false as const, error: "missing_daily_date" };
+    if (!input.dailyDate) return fail("missing_daily_date");
     const today = todayUtc();
-    if (input.dailyDate !== today) return { ok: false as const, error: "daily_date_mismatch" };
+    if (input.dailyDate !== today) {
+      return fail("daily_date_mismatch", {
+        client: input.dailyDate,
+        server: today,
+      });
+    }
     dailyDate = today;
   }
 
@@ -195,19 +250,35 @@ export async function submitCompletionAction(raw: SubmitInput) {
       mode: input.mode,
       dailyDate,
     });
+    log("inserted", { userId: user.id });
   } catch (e: unknown) {
     // Unique violation on the daily index → user already completed today.
     if (typeof e === "object" && e && "code" in e && (e as { code: string }).code === "23505") {
-      return { ok: false as const, error: "already_completed_today" };
+      return fail("already_completed_today");
     }
+    // RAZ-76: surface every other DB error to the runtime logs before
+    // re-throwing. Previously these threw straight up to the client
+    // IIFE which had no catch, so the modal showed "Solved!" and the
+    // log just said `POST /daily 200`. Now we get a proper trail.
+    console.error("[submitCompletion] insert_failed", e);
     throw e;
   }
 
   // Saved game is no longer needed; clean it up so the dashboard's
-  // "Continue" card doesn't show a finished puzzle.
-  await db
-    .delete(savedGames)
-    .where(and(eq(savedGames.userId, user.id), eq(savedGames.puzzleId, input.puzzleId)));
+  // "Continue" card doesn't show a finished puzzle. Wrapped so a
+  // delete failure (rare — would only happen on a connection blip
+  // between the insert and this statement) cannot mask the fact
+  // that the row IS inserted; we just log and continue. The user
+  // experience of "I see the completion in the modal but the
+  // continue card on /play also still shows it" is much smaller
+  // than "completion silently doesn't count".
+  try {
+    await db
+      .delete(savedGames)
+      .where(and(eq(savedGames.userId, user.id), eq(savedGames.puzzleId, input.puzzleId)));
+  } catch (err) {
+    console.error("[submitCompletion] saved_games delete_failed", err);
+  }
 
   // Invalidate the leaderboard and dashboard caches so the new entry
   // shows up immediately on the next request. RAZ-74: a plain
@@ -218,12 +289,20 @@ export async function submitCompletionAction(raw: SubmitInput) {
   // need either an explicit `[param]` placeholder + the `"page"`
   // type, or a `"layout"` revalidation higher up the tree. Same
   // shape for the per-difficulty + quick leaderboard variants.
-  revalidatePath("/leaderboard");
-  revalidatePath("/leaderboard/quick");
-  revalidatePath("/leaderboard/difficulty/[bucket]", "page");
-  revalidatePath("/profile");
-  revalidatePath("/profile/[username]", "page");
-  revalidatePath("/play");
+  //
+  // RAZ-76: wrapped because `revalidatePath` is documented to throw
+  // on invalid path syntax (and silently no-ops in dev). We don't
+  // want a future typo here to bring down the entire submit chain.
+  try {
+    revalidatePath("/leaderboard");
+    revalidatePath("/leaderboard/quick");
+    revalidatePath("/leaderboard/difficulty/[bucket]", "page");
+    revalidatePath("/profile");
+    revalidatePath("/profile/[username]", "page");
+    revalidatePath("/play");
+  } catch (err) {
+    console.error("[submitCompletion] revalidatePath_failed", err);
+  }
 
   // RAZ-32: compute a rank context AFTER the insert so the caller is
   // counted in the denominator. Only for daily mode (the feature is
@@ -460,8 +539,9 @@ function todayUtc(): string {
 
 const MigrateSchema = z.object({
   // The anonymous game from localStorage. Only the active in-progress
-  // game is migrated; completion records made while anonymous are not
-  // moved (would mess up leaderboards).
+  // game is migrated by default; if it turns out to be already
+  // solved, RAZ-76 also records a completion so anonymous wins are
+  // not silently dropped on sign-in.
   saved: z
     .object({
       puzzleId: z.number().int().positive(),
@@ -471,6 +551,17 @@ const MigrateSchema = z.object({
       mistakes: z.number().int().nonnegative(),
       hintsUsed: z.number().int().nonnegative(),
       isPaused: z.boolean(),
+      // RAZ-76: optional metadata so we can promote a completed
+      // anonymous solve into a real `completed_games` row. Both
+      // fields are optional for backward-compat with older
+      // localStorage payloads — when missing, we fall back to
+      // "random" mode and skip the daily-date check.
+      mode: z.enum(["random", "daily"]).optional(),
+      dailyDate: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .optional()
+        .nullable(),
     })
     .nullable(),
 });
@@ -479,6 +570,18 @@ const MigrateSchema = z.object({
 // first sign-in. Conservative: only preserves the active in-progress
 // game. Old completions stay in localStorage but never reach the server,
 // so the leaderboard can't be polluted with anonymous wins.
+//
+// RAZ-76: previously this action SILENTLY dropped any anonymous solve
+// — it only ever wrote to `saved_games`. Players who finished a puzzle
+// before signing in (or while their session was briefly missing due
+// to OAuth refresh) would see the local "Solved!" modal, then a
+// profile page that said zero. We now detect a fully-solved board on
+// the way in and promote it to a real completion via the same
+// validation path the live submit uses, so the player gets credit for
+// what they already saw on screen. Random mode only — daily auto-
+// promotion would race the daily_date_mismatch / unique-index gates
+// and is not worth the corner-case complexity for a path that's
+// expected to be rare.
 export async function migrateLocalProgressAction(raw: z.infer<typeof MigrateSchema>) {
   const user = await getCurrentUser();
   if (!user) return { ok: false as const, error: "unauthenticated" };
@@ -488,6 +591,46 @@ export async function migrateLocalProgressAction(raw: z.infer<typeof MigrateSche
 
   const puzzle = await getPuzzleById(input.saved.puzzleId);
   if (!puzzle) return { ok: false as const, error: "puzzle_not_found" };
+
+  // RAZ-76: detect a completed local snapshot. We require BOTH a
+  // fully-filled board AND zero conflicts AND an exact match against
+  // the stored solution — same triple-gate the live submit path uses
+  // — so we can never accidentally credit a partial / cheated /
+  // wrong-puzzle board.
+  const variant = (puzzle.variant ?? "standard") as import("@/lib/sudoku/board").Variant;
+  const localBoard = parseBoard(input.saved.board);
+  const isLocallySolved =
+    isFilled(localBoard) &&
+    findConflicts(localBoard, variant).size === 0 &&
+    isCorrect(localBoard, puzzle.solution);
+
+  if (isLocallySolved) {
+    // Promote to a real completion via the live action. Reusing the
+    // action (rather than inlining the insert) keeps the time-floor,
+    // sanity, achievements, and revalidation behavior in lockstep so
+    // a future change to one path automatically benefits the other.
+    // We force `mode = "random"` defensively (see the function
+    // comment) so daily-mode invariants stay intact.
+    const submit = await submitCompletionAction({
+      puzzleId: input.saved.puzzleId,
+      board: input.saved.board,
+      elapsedMs: input.saved.elapsedMs,
+      mistakes: input.saved.mistakes,
+      hintsUsed: input.saved.hintsUsed,
+      mode: "random",
+      dailyDate: null,
+    });
+    // The submit action also deletes the matching saved_games row on
+    // success, so we don't have to. On any failure (time floor,
+    // already_completed, transient DB blip) we fall through to the
+    // saved_games preservation path so the player at minimum keeps
+    // their progress to retry from.
+    if (submit.ok) return { ok: true as const, promoted: true };
+    console.warn(
+      "[migrate] auto-submit refused, falling back to saved_games",
+      JSON.stringify({ puzzleId: input.saved.puzzleId, error: submit.error }),
+    );
+  }
 
   // If the user already has a saved game for this puzzle, preserve the
   // server copy (it's been autosaved across devices and is more

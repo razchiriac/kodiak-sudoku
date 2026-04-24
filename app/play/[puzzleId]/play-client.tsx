@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Keyboard, Printer, Settings as SettingsIcon, Swords } from "lucide-react";
 import { toast } from "sonner";
 import { readPersistedSnapshot, useGameStore } from "@/lib/zustand/game-store";
@@ -424,6 +424,118 @@ export function PlayClient({
     percentile: number;
   } | null>(null);
   const submitted = useRef(false);
+
+  // RAZ-78: extracted submit so the completion-effect AND the
+  // Retry button in CompletionModal can both call it. The previous
+  // version inlined a `void (async () => {})()` IIFE inside the
+  // effect, which had two problems we ran into in production:
+  //
+  //   - If the action threw (network blip, server-side bug, etc.)
+  //     the IIFE silently swallowed the rejection and `setSubmitting`
+  //     was never flipped back to false. The "Saving your time..."
+  //     line in the completion modal stayed forever and the player
+  //     thought the app was hung. (RAZ-76 covers the silent-throw
+  //     angle for the data-correctness side; here we cover the
+  //     stuck-spinner UX side.)
+  //
+  //   - There was no way to retry from the modal. A failed submit
+  //     left the player with red error text and no recourse short
+  //     of refreshing the page (which loses the in-memory state).
+  //
+  // The extracted function adds three defenses:
+  //
+  //   1. try/catch around the await — any rejection sets a
+  //      submitError, clears the spinner, and re-arms `submitted`
+  //      so the player can retry without the next-tick guard
+  //      blocking them.
+  //   2. A hard 30s timeout that races the submit. Even if the
+  //      action's promise just hangs forever (e.g. a Vercel function
+  //      timeout that doesn't reject cleanly), the spinner cannot
+  //      stay up indefinitely.
+  //   3. The `runSubmit` callback is exposed to CompletionModal as
+  //      `onRetry`, so the modal can show a Retry button when an
+  //      error has been set.
+  const SUBMIT_TIMEOUT_MS = 30_000;
+  const runSubmit = useCallback(async () => {
+    const snap = snapshot();
+    if (!snap) {
+      // No snapshot means the store has no meta — nothing to send.
+      // Treat as "nothing to do" rather than a failure so the modal
+      // doesn't show a confusing error.
+      setSubmitting(false);
+      return;
+    }
+    setSubmitError(null);
+    setSubmitting(true);
+    try {
+      // RAZ-78 timeout race. We can't actually cancel a server
+      // action mid-flight — the network request is in-flight and
+      // any DB writes it triggered will still happen. What we
+      // CAN do is ensure the UI doesn't pretend to wait forever:
+      // after SUBMIT_TIMEOUT_MS we surface a "timed_out" error
+      // and let the player retry. If the original request later
+      // succeeds, the dedupe keys on (user, puzzle, daily_date)
+      // mean the duplicate insert fails harmlessly with 23505.
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      const timeout = new Promise<{ ok: false; error: "timed_out" }>(
+        (resolve) => {
+          timer = setTimeout(
+            () => resolve({ ok: false, error: "timed_out" } as const),
+            SUBMIT_TIMEOUT_MS,
+          );
+        },
+      );
+      const submit = submitCompletionAction({
+        puzzleId: snap.meta.puzzleId,
+        board: snap.board,
+        elapsedMs: snap.elapsedMs,
+        mistakes: snap.mistakes,
+        hintsUsed: snap.hintsUsed,
+        mode: snap.meta.mode,
+        dailyDate: dailyDate ?? null,
+      });
+      const res = await Promise.race([submit, timeout]);
+      if (timer != null) clearTimeout(timer);
+      setSubmitting(false);
+      if (!res.ok) {
+        setSubmitError(res.error);
+        // RAZ-78: re-arm so a Retry click (or a state-change
+        // re-render) can run the submit again. Without this the
+        // submitted-once guard at the top of the effect would
+        // permanently block any future attempt.
+        submitted.current = false;
+        if (res.error === "timed_out") {
+          toast.error(
+            "Server didn't respond in 30 seconds. Tap Retry to try again.",
+          );
+        }
+        return;
+      }
+      // RAZ-32: stash the rank context so the modal can render
+      // "You beat 73% of today's solvers". Null for random mode.
+      if (res.rankContext) setRankContext(res.rankContext);
+      // RAZ-10: surface newly-earned achievements as a series of
+      // toasts. We fan them out one at a time (rather than a
+      // single combined toast) so the player feels the individual
+      // pop for each one. Capped at 3 to avoid spamming on the
+      // rare first-solve case that unlocks multiple at once.
+      if (res.newlyEarned && res.newlyEarned.length > 0) {
+        for (const badge of res.newlyEarned.slice(0, 3)) {
+          toast.success(`Achievement unlocked: ${badge.title}`);
+        }
+      }
+    } catch (err) {
+      // Defensive: a thrown action (rather than `{ ok: false }`).
+      // The previous IIFE swallowed this and left submitting=true
+      // forever. Treat the same as a structured failure.
+      console.error("submitCompletionAction threw", err);
+      setSubmitting(false);
+      setSubmitError("submit_failed");
+      submitted.current = false;
+      toast.error("Could not record completion. Tap Retry to try again.");
+    }
+  }, [snapshot, dailyDate]);
+
   useEffect(() => {
     if (!isComplete || !meta) return;
     setCompletionOpen(true);
@@ -442,77 +554,17 @@ export function PlayClient({
       return;
     }
     submitted.current = true;
-    setSubmitting(true);
-    // RAZ-76: previously this IIFE had NO try/catch, so any rejection
-    // from `submitCompletionAction` (a thrown server-side error, a
-    // serialization fault, even a transient Edge Config blip) was
-    // silently swallowed: `setSubmitting(false)` and `setSubmitError`
-    // never ran, so the modal happily rendered "Solved!" while the
-    // server actually wrote nothing. The user then saw zero stats on
-    // their profile and had no clue why. We now treat a rejection
-    // identically to an `ok:false` result — surface the error in the
-    // modal AND raise a sonner toast, AND also flip a ref so the
-    // effect can retry on the next state-change tick (e.g. if the
-    // user re-navigates to the same puzzle).
-    void (async () => {
-      try {
-        const snap = snapshot();
-        if (!snap) {
-          setSubmitting(false);
-          return;
-        }
-        const res = await submitCompletionAction({
-          puzzleId: snap.meta.puzzleId,
-          board: snap.board,
-          elapsedMs: snap.elapsedMs,
-          mistakes: snap.mistakes,
-          hintsUsed: snap.hintsUsed,
-          mode: snap.meta.mode,
-          dailyDate: dailyDate ?? null,
-        });
-        setSubmitting(false);
-        if (!res.ok) {
-          setSubmitError(res.error);
-          // Failure modes the user can actually act on get a sonner
-          // toast in addition to the modal text. The modal text is
-          // small and easy to miss when the user is celebrating, so
-          // the toast is the safety net that ensures they know.
-          toast.error(`Could not record completion: ${res.error}`);
-          // Allow a retry on the next render tick. The effect dep
-          // array re-fires on state changes (selection, paused,
-          // etc.), so this is essentially "try once more if anything
-          // changes" — cheap and self-healing in the common case.
-          submitted.current = false;
-          return;
-        }
-        // RAZ-32: stash the rank context so the modal can render
-        // "You beat 73% of today's solvers". Null for random mode.
-        if (res.rankContext) setRankContext(res.rankContext);
-        // RAZ-10: surface newly-earned achievements as a series of
-        // toasts. We fan them out one at a time (rather than a
-        // single combined toast) so the player feels the individual
-        // pop for each one. Capped at 3 to avoid spamming on the
-        // rare first-solve case that unlocks multiple at once.
-        if (res.newlyEarned && res.newlyEarned.length > 0) {
-          for (const badge of res.newlyEarned.slice(0, 3)) {
-            toast.success(`Achievement unlocked: ${badge.title}`);
-          }
-        }
-      } catch (err) {
-        // Server action threw — either a real exception in the action
-        // body or a Next.js-level serialization fault. Without this
-        // catch the rejection is silently dropped (see RAZ-76 root
-        // cause). Log to console so it shows up in the browser
-        // devtools, surface to the modal AND a toast, and clear the
-        // submitted ref so the effect can retry.
-        console.error("submitCompletionAction threw", err);
-        setSubmitting(false);
-        setSubmitError("submit_failed");
-        toast.error("Could not record completion. Please try again.");
-        submitted.current = false;
-      }
-    })();
-  }, [isComplete, meta, isSignedIn, snapshot, dailyDate, isArchive, isCustom]);
+    // RAZ-78: delegated to the extracted `runSubmit` callback above.
+    // It is a strict superset of the RAZ-76 inlined IIFE — same
+    // try/catch + sonner-toast + `submitted.current = false` retry
+    // handling, plus a hard 30-second timeout race AND exposure as
+    // `onRetry` to the completion modal so a stuck submission has a
+    // single-tap recovery path. The effect-level guards above
+    // (archive / custom / signed-out short-circuits) stay here
+    // because they don't belong in `runSubmit` — they're decisions
+    // about WHETHER to submit, not HOW.
+    void runSubmit();
+  }, [isComplete, meta, isSignedIn, isArchive, isCustom, runSubmit]);
 
   // RAZ-28 — Periodic flush of the in-memory input-event ring buffer
   // to the server. We fire under three triggers: every ~15 seconds
@@ -741,6 +793,11 @@ export function PlayClient({
         onOpenChange={setCompletionOpen}
         submitting={submitting}
         submitError={submitError}
+        // RAZ-78: Retry hook. Modal renders a Retry button only
+        // when an error is set. Anonymous / archive / custom paths
+        // never set submitError, so the button never appears for
+        // them — no need to gate at the call site.
+        onRetry={runSubmit}
         previousBestMs={previousBestMs}
         shareEnabled={shareEnabled}
         dailyDate={dailyDate}

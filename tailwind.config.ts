@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import animate from "tailwindcss-animate";
 
 // Tailwind config wired for shadcn/ui design tokens.
 // All custom colors are exposed as CSS variables in app/globals.css so we can
@@ -85,7 +86,7 @@ const config: Config = {
       },
     },
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: [animate],
 };
 
 export default config;

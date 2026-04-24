@@ -124,6 +124,17 @@ export type DetectInput = {
   // True when the puzzle is solved — guards against firing as the
   // completion modal mounts.
   isComplete: boolean;
+  // RAZ-75: `elapsedMs` value at the moment the player last did
+  // something on the board (value placement, erase, notes toggle,
+  // bulk auto-notes, undo/redo, hint placement). Independent of the
+  // event-log telemetry buffer, which is double-gated on a flag AND
+  // a per-user setting (default off) — so for the vast majority of
+  // players the buffer was always empty and the idle detector would
+  // fall back to elapsedMs and never reset.
+  // Null means "no input yet this attempt"; the idle detector
+  // treats that as "use elapsedMs as the anchor", preserving the
+  // existing UX of "you opened the puzzle and stared at it".
+  lastInputAtMs: number | null;
 };
 
 // Public entry point. Returns the highest-priority signal, or null
@@ -197,16 +208,28 @@ function detectRepeat(input: DetectInput): StuckSignal | null {
   };
 }
 
-// Idle detector — fires when there have been no events for
-// `IDLE_THRESHOLD_MS`. We use the LAST event's `t` as the anchor
-// rather than a wall-clock "last activity" timestamp because `t` is
-// monotonic in elapsed-game-time and pause-exclusive, matching how
-// `elapsedMs` is computed.
+// Idle detector — fires when the player hasn't done anything on the
+// board for `IDLE_THRESHOLD_MS`. The anchor is `lastInputAtMs`, an
+// always-on activity timestamp the store updates on every player
+// mutation (RAZ-75). When that anchor is null the player hasn't
+// done anything yet this attempt, and we use `elapsedMs` as the
+// gap so a player who opens the puzzle and stares at it for 90s
+// still gets the prompt.
+//
+// Historical note: pre-RAZ-75 the anchor was the LAST event in the
+// telemetry ring buffer. That buffer is double-gated on the
+// `event-log` flag AND the `recordEvents` setting (default off),
+// so for the vast majority of players the buffer was empty and the
+// detector silently fell back to `elapsedMs`. The visible symptom
+// was "Xs since your last move" never resetting on input — the
+// number ticked up forever and the chip never went away. The
+// `events` field stays in DetectInput because the repeat detector
+// still uses it; only the idle anchor changed.
 function detectIdle(input: DetectInput): StuckSignal | null {
-  // No events at all — the player started but hasn't placed anything.
-  // Use elapsedMs as the gap anchor.
-  const last = input.events[input.events.length - 1];
-  const sinceLast = last == null ? input.elapsedMs : input.elapsedMs - last.t;
+  const sinceLast =
+    input.lastInputAtMs == null
+      ? input.elapsedMs
+      : input.elapsedMs - input.lastInputAtMs;
   if (sinceLast < IDLE_THRESHOLD_MS) return null;
   return {
     kind: "idle",

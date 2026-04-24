@@ -563,3 +563,101 @@ describe("game-store: RAZ-42 auto-notes toggle", () => {
     expect(total).toBeGreaterThan(0);
   });
 });
+
+// RAZ-75: regression for the rescue-chip "Xs since last move" bug.
+// The activity anchor (`lastInputAtMs`) must be updated on every
+// player-driven board mutation, regardless of the event-log
+// gates. Without this, the idle detector falls back to elapsedMs
+// and the chip's countdown ticks up forever — never resetting on
+// a real move. We assert the field on the four core mutators.
+describe("game-store: RAZ-75 lastInputAtMs activity anchor", () => {
+  beforeEach(start);
+
+  it("starts as null on a fresh game", () => {
+    expect(useGameStore.getState().lastInputAtMs).toBeNull();
+  });
+
+  it("inputDigit (value mode) stamps lastInputAtMs to current elapsedMs", () => {
+    // Drive the clock manually — the test environment doesn't run
+    // the play page's tick loop. We bump elapsedMs first so we can
+    // assert the anchor captures the elapsed at placement time.
+    useGameStore.getState().tick(45_000);
+    const elapsedAtPlacement = useGameStore.getState().elapsedMs;
+
+    const target = 2; // known-empty cell in the sample puzzle
+    const { selectCell, inputDigit } = useGameStore.getState();
+    selectCell(target);
+    inputDigit(5);
+
+    expect(useGameStore.getState().lastInputAtMs).toBe(elapsedAtPlacement);
+  });
+
+  it("inputDigit (notes mode) stamps lastInputAtMs", () => {
+    useGameStore.getState().tick(30_000);
+    const elapsedAtPlacement = useGameStore.getState().elapsedMs;
+
+    const target = 2;
+    const { selectCell, toggleMode, inputDigit } = useGameStore.getState();
+    selectCell(target);
+    toggleMode(); // value → notes
+    inputDigit(7);
+
+    expect(useGameStore.getState().lastInputAtMs).toBe(elapsedAtPlacement);
+  });
+
+  it("eraseSelection stamps lastInputAtMs", () => {
+    // Place first so the erase has something to remove.
+    const target = 2;
+    const { selectCell, inputDigit, eraseSelection, tick } =
+      useGameStore.getState();
+    selectCell(target);
+    inputDigit(5);
+
+    tick(60_000);
+    const elapsedAtErase = useGameStore.getState().elapsedMs;
+    eraseSelection();
+
+    expect(useGameStore.getState().lastInputAtMs).toBe(elapsedAtErase);
+  });
+
+  it("toggleNoteOnSelection stamps lastInputAtMs", () => {
+    const target = 2;
+    const { selectCell, toggleNoteOnSelection, tick } =
+      useGameStore.getState();
+    selectCell(target);
+
+    tick(20_000);
+    const elapsedAtToggle = useGameStore.getState().elapsedMs;
+    toggleNoteOnSelection(3);
+
+    expect(useGameStore.getState().lastInputAtMs).toBe(elapsedAtToggle);
+  });
+
+  it("autoFillNotes stamps lastInputAtMs", () => {
+    useGameStore.getState().tick(15_000);
+    const elapsedAtAuto = useGameStore.getState().elapsedMs;
+    useGameStore.getState().autoFillNotes();
+
+    expect(useGameStore.getState().lastInputAtMs).toBe(elapsedAtAuto);
+  });
+
+  it("anchor advances on each successive input", () => {
+    // The bug class we're guarding against is "anchor never moves
+    // from its first value". Make sure consecutive placements move
+    // the timestamp forward as elapsedMs grows.
+    const { selectCell, inputDigit, tick } = useGameStore.getState();
+
+    selectCell(2);
+    tick(10_000);
+    inputDigit(5);
+    const first = useGameStore.getState().lastInputAtMs;
+    expect(first).toBe(10_000);
+
+    selectCell(3);
+    tick(20_000);
+    inputDigit(2);
+    const second = useGameStore.getState().lastInputAtMs;
+    expect(second).toBe(30_000);
+    expect(second).toBeGreaterThan(first as number);
+  });
+});

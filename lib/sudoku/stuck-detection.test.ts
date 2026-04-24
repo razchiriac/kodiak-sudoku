@@ -18,6 +18,11 @@ function makeInput(overrides: Partial<Parameters<typeof detectStuck>[0]> = {}) {
     conflictSinceMs: null,
     isRunning: true,
     isComplete: false,
+    // RAZ-75: default to null so existing tests keep their old
+    // semantics ("no input yet → use elapsedMs as the gap").
+    // Tests that exercise the post-input behaviour set this
+    // explicitly.
+    lastInputAtMs: null,
     ...overrides,
   };
 }
@@ -43,27 +48,54 @@ describe("detectStuck: gating", () => {
 });
 
 describe("detectStuck: idle detector", () => {
-  it("fires after 90s of no events from elapsedMs anchor", () => {
-    const sig = detectStuck(makeInput({ elapsedMs: 91_000, events: [] }));
+  it("fires after 90s with no input — uses elapsedMs as the gap", () => {
+    // Player opened the puzzle and stared at it: lastInputAtMs is
+    // null (the store's initial value), elapsedMs has crossed the
+    // threshold. The fallback path keeps the warmup-then-prompt
+    // UX for fresh attempts intact.
+    const sig = detectStuck(
+      makeInput({ elapsedMs: 91_000, lastInputAtMs: null }),
+    );
     expect(sig?.kind).toBe("idle");
     expect(sig?.reason).toMatch(/since your last move/);
   });
 
-  it("does NOT fire when last event was recent", () => {
+  it("does NOT fire when the last input was recent", () => {
+    // Player placed a digit 5s ago; gap = 5s < 90s threshold.
+    const sig = detectStuck(
+      makeInput({ elapsedMs: 100_000, lastInputAtMs: 95_000 }),
+    );
+    expect(sig).toBeNull();
+  });
+
+  it("RAZ-75 regression: resets on input even when events buffer is empty", () => {
+    // Pre-RAZ-75 the detector inferred "last move" from the
+    // events tail. For users with `recordEvents` off (the
+    // default) the buffer was always empty, so `sinceLast`
+    // collapsed to `elapsedMs` and the chip's "Xs since your
+    // last move" number ticked up forever, never resetting on
+    // input. We assert the new contract: an empty events buffer
+    // is fine as long as `lastInputAtMs` is fresh.
     const sig = detectStuck(
       makeInput({
-        elapsedMs: 100_000,
-        events: [placeEvent(0, 50_000)],
+        elapsedMs: 200_000,
+        events: [], // <- buffer is empty (recordEvents=false case)
+        lastInputAtMs: 199_500, // <- last input 0.5s ago
       }),
     );
     expect(sig).toBeNull();
   });
 
-  it("uses last event timestamp, not wall clock, for the gap", () => {
+  it("uses lastInputAtMs (not wall clock) for the gap", () => {
+    // 100s gap from the last input — over the 90s threshold.
+    // `events` is intentionally non-empty AND recent to prove
+    // it's NOT being consulted: the fact that we still fire
+    // means the detector reads `lastInputAtMs` exclusively.
     const sig = detectStuck(
       makeInput({
         elapsedMs: 200_000,
-        events: [placeEvent(0, 100_000)],
+        events: [placeEvent(0, 199_000)], // recent event — should be ignored by idle
+        lastInputAtMs: 100_000,
       }),
     );
     expect(sig?.kind).toBe("idle");

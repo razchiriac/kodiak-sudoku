@@ -56,6 +56,11 @@ export function useStuckDetector(): ActiveStuckSignal | null {
   const isPaused = useGameStore((s) => s.isPaused);
   const isComplete = useGameStore((s) => s.isComplete);
   const flagOn = useGameStore((s) => s.featureFlags.stuckRescue);
+  // RAZ-75: fresh activity anchor sourced from the store. Updates
+  // on every player mutation independent of the telemetry buffer
+  // gates, so the idle detector resets on a real move even when
+  // event recording is off.
+  const lastInputAtMs = useGameStore((s) => s.lastInputAtMs);
 
   // The conflict-since anchor — set when the conflict count
   // transitions 0 → non-zero, cleared when it returns to 0. We use a
@@ -104,6 +109,9 @@ export function useStuckDetector(): ActiveStuckSignal | null {
         conflictSinceMs,
         isRunning: !isPaused,
         isComplete,
+        // RAZ-75: pass the activity anchor through. The detector
+        // now uses this (not the events tail) to score idle.
+        lastInputAtMs,
       });
 
       // Suppress while in cooldown OR when the signal is cleared.
@@ -139,6 +147,10 @@ export function useStuckDetector(): ActiveStuckSignal | null {
     conflictSinceMs,
     isPaused,
     isComplete,
+    // RAZ-75: re-run the effect whenever the activity anchor changes
+    // so the idle bubble disappears immediately on the next input
+    // rather than waiting for the 5s tick interval.
+    lastInputAtMs,
   ]);
 
   return signal;

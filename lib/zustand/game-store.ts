@@ -324,6 +324,20 @@ type GameState = {
   // current one (all 9 copies on the board). Not persisted - always
   // starts null on a page load.
   activeDigit: number | null;
+  // RAZ-75: monotonic activity timestamp (in elapsedMs units) updated
+  // on EVERY player-driven board mutation — value placement, erase,
+  // notes toggle, bulk auto-notes, AND hint-applied placements. We
+  // need this as a separate field (rather than reusing the events
+  // ring buffer) because the buffer is double-gated on the
+  // `event-log` Edge Config flag AND the per-user `recordEvents`
+  // setting (default false), so the buffer is empty for most
+  // players. The idle detector previously inferred "last move" from
+  // the buffer's tail and silently fell back to `elapsedMs` when
+  // empty, which is why "Xs since last move" never reset on input.
+  // Null means "the player has not done anything yet this attempt"
+  // — the idle detector treats that as "use elapsedMs as the anchor"
+  // so the warmup-then-prompt UX for a fresh page-open still works.
+  lastInputAtMs: number | null;
 };
 
 type GameActions = {
@@ -501,6 +515,8 @@ const INITIAL: GameState = {
   events: [],
   eventSeq: 0,
   activeDigit: null,
+  // RAZ-75: starts null — see field comment in GameState.
+  lastInputAtMs: null,
 };
 
 // RAZ-16 helper. Given the digit that was just placed and the post-
@@ -651,6 +667,10 @@ function applyHintPlacement(
     // placements (e.g. a "perfect run with zero hints" signal relies
     // on being able to filter these out).
     events: maybeRecord(s, "h", idx, suggestion.digit),
+    // RAZ-75: a hint placement is still an action — it should reset
+    // the "Xs since last move" idle anchor so the rescue chip
+    // doesn't immediately re-fire after the player accepts one.
+    lastInputAtMs: s.elapsedMs,
   });
 }
 
@@ -781,6 +801,10 @@ export const useGameStore = create<GameState & GameActions>()(
             // progressive hint. The tier-2 "naked single at r3c7"
             // message would likely be wrong after the user edits notes.
             hintSession: null,
+            // RAZ-75: notes-mode toggle is also "the player did
+            // something" — keeps the idle detector quiet for players
+            // who solve primarily via pencil marks.
+            lastInputAtMs: s.elapsedMs,
           });
           return;
         }
@@ -886,6 +910,10 @@ export const useGameStore = create<GameState & GameActions>()(
           // the anti-cheat / replay analysis cares about the full
           // stream of clicks, not just the correct ones.
           events: maybeRecord(s, "v", idx, digit),
+          // RAZ-75: stamp the activity anchor so the idle detector
+          // (`useStuckDetector`) sees a fresh "last move" timestamp
+          // even when event recording is disabled.
+          lastInputAtMs: s.elapsedMs,
         });
       },
 
@@ -923,6 +951,8 @@ export const useGameStore = create<GameState & GameActions>()(
           notes: nextNotes,
           history: pushEntry(s.history, entry),
           hintSession: null,
+          // RAZ-75: long-press note toggle counts as activity.
+          lastInputAtMs: s.elapsedMs,
         });
       },
 
@@ -965,6 +995,8 @@ export const useGameStore = create<GameState & GameActions>()(
           // analysis (an unusually fast erase-then-fill pattern is a
           // telltale of a brute-force script).
           events: maybeRecord(s, "e", idx, 0),
+          // RAZ-75: erase counts as activity.
+          lastInputAtMs: s.elapsedMs,
         });
       },
 
@@ -1003,6 +1035,8 @@ export const useGameStore = create<GameState & GameActions>()(
           notes: nextNotes,
           history: pushEntry(s.history, entry),
           hintSession: null,
+          // RAZ-75: bulk auto-notes is a deliberate player action.
+          lastInputAtMs: s.elapsedMs,
         });
       },
 
@@ -1012,6 +1046,9 @@ export const useGameStore = create<GameState & GameActions>()(
         const u = undo(s.history);
         if (!u) return;
         const e = u.entry;
+        // RAZ-75: undo is a player action; capture the activity
+        // anchor once for whichever branch fires below.
+        const lastInputAtMs = s.elapsedMs;
         if (e.kind === "value") {
           const board = new Uint8Array(s.board);
           board[e.index] = e.prevValue;
@@ -1024,11 +1061,12 @@ export const useGameStore = create<GameState & GameActions>()(
             isComplete: isComplete(board, v),
             hintSession: null,
             // Lock isComplete back to false if undoing past the win.
+            lastInputAtMs,
           });
         } else if (e.kind === "note") {
           const notes = new Uint16Array(s.notes);
           notes[e.index] = e.prevMask;
-          set({ notes, history: u.next, hintSession: null });
+          set({ notes, history: u.next, hintSession: null, lastInputAtMs });
         } else {
           // notes-bulk: swap the entire notes buffer back. We copy so
           // the stored entry's prevNotes stays immutable for redo.
@@ -1036,6 +1074,7 @@ export const useGameStore = create<GameState & GameActions>()(
             notes: new Uint16Array(e.prevNotes),
             history: u.next,
             hintSession: null,
+            lastInputAtMs,
           });
         }
       },
@@ -1046,6 +1085,8 @@ export const useGameStore = create<GameState & GameActions>()(
         const r = redo(s.history);
         if (!r) return;
         const e = r.entry;
+        // RAZ-75: redo is a player action — same treatment as undo.
+        const lastInputAtMs = s.elapsedMs;
         if (e.kind === "value") {
           const board = new Uint8Array(s.board);
           board[e.index] = e.nextValue;
@@ -1057,17 +1098,19 @@ export const useGameStore = create<GameState & GameActions>()(
             conflicts: findConflicts(board, v),
             isComplete: isComplete(board, v),
             hintSession: null,
+            lastInputAtMs,
           });
         } else if (e.kind === "note") {
           const notes = new Uint16Array(s.notes);
           notes[e.index] = e.nextMask;
-          set({ notes, history: r.next, hintSession: null });
+          set({ notes, history: r.next, hintSession: null, lastInputAtMs });
         } else {
           // notes-bulk: re-apply the recomputed candidates.
           set({
             notes: new Uint16Array(e.nextNotes),
             history: r.next,
             hintSession: null,
+            lastInputAtMs,
           });
         }
       },

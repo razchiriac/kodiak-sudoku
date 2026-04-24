@@ -2,22 +2,37 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getServerSupabase } from "@/lib/supabase/server";
 
-// RAZ-73 — DEV-ONLY test-login route.
+// RAZ-73 — DEV-ONLY / preview-only test-login route.
 //
 // This route exists solely to give Playwright a way to obtain a
 // real Supabase session cookie without going through the magic-link
 // email flow (which requires SMTP and a human inbox). It is locked
 // down with two independent guards:
 //
-//   1. NODE_ENV must NOT be "production". A leaked deploy that
-//      somehow inherits this file simply cannot serve it.
-//   2. ENABLE_TEST_LOGIN must be exactly "1". Even in dev, you
-//      have to opt in. Forgetting to set this is the worst that
-//      can happen.
+//   1. The Vercel production deploy must NEVER serve this. We key
+//      off VERCEL_ENV rather than NODE_ENV because Vercel sets
+//      NODE_ENV=production for ALL non-`vercel dev` builds (incl.
+//      preview deploys), which would lock the route out of CI.
+//      VERCEL_ENV is set to "production" only for the actual
+//      production deploy; "preview" / "development" are safe.
+//      When VERCEL_ENV is unset (e.g. local `next dev` outside
+//      Vercel), we treat that as non-production.
+//   2. ENABLE_TEST_LOGIN must be exactly "1". Even in dev or on a
+//      preview deploy, you have to opt in. Forgetting to set this
+//      is the worst that can happen — the route just 404s.
 //
 // Both guards must be true. If either fails we return 404 (NOT
 // 403): a 404 doesn't even confirm the route exists, which is
 // the right defence-in-depth posture for a dev-only auth bypass.
+//
+// In CI (RAZ-73 Phase 3) this means:
+//   - Set ENABLE_TEST_LOGIN=1 in the Vercel project's *Preview*
+//     environment (Project Settings → Environment Variables).
+//     Production must NOT have it set, but even if it leaks,
+//     the VERCEL_ENV guard above blocks it.
+//   - The GitHub Actions e2e workflow ALSO sets ENABLE_TEST_LOGIN=1
+//     on the runner so playwright.config.ts adds the authed
+//     projects to the run.
 //
 // Mechanism:
 //   - Service-role admin client looks up (or creates on first
@@ -44,7 +59,19 @@ const DEFAULT_TEST_EMAIL = "e2e+playwright@example.test";
 type LoginBody = { email?: string; next?: string };
 
 function isEnabled(): boolean {
-  if (process.env.NODE_ENV === "production") return false;
+  // Vercel production deploy: hard-block. VERCEL_ENV is set by the
+  // Vercel runtime; locally it's undefined, which we treat as safe.
+  if (process.env.VERCEL_ENV === "production") return false;
+  // Belt-and-braces: even outside Vercel, refuse if NODE_ENV is
+  // "production" without VERCEL_ENV being set to something safe.
+  // (E.g. someone self-hosting with `next start` and NODE_ENV=production
+  // but no Vercel envs at all.) We only allow the "production-y"
+  // NODE_ENV when VERCEL_ENV explicitly says preview/development.
+  const isProdNode = process.env.NODE_ENV === "production";
+  const vercelEnv = process.env.VERCEL_ENV;
+  if (isProdNode && vercelEnv !== "preview" && vercelEnv !== "development") {
+    return false;
+  }
   return process.env.ENABLE_TEST_LOGIN === "1";
 }
 

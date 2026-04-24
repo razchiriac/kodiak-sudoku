@@ -27,11 +27,14 @@ test.describe("authed: profile", () => {
 
     const url = page.url();
     if (/\/profile\/edit/.test(url)) {
-      // First-time landing: the editor's heading is unambiguous.
+      // First-time landing: the editor's heading is "Set your
+      // username" (see app/profile/edit/page.tsx). We accept any
+      // heading that mentions either "username" or "profile" so
+      // a future copy tweak doesn't take this test down.
       await expect(
-        page.getByRole("heading", { level: 1, name: /pick (a|your) username/i }).or(
-          page.getByRole("heading", { level: 1, name: /profile/i }),
-        ),
+        page
+          .getByRole("heading", { level: 1, name: /username/i })
+          .or(page.getByRole("heading", { level: 1, name: /profile/i })),
       ).toBeVisible();
       await expect(page.getByLabel(/username/i)).toBeVisible();
     } else {

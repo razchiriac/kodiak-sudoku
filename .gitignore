@@ -11,6 +11,11 @@ coverage
 playwright-report/
 test-results/
 .playwright/
+# RAZ-73: storage state captured by the dev-only auth setup. Never
+# commit — even though the test user is fake, the file contains a
+# real Supabase session JWT against whatever project the dev server
+# is pointed at.
+playwright/.auth/
 
 # next.js
 .next

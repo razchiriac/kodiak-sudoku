@@ -29,6 +29,19 @@ import { defineConfig, devices } from "@playwright/test";
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000";
 const startOwnServer = process.env.PLAYWRIGHT_START_SERVER === "1";
 
+// RAZ-73 — Authed projects live behind an env switch. The
+// /api/test/login route ALSO requires this env to be set on the
+// dev server, so flipping it on at the playwright level without
+// also setting it on the dev server will surface as a clear
+// "POST /api/test/login returned 404" message during setup.
+const authedEnabled = process.env.ENABLE_TEST_LOGIN === "1";
+
+// Path used by both the setup project (writes) and the authed
+// projects (read via storageState). Re-exported from
+// `e2e/auth.setup.ts` for the spec files; declared here so the
+// config can stay self-contained.
+const AUTH_STATE = "playwright/.auth/user.json";
+
 export default defineConfig({
   testDir: "./e2e",
 
@@ -64,16 +77,52 @@ export default defineConfig({
   },
 
   projects: [
+    // Anonymous projects — match every spec EXCEPT the authed ones
+    // under e2e/authed/. We use testIgnore (rather than relying on
+    // storageState being absent) so an anonymous run never even
+    // tries to read the auth file.
     {
       name: "chromium-desktop",
       use: { ...devices["Desktop Chrome"] },
+      testIgnore: /authed\//,
     },
     {
       name: "chromium-mobile",
       // Pixel 7 is a representative Android viewport (412x915).
       // iPhone would need WebKit which we skip for now.
       use: { ...devices["Pixel 7"] },
+      testIgnore: /authed\//,
     },
+    // RAZ-73 — Authed projects. Conditionally added so they don't
+    // pollute the anonymous run with skipped scaffolding when the
+    // dev-only login route is off.
+    ...(authedEnabled
+      ? [
+          {
+            name: "setup",
+            testMatch: /.*\.setup\.ts/,
+            use: { ...devices["Desktop Chrome"] },
+          },
+          {
+            name: "chromium-desktop-authed",
+            use: {
+              ...devices["Desktop Chrome"],
+              storageState: AUTH_STATE,
+            },
+            testMatch: /authed\/.*\.spec\.ts/,
+            dependencies: ["setup"],
+          },
+          {
+            name: "chromium-mobile-authed",
+            use: {
+              ...devices["Pixel 7"],
+              storageState: AUTH_STATE,
+            },
+            testMatch: /authed\/.*\.spec\.ts/,
+            dependencies: ["setup"],
+          },
+        ]
+      : []),
   ],
 
   // When PLAYWRIGHT_START_SERVER=1, start the dev server ourselves

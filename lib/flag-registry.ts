@@ -341,4 +341,21 @@ export const FLAG_REGISTRY: readonly FlagSpec[] = [
       "Expose a settings toggle that tints wrong placements red in real time (random puzzles only — daily solutions stay server-side).",
     linearId: "RAZ-15",
   },
+  {
+    // RAZ-47: Technique Journey. When on, /learn is reachable and the
+    // /play hub surfaces a small "Learn techniques" CTA. Each lesson
+    // is a near-complete board centered on a single deductive
+    // technique (naked single, hidden single, etc.); the player fills
+    // the empty cells and the lesson auto-completes when every empty
+    // cell holds the correct digit. Anonymous progress is persisted
+    // to localStorage; signed-in user persistence + the unlock graph
+    // arrive in a follow-up PR. Flag off = /learn 404s and the hub
+    // CTA disappears entirely.
+    key: "technique-journey",
+    envKey: "FLAG_TECHNIQUE_JOURNEY",
+    defaultValue: true,
+    description:
+      "Expose /learn (Technique Journey) — guided lessons on Sudoku deduction techniques with auto-graded mini-puzzles.",
+    linearId: "RAZ-47",
+  },
 ];

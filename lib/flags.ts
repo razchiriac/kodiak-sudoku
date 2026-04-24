@@ -287,6 +287,16 @@ export const techniqueJourney = declareFlag("technique-journey");
 // puzzle solution to the model.
 export const aiDebrief = declareFlag("ai-debrief");
 
+// RAZ-58 - Personal AI Coach. When on, the play screen shows a "Coach"
+// button next to the timer; tapping it opens a dialog that fetches a
+// short, context-aware coach card. The card may include a "Try this
+// move" CTA that places a digit — but ONLY if the model's suggestion
+// is verified against the deterministic solver server-side. Default
+// off until P2 (beginner cohort default-on per the rollout plan in
+// RAZ-58); flipping in Edge Config moves any cohort from beta to live
+// without a deploy.
+export const aiCoach = declareFlag("ai-coach");
+
 // RAZ-15 - Per-cell mistake indicator. When on, the settings dialog
 // exposes a "Show mistakes" toggle; if the user enables it AND the
 // client has the puzzle solution (i.e. random non-daily puzzles where

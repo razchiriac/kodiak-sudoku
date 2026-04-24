@@ -25,6 +25,7 @@ import {
   pbRibbon,
   postGameBreakdown,
   aiDebrief,
+  aiCoach,
   printPuzzle,
   stuckRescue,
   eventLog,
@@ -134,6 +135,10 @@ export default async function DailyPage({
   // call, so this prop just hides the surface when the kill-switch
   // is flipped via Edge Config.
   const aiDebriefEnabled = await aiDebrief();
+  // RAZ-58 / ai-coach flag. Same render-gate pattern as the debrief
+  // above; the Coach button hides instantly when the kill-switch
+  // flips in Edge Config.
+  const aiCoachEnabled = await aiCoach();
 
   // RAZ-48 / stuck-rescue flag. Forwarded to PlayClient.
   const stuckRescueEnabled = await stuckRescue();
@@ -201,6 +206,7 @@ export default async function DailyPage({
         modePresetsEnabled={modePresetsEnabled}
         breakdownEnabled={breakdownEnabled}
         aiDebriefEnabled={aiDebriefEnabled}
+        aiCoachEnabled={aiCoachEnabled}
         stuckRescueEnabled={stuckRescueEnabled}
       />
     </>

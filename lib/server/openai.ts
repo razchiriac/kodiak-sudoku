@@ -63,6 +63,17 @@ export function debriefModel(): string {
   return env && env.length > 0 ? env : "gpt-5.4-mini";
 }
 
+// RAZ-58 — Coach model selection. Independent env var from debrief so
+// we can dial the coach up to a reasoning-tier model (the whole point
+// of the coach is "explain WHY the next move works", which benefits
+// from a more capable model) while keeping the debrief on the cheap
+// tier. Defaults to the same small model when unset so dev and tests
+// don't accidentally start spending more after a config diff.
+export function coachModel(): string {
+  const env = process.env.OPENAI_MODEL_COACH?.trim();
+  return env && env.length > 0 ? env : "gpt-5.4-mini";
+}
+
 // Lazy singleton accessor. Returns `null` (not throws) when no key is
 // configured so callers can branch cleanly:
 //

@@ -376,4 +376,32 @@ export const FLAG_REGISTRY: readonly FlagSpec[] = [
       "Render AI-generated post-game debrief card in the completion modal (uses sanitized aggregates only; no solution is sent to the model).",
     linearId: "RAZ-61",
   },
+  {
+    // RAZ-58: Personal AI Coach. Adds a "Coach" button on the play
+    // screen that opens a dialog with a context-aware coach card —
+    // a short prose nudge + a rationale + an optional "Try this move"
+    // CTA that places a solver-validated digit. The flag controls
+    // whether the button RENDERS at all; the model call is gated
+    // independently by OPENAI_API_KEY (no key → deterministic fallback
+    // wraps `nextHint`).
+    //
+    // Default OFF for v1 (opt-in beta per the rollout plan in RAZ-58
+    // P1). The OpenAI flag-defaulting policy is "default true so
+    // previews exercise the path", but the coach changes the GAMEPLAY
+    // surface — we want to validate UX with a small cohort before
+    // turning it on for everyone, so this is a deliberate exception
+    // documented here.
+    //
+    // Critical safety property: every move suggestion the model emits
+    // is validated against the deterministic solver before reaching
+    // the user (see `validateSuggestion` in lib/server/coach.ts).
+    // Hallucinated placements are dropped on the floor; the prose can
+    // still render alongside, just without the "Try this move" button.
+    key: "ai-coach",
+    envKey: "FLAG_AI_COACH",
+    defaultValue: false,
+    description:
+      "Render the in-game AI Coach button + dialog. Suggestions are validated against the deterministic solver before reaching the user; hallucinated moves are dropped.",
+    linearId: "RAZ-58",
+  },
 ];

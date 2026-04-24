@@ -239,6 +239,20 @@ describe("LESSONS catalog sanity", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
+  it("keeps the singles-tier lessons in the intended unlock order", () => {
+    // RAZ-84: the journey map renders the catalog in array order, so
+    // this is a content contract, not just a style preference. The
+    // player should learn naked singles first, then hidden singles,
+    // then a mixed checkpoint that asks them to choose between both.
+    expect(LESSONS.map((l) => l.id)).toEqual([
+      "naked-single-intro",
+      "naked-single-practice",
+      "hidden-single-intro",
+      "hidden-single-practice",
+      "singles-mixed-practice",
+    ]);
+  });
+
   it("simulator solves every lesson without ever falling back to 'from-solution'", () => {
     // The "from-solution" technique means the solver couldn't find a
     // naked or hidden single, so it just looked up the answer. That's
@@ -274,6 +288,37 @@ describe("LESSONS catalog sanity", () => {
           `lesson "${lesson.id}" is labelled naked-single but step at index ${step.index} required ${step.technique}`,
         ).toBe("naked-single");
       }
+    }
+  });
+
+  it("a 'hidden-single' lesson starts with a hidden-single step", () => {
+    // This is the RAZ-84 safety net. Hidden-single boards need decoy
+    // empties; otherwise the first move silently becomes a naked
+    // single and the lesson teaches the wrong habit. Later steps may
+    // become naked singles as the board opens up — that is fine.
+    for (const lesson of LESSONS) {
+      if (lesson.technique !== "hidden-single") continue;
+      const result = simulateLessonSolve(lesson);
+      expect(result.steps[0]?.technique, `lesson "${lesson.id}" first step`).toBe(
+        "hidden-single",
+      );
+    }
+  });
+
+  it("a 'mixed' lesson uses both naked-single and hidden-single steps", () => {
+    // A mixed lesson should be more than a relabelled practice board:
+    // it must make the player switch between both singles strategies.
+    for (const lesson of LESSONS) {
+      if (lesson.technique !== "mixed") continue;
+      const result = simulateLessonSolve(lesson);
+      const techniques = new Set(result.steps.map((s) => s.technique));
+      expect(techniques.has("naked-single"), `lesson "${lesson.id}" naked step`).toBe(
+        true,
+      );
+      expect(
+        techniques.has("hidden-single"),
+        `lesson "${lesson.id}" hidden step`,
+      ).toBe(true);
     }
   });
 });

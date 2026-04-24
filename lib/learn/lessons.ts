@@ -27,11 +27,17 @@
 //      localStorage (and eventually the DB) as completion keys.
 //      Renaming a lesson is fine; renaming the id wipes progress.
 //
-// A note on the v0 catalog: this PR ships two naked-single-themed
-// lessons to validate the framework end-to-end. Hidden-single,
-// pointing-pair, and box-line-reduction lessons land in a follow-up
-// once we curate puzzles whose first move *requires* the named
-// technique (i.e. no naked single is available before then).
+// RAZ-84 expands the singles tier with curated hidden-single and
+// mixed-singles lessons. The important authoring rule for every
+// hidden-single board is: the FIRST solver step must be hidden-single,
+// not naked-single. That forces the lesson to teach "scan the unit for
+// the only possible home for a digit" instead of quietly degrading into
+// another naked-single drill. The tests assert this contract.
+//
+// Pointing-pair, box-line, subset, and advanced lessons still need
+// solver support before they can be tested honestly. Do NOT add those
+// as static catalog entries until `nextHint()` knows their techniques;
+// otherwise the lesson would either stall or fall back to the solution.
 
 export type LessonTechnique = "naked-single" | "hidden-single" | "mixed";
 
@@ -123,6 +129,94 @@ const NAKED_SINGLE_PRACTICE_EMPTY = [
   80, // r9c9 = 9
 ] as const;
 
+// LESSON 3 — Hidden Singles, intro.
+//
+// Unlike naked-single lessons, a hidden-single lesson needs "decoy"
+// empty cells. If we only clear a few cells from a solved board, each
+// target usually becomes a naked single because its peers already
+// eliminate every other digit. This curated board has 41 empty cells:
+// enough ambiguity that the opening move is NOT obvious from one cell's
+// candidate list, while still being solvable by hidden/naked singles
+// only. The first five solver steps are hidden singles in rows 1, 2, 4,
+// 3, and 7, which gives the player repeated practice with the unit-scan
+// idea before the board collapses into easier naked singles.
+const HIDDEN_SINGLE_INTRO_PUZZLE =
+  "010300805" +
+  "839650020" +
+  "200081030" +
+  "102730009" +
+  "080006010" +
+  "060510302" +
+  "096803100" +
+  "508090263" +
+  "000065000";
+
+const HIDDEN_SINGLE_INTRO_SOLUTION =
+  "614372895" +
+  "839654721" +
+  "275981436" +
+  "152738649" +
+  "983246517" +
+  "467519382" +
+  "796823154" +
+  "548197263" +
+  "321465978";
+
+// LESSON 4 — Hidden Singles, practice.
+//
+// A denser practice board with seven hidden-single steps before the
+// naked singles take over. The first move is r1c4 = 5 by scanning row 1:
+// several cells have multiple candidates, but 5 has only one legal home.
+const HIDDEN_SINGLE_PRACTICE_PUZZLE =
+  "903000080" +
+  "000070050" +
+  "850936001" +
+  "190820700" +
+  "508709320" +
+  "020050198" +
+  "200065837" +
+  "005097012" +
+  "030000509";
+
+const HIDDEN_SINGLE_PRACTICE_SOLUTION =
+  "973541286" +
+  "641278953" +
+  "852936471" +
+  "194823765" +
+  "568719324" +
+  "327654198" +
+  "219465837" +
+  "485397612" +
+  "736182549";
+
+// LESSON 5 — Mixed Singles practice.
+//
+// This one intentionally mixes hidden singles and naked singles. The
+// player should no longer ask "which technique is this lesson about?"
+// and instead practice the real solving loop: scan a unit for hidden
+// singles, then grab naked singles as the board opens up.
+const SINGLES_MIXED_PUZZLE =
+  "090501082" +
+  "200830045" +
+  "385040160" +
+  "950308004" +
+  "020090070" +
+  "041700000" +
+  "100000430" +
+  "508409006" +
+  "409003850";
+
+const SINGLES_MIXED_SOLUTION =
+  "794561382" +
+  "216837945" +
+  "385942167" +
+  "957328614" +
+  "623194578" +
+  "841756293" +
+  "172685439" +
+  "538419726" +
+  "469273851";
+
 export const LESSONS: readonly Lesson[] = [
   {
     id: "naked-single-intro",
@@ -151,6 +245,48 @@ export const LESSONS: readonly Lesson[] = [
     ].join("\n\n"),
     puzzle: carve(SHARED_SOLUTION, NAKED_SINGLE_PRACTICE_EMPTY),
     solution: SHARED_SOLUTION,
+  },
+  {
+    id: "hidden-single-intro",
+    title: "Hidden Singles",
+    tagline: "Find the only home for a digit inside one unit.",
+    technique: "hidden-single",
+    difficultyBucket: 2,
+    intro: [
+      "A **hidden single** is different from a naked single. The cell may still have multiple candidate digits, but one digit has only one possible home in a row, column, or 3×3 box.",
+      "**How to scan:** pick a unit, choose one missing digit, and ask: “where could this digit go?” If only one empty cell can accept it, that cell is a hidden single.",
+      "This board starts with several hidden singles. Do not just look for cells with one candidate — scan rows, columns, and boxes for digits with one legal home.",
+    ].join("\n\n"),
+    puzzle: HIDDEN_SINGLE_INTRO_PUZZLE,
+    solution: HIDDEN_SINGLE_INTRO_SOLUTION,
+  },
+  {
+    id: "hidden-single-practice",
+    title: "Hidden Singles — Practice",
+    tagline: "Scan each unit until a digit has only one landing spot.",
+    technique: "hidden-single",
+    difficultyBucket: 2,
+    intro: [
+      "Hidden singles often appear before the board looks easy. A row can have five empty cells and still force one digit because the other empty cells are blocked by their columns or boxes.",
+      "**Tip:** write down the missing digits for a row, then test one digit at a time. You are not asking “what can this cell be?” — you are asking “where can this digit go?”",
+      "Solve the board using hidden singles first, then clean up any naked singles that appear afterward.",
+    ].join("\n\n"),
+    puzzle: HIDDEN_SINGLE_PRACTICE_PUZZLE,
+    solution: HIDDEN_SINGLE_PRACTICE_SOLUTION,
+  },
+  {
+    id: "singles-mixed-practice",
+    title: "Singles — Mixed Practice",
+    tagline: "Use naked and hidden singles together.",
+    technique: "mixed",
+    difficultyBucket: 2,
+    intro: [
+      "Real puzzles do not announce which technique comes next. This checkpoint mixes **naked singles** and **hidden singles** so you can practice choosing the right scan.",
+      "If one cell has a single candidate, place it. If no cell looks forced, scan a row, column, or box for a digit with only one possible home.",
+      "The lesson completes when the board is solved. No advanced techniques are required.",
+    ].join("\n\n"),
+    puzzle: SINGLES_MIXED_PUZZLE,
+    solution: SINGLES_MIXED_SOLUTION,
   },
 ];
 

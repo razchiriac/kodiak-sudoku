@@ -265,6 +265,18 @@ export const stuckRescue = declareFlag("stuck-rescue");
 // level — re-enabling the flag restores the picker pre-selected).
 export const modePresets = declareFlag("mode-presets");
 
+// RAZ-47 - Technique Journey. When on, /learn is reachable: a guided
+// learning path that walks new players through each Sudoku deduction
+// technique in turn. Each lesson presents a near-complete board
+// centered on the lesson's technique; the player fills the empty
+// cells and the lesson grades itself by comparing every placement to
+// the puzzle's solution. Anonymous progress is persisted to
+// localStorage so a logged-out player can still take the journey;
+// signed-in user persistence + the unlock-graph view of the lesson
+// list arrive in a follow-up. Flag off = /learn 404s and the play
+// hub CTA disappears entirely.
+export const techniqueJourney = declareFlag("technique-journey");
+
 // RAZ-15 - Per-cell mistake indicator. When on, the settings dialog
 // exposes a "Show mistakes" toggle; if the user enables it AND the
 // client has the puzzle solution (i.e. random non-daily puzzles where

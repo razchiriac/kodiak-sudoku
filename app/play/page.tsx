@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Calendar, Sparkles, Swords } from "lucide-react";
+import { Calendar, GraduationCap, Sparkles, Swords } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DIFFICULTY_LABEL } from "@/lib/utils";
 import { getCurrentUser } from "@/lib/supabase/server";
 import { listRecentSavedGames } from "@/lib/db/queries";
-import { modePresets } from "@/lib/flags";
+import { modePresets, techniqueJourney } from "@/lib/flags";
 import { ModePresetPicker } from "@/components/game/mode-preset-picker";
 
 // Reads the caller's session and saved games; never static.
@@ -20,6 +20,11 @@ export default async function PlayHomePage() {
   // picker hides itself instantly when the flag is off — no flicker
   // from a client effect that runs after first paint.
   const modePresetsEnabled = await modePresets();
+  // RAZ-47: same SSR-resolved-flag pattern. When off, the Learn CTA
+  // is omitted from the DOM entirely (not hidden via CSS) so the
+  // grid below collapses cleanly to two cards. Off-flag = the route
+  // 404s anyway, so we never want to advertise a dead link.
+  const techniqueJourneyEnabled = await techniqueJourney();
 
   return (
     <div className="container max-w-3xl py-10">
@@ -95,6 +100,26 @@ export default async function PlayHomePage() {
             <div className="text-sm text-muted-foreground">See who's fastest today.</div>
           </div>
         </Link>
+        {/* RAZ-47: entry to the Technique Journey. Sits in the same
+            secondary-CTA grid as the daily and the diagonal variant
+            so it reads as one of "the other things you can do here"
+            rather than a top-of-page hero. Hidden entirely when the
+            flag is off — the route also 404s in that state, so this
+            keeps the UI honest. */}
+        {techniqueJourneyEnabled && (
+          <Link
+            href="/learn"
+            className="flex items-center gap-3 rounded-lg border bg-card p-4 hover:bg-accent"
+          >
+            <GraduationCap className="h-5 w-5 text-primary" />
+            <div>
+              <div className="font-medium">Learn techniques</div>
+              <div className="text-sm text-muted-foreground">
+                Guided lessons for naked singles and beyond.
+              </div>
+            </div>
+          </Link>
+        )}
       </section>
     </div>
   );

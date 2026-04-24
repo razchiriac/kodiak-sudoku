@@ -467,15 +467,40 @@ export function PlayClient({
     }
     setSubmitError(null);
     setSubmitting(true);
-    try {
-      // RAZ-78 timeout race. We can't actually cancel a server
-      // action mid-flight — the network request is in-flight and
-      // any DB writes it triggered will still happen. What we
-      // CAN do is ensure the UI doesn't pretend to wait forever:
-      // after SUBMIT_TIMEOUT_MS we surface a "timed_out" error
-      // and let the player retry. If the original request later
-      // succeeds, the dedupe keys on (user, puzzle, daily_date)
-      // mean the duplicate insert fails harmlessly with 23505.
+
+    // RAZ-81: payload is computed once and reused across the initial
+    // attempt + the auto-retry below so they share the same
+    // attemptId. The server's partial unique index on attempt_id
+    // turns the second insert into an idempotent no-op if the first
+    // attempt actually reached the DB but its response never made it
+    // back to the client (the most common shape we see in Vercel
+    // logs for this bug — a stalled RSC POST that the browser later
+    // retries on its own, plus our explicit retry here).
+    const payload = {
+      puzzleId: snap.meta.puzzleId,
+      board: snap.board,
+      elapsedMs: snap.elapsedMs,
+      mistakes: snap.mistakes,
+      hintsUsed: snap.hintsUsed,
+      mode: snap.meta.mode,
+      dailyDate: dailyDate ?? null,
+      attemptId: snap.attemptId ?? null,
+    };
+
+    // RAZ-78 timeout race. We can't actually cancel a server
+    // action mid-flight — the network request is in-flight and
+    // any DB writes it triggered will still happen. What we
+    // CAN do is ensure the UI doesn't pretend to wait forever:
+    // after SUBMIT_TIMEOUT_MS we surface a "timed_out" error
+    // and let the player retry. If the original request later
+    // succeeds, RAZ-81's attempt_id dedupe means the duplicate
+    // insert short-circuits server-side without polluting the
+    // leaderboard.
+    function runOnce(): Promise<
+      | Awaited<ReturnType<typeof submitCompletionAction>>
+      | { ok: false; error: "timed_out" }
+      | { ok: false; error: "thrown"; cause: unknown }
+    > {
       let timer: ReturnType<typeof setTimeout> | null = null;
       const timeout = new Promise<{ ok: false; error: "timed_out" }>(
         (resolve) => {
@@ -485,54 +510,115 @@ export function PlayClient({
           );
         },
       );
-      const submit = submitCompletionAction({
-        puzzleId: snap.meta.puzzleId,
-        board: snap.board,
-        elapsedMs: snap.elapsedMs,
-        mistakes: snap.mistakes,
-        hintsUsed: snap.hintsUsed,
-        mode: snap.meta.mode,
-        dailyDate: dailyDate ?? null,
+      // Wrap the action in a catch so a thrown error becomes a
+      // structured failure that the retry layer below can inspect
+      // and decide whether it's worth a second pass.
+      const submit = submitCompletionAction(payload).catch(
+        (cause: unknown) =>
+          ({ ok: false, error: "thrown", cause }) as const,
+      );
+      return Promise.race([submit, timeout]).finally(() => {
+        if (timer != null) clearTimeout(timer);
       });
-      const res = await Promise.race([submit, timeout]);
-      if (timer != null) clearTimeout(timer);
-      setSubmitting(false);
-      if (!res.ok) {
-        setSubmitError(res.error);
-        // RAZ-78: re-arm so a Retry click (or a state-change
-        // re-render) can run the submit again. Without this the
-        // submitted-once guard at the top of the effect would
-        // permanently block any future attempt.
-        submitted.current = false;
-        if (res.error === "timed_out") {
-          toast.error(
-            "Server didn't respond in 30 seconds. Tap Retry to try again.",
-          );
-        }
-        return;
+    }
+
+    // RAZ-81: classify a failure as "transient" — i.e. worth one
+    // automatic retry — vs "definitive". The vast majority of
+    // submit_failed reports trace back to network blips on
+    // cellular: the RSC POST never lands, the action never runs,
+    // there's no row in completed_games. A single auto-retry
+    // (with the SAME attemptId so the server can dedupe if the
+    // first attempt did secretly land) recovers cleanly.
+    //
+    // Definitive failures (validation, auth, already-completed,
+    // schema, time-floor, etc.) are NOT retried — they would
+    // produce the same result and just waste a round-trip. The
+    // 30s timeout is treated as transient because the most
+    // common cause is the request hanging mid-flight; a fresh
+    // attempt usually goes through quickly.
+    function isTransient(
+      res:
+        | Awaited<ReturnType<typeof submitCompletionAction>>
+        | { ok: false; error: "timed_out" }
+        | { ok: false; error: "thrown"; cause: unknown },
+    ): boolean {
+      if (res.ok) return false;
+      if (res.error === "timed_out") return true;
+      // The action's own ok:false errors come back as plain strings
+      // ("schema_invalid", "unauthenticated", etc.) — those are
+      // definitive and not worth retrying. The "thrown" variant is
+      // our internal wrapper from runOnce's .catch() and is the
+      // only one that carries a `cause`. Use `in` (rather than
+      // narrowing on `error === "thrown"`) so TypeScript accepts
+      // the access — error is widened to `string` after the union
+      // and discriminated narrowing fails.
+      if ("cause" in res) {
+        // Network errors throw a TypeError ("Failed to fetch",
+        // "Load failed", "NetworkError when attempting to fetch
+        // resource") in every major browser. AbortError fires
+        // when a navigation cancels the in-flight RSC POST.
+        const cause = res.cause as { name?: string; message?: string } | null;
+        const name = cause?.name ?? "";
+        const msg = (cause?.message ?? "").toLowerCase();
+        if (name === "TypeError" || name === "AbortError") return true;
+        if (msg.includes("fetch") || msg.includes("network")) return true;
       }
-      // RAZ-32: stash the rank context so the modal can render
-      // "You beat 73% of today's solvers". Null for random mode.
-      if (res.rankContext) setRankContext(res.rankContext);
-      // RAZ-10: surface newly-earned achievements as a series of
-      // toasts. We fan them out one at a time (rather than a
-      // single combined toast) so the player feels the individual
-      // pop for each one. Capped at 3 to avoid spamming on the
-      // rare first-solve case that unlocks multiple at once.
-      if (res.newlyEarned && res.newlyEarned.length > 0) {
-        for (const badge of res.newlyEarned.slice(0, 3)) {
-          toast.success(`Achievement unlocked: ${badge.title}`);
-        }
+      return false;
+    }
+
+    let res = await runOnce();
+    if (isTransient(res)) {
+      // Brief backoff so we're not hammering a flapping connection.
+      // Short enough that the player doesn't perceive it as a hang
+      // (the spinner is already showing) and long enough to let
+      // the radio stabilise after a momentary signal drop.
+      await new Promise((resolve) => setTimeout(resolve, 1_500));
+      res = await runOnce();
+    }
+
+    setSubmitting(false);
+
+    if (!res.ok) {
+      // Map our internal "thrown" wrapper back onto the same
+      // submit_failed code the modal already knows how to
+      // render — keeping the wire shape stable means the
+      // ERROR_COPY map in completion-modal.tsx doesn't need a
+      // new entry for the retry path.
+      const isThrown = "cause" in res;
+      const code = isThrown ? "submit_failed" : res.error;
+      if (isThrown) {
+        console.error(
+          "submitCompletionAction threw",
+          (res as { cause: unknown }).cause,
+        );
       }
-    } catch (err) {
-      // Defensive: a thrown action (rather than `{ ok: false }`).
-      // The previous IIFE swallowed this and left submitting=true
-      // forever. Treat the same as a structured failure.
-      console.error("submitCompletionAction threw", err);
-      setSubmitting(false);
-      setSubmitError("submit_failed");
+      setSubmitError(code);
+      // RAZ-78: re-arm so a Retry click (or a state-change
+      // re-render) can run the submit again. Without this the
+      // submitted-once guard at the top of the effect would
+      // permanently block any future attempt.
       submitted.current = false;
-      toast.error("Could not record completion. Tap Retry to try again.");
+      if (code === "timed_out") {
+        toast.error(
+          "Server didn't respond in 30 seconds. Tap Retry to try again.",
+        );
+      } else if (code === "submit_failed") {
+        toast.error("Could not record completion. Tap Retry to try again.");
+      }
+      return;
+    }
+    // RAZ-32: stash the rank context so the modal can render
+    // "You beat 73% of today's solvers". Null for random mode.
+    if (res.rankContext) setRankContext(res.rankContext);
+    // RAZ-10: surface newly-earned achievements as a series of
+    // toasts. We fan them out one at a time (rather than a
+    // single combined toast) so the player feels the individual
+    // pop for each one. Capped at 3 to avoid spamming on the
+    // rare first-solve case that unlocks multiple at once.
+    if (res.newlyEarned && res.newlyEarned.length > 0) {
+      for (const badge of res.newlyEarned.slice(0, 3)) {
+        toast.success(`Achievement unlocked: ${badge.title}`);
+      }
     }
   }, [snapshot, dailyDate]);
 

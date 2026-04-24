@@ -753,3 +753,62 @@ describe("game-store: RAZ-77 conflict haptic respects showMistakes", () => {
     expect(useGameStore.getState().mistakes).toBe(1);
   });
 });
+
+// RAZ-81: per-session idempotency token. The store mints a UUID on
+// startGame so submitCompletionAction can dedupe a flaky-network
+// retry storm (the actual UX bug we shipped this for: a player
+// completing /play/quick on a flapping cellular connection saw the
+// modal flash "submit_failed" while behind the scenes the same
+// solve was inserting twice into completed_games).
+describe("game-store: RAZ-81 attemptId idempotency token", () => {
+  beforeEach(start);
+
+  it("startGame mints a non-empty attemptId and exposes it on snapshot", () => {
+    const snap = useGameStore.getState().snapshot();
+    // Sanity: snapshot is available immediately after start.
+    expect(snap).not.toBeNull();
+    const id = snap?.attemptId ?? null;
+    expect(typeof id).toBe("string");
+    // randomAttemptId returns either a UUID v4 (36 chars) or the
+    // textual fallback `<ts36>-<r1>-<r2>` (≈ 27 chars). Both are
+    // comfortably above the 8-char Zod min on the server side.
+    expect((id ?? "").length).toBeGreaterThanOrEqual(8);
+  });
+
+  it("startGame mints a fresh attemptId per game", () => {
+    const first = useGameStore.getState().snapshot()?.attemptId;
+    // Re-start: same puzzle, different session, must NOT reuse the
+    // old token (otherwise a "play again" loop would dedupe-collide
+    // with the previous attempt's already-recorded completion).
+    start();
+    const second = useGameStore.getState().snapshot()?.attemptId;
+    expect(first).toBeTruthy();
+    expect(second).toBeTruthy();
+    expect(second).not.toBe(first);
+  });
+
+  it("resumeFromSnapshot preserves the attemptId from the snapshot", () => {
+    const snap = useGameStore.getState().snapshot();
+    expect(snap).not.toBeNull();
+    const original = snap!.attemptId;
+    expect(original).toBeTruthy();
+    // Resume from the same snapshot — the store should keep the
+    // token so a retry after a page reload still dedupes.
+    useGameStore.getState().resumeFromSnapshot(snap!, PUZZLE);
+    const after = useGameStore.getState().snapshot()?.attemptId;
+    expect(after).toBe(original);
+  });
+
+  it("resumeFromSnapshot mints a fresh attemptId when the snapshot has none", () => {
+    const snap = useGameStore.getState().snapshot();
+    expect(snap).not.toBeNull();
+    // Strip the field to simulate a snapshot from before this ticket
+    // (server-resume for a signed-in user, or a localStorage payload
+    // persisted before the partialize block learned about attemptId).
+    const stripped = { ...snap!, attemptId: null };
+    useGameStore.getState().resumeFromSnapshot(stripped, PUZZLE);
+    const after = useGameStore.getState().snapshot()?.attemptId;
+    expect(typeof after).toBe("string");
+    expect((after ?? "").length).toBeGreaterThanOrEqual(8);
+  });
+});

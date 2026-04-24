@@ -129,6 +129,14 @@ export const completedGames = pgTable(
     // 'random'. The leaderboard query joins on this field.
     dailyDate: date("daily_date"),
     completedAt: timestamp("completed_at", { withTimezone: true }).notNull().defaultNow(),
+    // RAZ-81: client-generated idempotency token, one per play session.
+    // The server action treats a unique-violation on this column as a
+    // "we already recorded this completion, return success" no-op so
+    // a flaky-network retry storm cannot pollute the random-mode
+    // leaderboard with duplicate rows. Nullable for the rows that
+    // existed before drizzle/migrations/0008; new submits are required
+    // to provide one (enforced in lib/server/actions.ts SubmitSchema).
+    attemptId: text("attempt_id"),
   },
   (t) => [
     check("completed_games_mode_check", sql`${t.mode} in ('random', 'daily')`),
@@ -146,6 +154,12 @@ export const completedGames = pgTable(
     uniqueIndex("completed_games_daily_user_bucket_uniq")
       .on(t.userId, t.dailyDate, t.difficultyBucket)
       .where(sql`${t.mode} = 'daily'`),
+    // RAZ-81: per-attempt dedupe. Partial index so historic NULLs from
+    // pre-migration rows don't collide. The matching SQL migration is
+    // drizzle/migrations/0008_completion_attempt_id.sql.
+    uniqueIndex("completed_games_attempt_id_uniq")
+      .on(t.attemptId)
+      .where(sql`${t.attemptId} is not null`),
   ],
 );
 

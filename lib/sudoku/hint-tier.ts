@@ -30,6 +30,13 @@ const UNIT_LABEL: Record<HintUnit, string> = {
 const TECHNIQUE_LABEL: Record<HintSuggestion["technique"], string> = {
   "naked-single": "Naked single",
   "hidden-single": "Hidden single",
+  "pointing-pair": "Pointing pair",
+  "box-line-reduction": "Box-line reduction",
+  "naked-pair": "Naked pair",
+  "naked-triple": "Naked triple",
+  "hidden-pair": "Hidden pair",
+  "x-wing": "X-Wing",
+  swordfish: "Swordfish",
   // "from-solution" is the fallback path when no human technique applies.
   // We don't want to lie to the player by inventing a fake technique name,
   // so we use a neutral copy for tier 2 that still tells them where to

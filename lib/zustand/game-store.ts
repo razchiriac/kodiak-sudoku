@@ -18,7 +18,7 @@ import {
   notesMatchComputedCandidates,
 } from "@/lib/sudoku/board";
 import { findConflicts, isComplete, isLegalPlacement } from "@/lib/sudoku/validate";
-import { nextHint, type HintSuggestion } from "@/lib/sudoku/solver";
+import { nextHint, type HintSuggestion, type HintTechnique } from "@/lib/sudoku/solver";
 import {
   emptyHistory,
   pushEntry,
@@ -406,9 +406,7 @@ type GameState = {
   // "from-solution" fallback the value is recorded as-is and the
   // tip detector decides not to surface a teachable message.
   lastHintTechnique:
-    | "naked-single"
-    | "hidden-single"
-    | "from-solution"
+    | HintTechnique
     | null;
 };
 
@@ -723,7 +721,7 @@ function applyHintPlacement(
   suggestion: {
     index: number;
     digit: number;
-    technique?: "naked-single" | "hidden-single" | "from-solution";
+    technique?: HintTechnique;
   },
   opts: { incrementCounter: boolean; clearSession: boolean },
   set: (partial: Partial<GameState>) => void,

@@ -35,6 +35,7 @@ import {
   simulateLessonSolve,
 } from "./journey";
 import { LESSONS, getLessonById, type Lesson } from "./lessons";
+import type { HintTechnique } from "../sudoku/solver";
 
 // Tiny helper: turn an 81-char string into a Uint8Array board. Used
 // by the evaluator tests to construct "player attempts" without
@@ -250,6 +251,16 @@ describe("LESSONS catalog sanity", () => {
       "hidden-single-intro",
       "hidden-single-practice",
       "singles-mixed-practice",
+      "pointing-pair-intro",
+      "box-line-reduction-intro",
+      "intersections-mixed-practice",
+      "naked-pair-intro",
+      "naked-triple-intro",
+      "hidden-pair-intro",
+      "subset-mixed-practice",
+      "x-wing-intro",
+      "swordfish-intro",
+      "capstone-mixed-practice",
     ]);
   });
 
@@ -305,20 +316,60 @@ describe("LESSONS catalog sanity", () => {
     }
   });
 
-  it("a 'mixed' lesson uses both naked-single and hidden-single steps", () => {
+  it("single-technique lessons start with their named deterministic technique", () => {
+    // These lessons are curated so the opening move demonstrates the
+    // named pattern immediately. X-Wing and Swordfish are advanced
+    // practice boards from public strategy examples; those remain
+    // solved without fallback but are not first-move contracts because
+    // simpler cleanup may appear before the fish pattern is useful.
+    const expectedFirstTechniqueById = new Map([
+      ["pointing-pair-intro", "pointing-pair"],
+      ["box-line-reduction-intro", "box-line-reduction"],
+      ["naked-pair-intro", "naked-pair"],
+      ["naked-triple-intro", "naked-triple"],
+      ["hidden-pair-intro", "hidden-pair"],
+    ]);
+    for (const lesson of LESSONS) {
+      const expected = expectedFirstTechniqueById.get(lesson.id);
+      if (!expected) continue;
+      const result = simulateLessonSolve(lesson);
+      expect(result.steps[0]?.technique, `lesson "${lesson.id}" first step`).toBe(
+        expected,
+      );
+    }
+  });
+
+  it("mixed lessons use their required technique mix", () => {
     // A mixed lesson should be more than a relabelled practice board:
-    // it must make the player switch between both singles strategies.
+    // it must make the player switch between the strategies its title
+    // promises.
+    const expectedById = new Map<string, HintTechnique[]>([
+      ["singles-mixed-practice", ["naked-single", "hidden-single"]],
+      [
+        "intersections-mixed-practice",
+        ["pointing-pair", "box-line-reduction"],
+      ],
+      [
+        "subset-mixed-practice",
+        ["naked-pair", "naked-triple", "hidden-pair"],
+      ],
+      [
+        "capstone-mixed-practice",
+        ["pointing-pair", "naked-pair", "hidden-pair"],
+      ],
+    ]);
     for (const lesson of LESSONS) {
       if (lesson.technique !== "mixed") continue;
       const result = simulateLessonSolve(lesson);
       const techniques = new Set(result.steps.map((s) => s.technique));
-      expect(techniques.has("naked-single"), `lesson "${lesson.id}" naked step`).toBe(
-        true,
-      );
-      expect(
-        techniques.has("hidden-single"),
-        `lesson "${lesson.id}" hidden step`,
-      ).toBe(true);
+      const expected = expectedById.get(lesson.id);
+      if (!expected) throw new Error(`missing expected mix for ${lesson.id}`);
+      for (const technique of expected) {
+        expect(
+          techniques.has(technique),
+          `lesson "${lesson.id}" includes ${technique}`,
+        ).toBe(true);
+      }
     }
   });
 });

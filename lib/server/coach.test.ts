@@ -134,7 +134,7 @@ describe("CoachOutputSchema", () => {
       suggestion: {
         cellIndex: 0,
         digit: 1,
-        technique: "x-wing" as unknown as never,
+        technique: "made-up-technique" as unknown as never,
       },
     });
     expect(out.success).toBe(false);

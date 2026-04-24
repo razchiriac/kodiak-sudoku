@@ -39,7 +39,17 @@
 // as static catalog entries until `nextHint()` knows their techniques;
 // otherwise the lesson would either stall or fall back to the solution.
 
-export type LessonTechnique = "naked-single" | "hidden-single" | "mixed";
+export type LessonTechnique =
+  | "naked-single"
+  | "hidden-single"
+  | "pointing-pair"
+  | "box-line-reduction"
+  | "naked-pair"
+  | "naked-triple"
+  | "hidden-pair"
+  | "x-wing"
+  | "swordfish"
+  | "mixed";
 
 export type Lesson = {
   // Stable, URL-safe identifier. NEVER renumber or repurpose — it
@@ -217,6 +227,226 @@ const SINGLES_MIXED_SOLUTION =
   "538419726" +
   "469273851";
 
+const POINTING_PAIR_INTRO_PUZZLE =
+  "000380060" +
+  "307250001" +
+  "090070023" +
+  "900005070" +
+  "430700109" +
+  "000010000" +
+  "009002000" +
+  "603000200" +
+  "200800006";
+
+const POINTING_PAIR_INTRO_SOLUTION =
+  "521389764" +
+  "367254981" +
+  "894671523" +
+  "918435672" +
+  "436728159" +
+  "752916348" +
+  "149562837" +
+  "683147295" +
+  "275893416";
+
+const BOX_LINE_REDUCTION_INTRO_PUZZLE =
+  "001078946" +
+  "000090000" +
+  "040500700" +
+  "002000000" +
+  "000102000" +
+  "400900008" +
+  "208650000" +
+  "034009600" +
+  "000020800";
+
+const BOX_LINE_REDUCTION_INTRO_SOLUTION =
+  "521378946" +
+  "786294153" +
+  "349516782" +
+  "912865437" +
+  "873142569" +
+  "465937218" +
+  "298651374" +
+  "134789625" +
+  "657423891";
+
+const INTERSECTIONS_MIXED_PUZZLE =
+  "000000000" +
+  "003700000" +
+  "000000000" +
+  "000040009" +
+  "036001000" +
+  "000025000" +
+  "070000060" +
+  "900000100" +
+  "321900008";
+
+const INTERSECTIONS_MIXED_SOLUTION =
+  "684219375" +
+  "153768294" +
+  "297534816" +
+  "812647539" +
+  "536891742" +
+  "749325681" +
+  "475182963" +
+  "968453127" +
+  "321976458";
+
+const NAKED_PAIR_INTRO_PUZZLE =
+  "060325009" +
+  "200809060" +
+  "050000832" +
+  "001082000" +
+  "600704083" +
+  "005003000" +
+  "000007620" +
+  "000200974" +
+  "000000350";
+
+const NAKED_PAIR_INTRO_SOLUTION =
+  "468325719" +
+  "237819465" +
+  "159476832" +
+  "341682597" +
+  "692754183" +
+  "875193246" +
+  "983547621" +
+  "516238974" +
+  "724961358";
+
+const NAKED_TRIPLE_INTRO_PUZZLE =
+  "070003008" +
+  "000754000" +
+  "000860030" +
+  "206300000" +
+  "000000080" +
+  "100500023" +
+  "400100052" +
+  "020000341" +
+  "000400000";
+
+const NAKED_TRIPLE_INTRO_SOLUTION =
+  "572913468" +
+  "638754219" +
+  "941862537" +
+  "256381794" +
+  "394276185" +
+  "187549623" +
+  "469137852" +
+  "725698341" +
+  "813425976";
+
+const HIDDEN_PAIR_INTRO_PUZZLE =
+  "021070930" +
+  "800020010" +
+  "700090200" +
+  "500002060" +
+  "000000572" +
+  "268507490" +
+  "000040000" +
+  "000000000" +
+  "002000140";
+
+const HIDDEN_PAIR_INTRO_SOLUTION =
+  "421675938" +
+  "859324617" +
+  "736891254" +
+  "547932861" +
+  "193468572" +
+  "268517493" +
+  "615243789" +
+  "974186325" +
+  "382759146";
+
+const SUBSET_MIXED_PUZZLE =
+  "090300000" +
+  "700804000" +
+  "003002000" +
+  "000000000" +
+  "800000000" +
+  "000086700" +
+  "900008004" +
+  "308927000" +
+  "002000000";
+
+const SUBSET_MIXED_SOLUTION =
+  "294361587" +
+  "716854392" +
+  "583792146" +
+  "657149823" +
+  "829573461" +
+  "431286759" +
+  "975618234" +
+  "348927615" +
+  "162435978";
+
+const X_WING_INTRO_PUZZLE =
+  "100000569" +
+  "402000008" +
+  "050009040" +
+  "000640801" +
+  "000010000" +
+  "208035000" +
+  "040500010" +
+  "900000402" +
+  "621000005";
+
+const X_WING_INTRO_SOLUTION =
+  "187423569" +
+  "492756138" +
+  "356189247" +
+  "539647821" +
+  "764218953" +
+  "218935674" +
+  "843592716" +
+  "975361482" +
+  "621874395";
+
+const SWORDFISH_INTRO_PUZZLE =
+  "000308002" +
+  "000040700" +
+  "001970080" +
+  "905003006" +
+  "037000520" +
+  "800500903" +
+  "070096100" +
+  "006030000" +
+  "400807000";
+
+const SWORDFISH_INTRO_SOLUTION =
+  "759318642" +
+  "382645791" +
+  "641972385" +
+  "925783416" +
+  "137469528" +
+  "864521973" +
+  "578296134" +
+  "296134857" +
+  "413857269";
+
+const CAPSTONE_MIXED_PUZZLE =
+  "008000000" +
+  "030008002" +
+  "294005073" +
+  "081009000" +
+  "000800005" +
+  "520000000" +
+  "010000458" +
+  "800003001" +
+  "002500007";
+
+const CAPSTONE_MIXED_SOLUTION =
+  "168372549" +
+  "735498612" +
+  "294615873" +
+  "481259736" +
+  "679834125" +
+  "523167984" +
+  "317926458" +
+  "856743291" +
+  "942581367";
+
 export const LESSONS: readonly Lesson[] = [
   {
     id: "naked-single-intro",
@@ -287,6 +517,146 @@ export const LESSONS: readonly Lesson[] = [
     ].join("\n\n"),
     puzzle: SINGLES_MIXED_PUZZLE,
     solution: SINGLES_MIXED_SOLUTION,
+  },
+  {
+    id: "pointing-pair-intro",
+    title: "Pointing Pairs",
+    tagline: "Use a box pattern to clean up a row or column.",
+    technique: "pointing-pair",
+    difficultyBucket: 3,
+    intro: [
+      "A **pointing pair** happens when every possible home for a digit inside one 3×3 box sits on the same row or column.",
+      "That means the digit must land in that box somewhere on that line, so you can remove that digit from the rest of the same row or column outside the box.",
+      "This lesson starts with a pointing-pair move. Use it to create the next forced placement, then keep solving with the singles you already know.",
+    ].join("\n\n"),
+    puzzle: POINTING_PAIR_INTRO_PUZZLE,
+    solution: POINTING_PAIR_INTRO_SOLUTION,
+  },
+  {
+    id: "box-line-reduction-intro",
+    title: "Box-Line Reduction",
+    tagline: "Use a row or column pattern to clean up a box.",
+    technique: "box-line-reduction",
+    difficultyBucket: 3,
+    intro: [
+      "**Box-line reduction** is the inverse of pointing pairs. If every possible home for a digit in one row or column sits inside the same 3×3 box, then that digit cannot appear elsewhere in the box.",
+      "Look for a row or column where a digit is trapped inside one box. Remove that digit from the rest of that box, then place the newly forced value.",
+      "The first move in this lesson is a box-line reduction. After that, the board opens into familiar singles and subset patterns.",
+    ].join("\n\n"),
+    puzzle: BOX_LINE_REDUCTION_INTRO_PUZZLE,
+    solution: BOX_LINE_REDUCTION_INTRO_SOLUTION,
+  },
+  {
+    id: "intersections-mixed-practice",
+    title: "Intersections — Mixed Practice",
+    tagline: "Switch between pointing pairs and box-line reductions.",
+    technique: "mixed",
+    difficultyBucket: 3,
+    intro: [
+      "Intersection techniques all ask the same question: is a digit trapped where a box and a line cross?",
+      "Sometimes the box points into a line. Sometimes the line points back into a box. Practice both directions here, then use singles to clean up.",
+      "This checkpoint includes both pointing-pair and box-line-reduction moments.",
+    ].join("\n\n"),
+    puzzle: INTERSECTIONS_MIXED_PUZZLE,
+    solution: INTERSECTIONS_MIXED_SOLUTION,
+  },
+  {
+    id: "naked-pair-intro",
+    title: "Naked Pairs",
+    tagline: "Two cells reserve two digits for themselves.",
+    technique: "naked-pair",
+    difficultyBucket: 3,
+    intro: [
+      "A **naked pair** appears when two cells in the same row, column, or box contain the exact same two candidates.",
+      "Those two digits must occupy those two cells, so every other cell in the unit can remove both digits from its candidates.",
+      "Use the pair to create a forced placement, then continue with singles.",
+    ].join("\n\n"),
+    puzzle: NAKED_PAIR_INTRO_PUZZLE,
+    solution: NAKED_PAIR_INTRO_SOLUTION,
+  },
+  {
+    id: "naked-triple-intro",
+    title: "Naked Triples",
+    tagline: "Three cells reserve three digits together.",
+    technique: "naked-triple",
+    difficultyBucket: 3,
+    intro: [
+      "A **naked triple** is the same idea as a naked pair, but spread across three cells and three digits.",
+      "The three cells do not all need the exact same candidates. What matters is that their combined candidates are exactly three digits.",
+      "Remove those three digits from the other cells in the unit, then place the digit that becomes forced.",
+    ].join("\n\n"),
+    puzzle: NAKED_TRIPLE_INTRO_PUZZLE,
+    solution: NAKED_TRIPLE_INTRO_SOLUTION,
+  },
+  {
+    id: "hidden-pair-intro",
+    title: "Hidden Pairs",
+    tagline: "Two digits hide inside the same two cells.",
+    technique: "hidden-pair",
+    difficultyBucket: 3,
+    intro: [
+      "A **hidden pair** appears when two digits can only go in the same two cells inside a row, column, or box.",
+      "Those two cells may have extra candidates written in, but the pair lets you remove every other candidate from those cells.",
+      "This lesson starts with a hidden-pair deduction and then collapses into easier placements.",
+    ].join("\n\n"),
+    puzzle: HIDDEN_PAIR_INTRO_PUZZLE,
+    solution: HIDDEN_PAIR_INTRO_SOLUTION,
+  },
+  {
+    id: "subset-mixed-practice",
+    title: "Subsets — Mixed Practice",
+    tagline: "Practice pairs, triples, and hidden pairs together.",
+    technique: "mixed",
+    difficultyBucket: 3,
+    intro: [
+      "Subset patterns reserve digits. Naked subsets reserve digits through visible candidate sets; hidden subsets reserve cells through where digits can appear.",
+      "This checkpoint includes naked pairs, naked triples, and hidden pairs. When you get stuck, ask what a pair or triple is reserving.",
+      "Finish the board without needing any fish techniques.",
+    ].join("\n\n"),
+    puzzle: SUBSET_MIXED_PUZZLE,
+    solution: SUBSET_MIXED_SOLUTION,
+  },
+  {
+    id: "x-wing-intro",
+    title: "X-Wing",
+    tagline: "Use two matching lines to eliminate a digit.",
+    technique: "x-wing",
+    difficultyBucket: 4,
+    intro: [
+      "An **X-Wing** appears when a digit can occupy the same two columns across two different rows (or the same two rows across two columns).",
+      "The digit must form the corners of that rectangle, so you can remove it from the rest of those columns or rows.",
+      "This advanced board is a curated X-Wing practice puzzle. Singles and pairs still appear along the way; use them whenever they unlock the next step.",
+    ].join("\n\n"),
+    puzzle: X_WING_INTRO_PUZZLE,
+    solution: X_WING_INTRO_SOLUTION,
+  },
+  {
+    id: "swordfish-intro",
+    title: "Swordfish",
+    tagline: "Track one digit across three rows or columns.",
+    technique: "swordfish",
+    difficultyBucket: 4,
+    intro: [
+      "A **Swordfish** is the three-line version of an X-Wing. One digit is confined to three columns across three rows, or three rows across three columns.",
+      "Those three lines reserve the digit's homes, letting you remove the digit from the rest of the intersecting lines.",
+      "This is a stretch technique. Use the easier singles and pairs as they appear, then look for the fish pattern when progress slows.",
+    ].join("\n\n"),
+    puzzle: SWORDFISH_INTRO_PUZZLE,
+    solution: SWORDFISH_INTRO_SOLUTION,
+  },
+  {
+    id: "capstone-mixed-practice",
+    title: "Technique Journey Capstone",
+    tagline: "Bring the whole toolkit together.",
+    technique: "mixed",
+    difficultyBucket: 4,
+    intro: [
+      "This capstone mixes singles, intersections, and subset patterns. It is meant to feel closer to a real Medium/Hard solve than a tiny isolated drill.",
+      "Do not force one technique. Scan for the easiest available move, place it, and let the next pattern emerge.",
+      "Completing this lesson means you can combine the core techniques from the journey instead of treating them as separate tricks.",
+    ].join("\n\n"),
+    puzzle: CAPSTONE_MIXED_PUZZLE,
+    solution: CAPSTONE_MIXED_SOLUTION,
   },
 ];
 

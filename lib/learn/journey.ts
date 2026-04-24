@@ -1,6 +1,6 @@
 import type { Lesson } from "./lessons";
 import type { Board } from "../sudoku/board";
-import { computeCandidates, nextHint } from "../sudoku/solver";
+import { computeCandidates, nextHint, type HintTechnique } from "../sudoku/solver";
 
 // RAZ-47 — Deterministic lesson evaluator.
 //
@@ -118,7 +118,7 @@ export type SimulateResult = {
   steps: Array<{
     index: number;
     digit: number;
-    technique: "naked-single" | "hidden-single" | "from-solution";
+    technique: HintTechnique;
   }>;
 };
 

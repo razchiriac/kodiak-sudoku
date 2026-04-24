@@ -358,4 +358,22 @@ export const FLAG_REGISTRY: readonly FlagSpec[] = [
       "Expose /learn (Technique Journey) — guided lessons on Sudoku deduction techniques with auto-graded mini-puzzles.",
     linearId: "RAZ-47",
   },
+  {
+    // RAZ-61: Post-Game AI Debrief. When on, the completion modal
+    // renders a small AI-generated debrief card (3 short bullets + a
+    // suggested next action) computed from the deterministic post-game
+    // breakdown numbers. The flag controls whether the card is RENDERED
+    // at all; the actual OpenAI call only fires when OPENAI_API_KEY is
+    // also set on the server. With the flag on but no key, the card
+    // still renders but shows the deterministic fallback copy — useful
+    // for previews where we want to validate UX without burning tokens.
+    // Server NEVER sends the puzzle solution to the model; only the
+    // sanitized aggregates from `computeBreakdown` are forwarded.
+    key: "ai-debrief",
+    envKey: "FLAG_AI_DEBRIEF",
+    defaultValue: true,
+    description:
+      "Render AI-generated post-game debrief card in the completion modal (uses sanitized aggregates only; no solution is sent to the model).",
+    linearId: "RAZ-61",
+  },
 ];

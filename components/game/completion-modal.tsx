@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { BreakdownPanel } from "@/components/game/breakdown-panel";
+import { AiDebriefCard } from "@/components/game/debrief-card";
 import { useGameStore } from "@/lib/zustand/game-store";
 import { DIFFICULTY_LABEL, formatTime } from "@/lib/utils";
 import { buildShareBlock, buildShareText, buildShareUrl } from "@/lib/share/format";
@@ -52,6 +53,7 @@ export function CompletionModal({
   currentUsername = null,
   rankContext = null,
   breakdownEnabled = false,
+  aiDebriefEnabled = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -112,11 +114,21 @@ export function CompletionModal({
   // state already in scope here, so this prop is a simple show/hide
   // gate — no network round trip, no extra server payload.
   breakdownEnabled?: boolean;
+  // RAZ-61: server-resolved value of `ai-debrief`. When on, we
+  // render the AiDebriefCard beneath the BreakdownPanel. The card
+  // fires a server action ONCE per `cacheKey` (built from puzzle id
+  // + attempt id) and persists the result to localStorage so a
+  // refresh / reopen doesn't burn another OpenAI call.
+  aiDebriefEnabled?: boolean;
 }) {
   const elapsedMs = useGameStore((s) => s.elapsedMs);
   const mistakes = useGameStore((s) => s.mistakes);
   const hintsUsed = useGameStore((s) => s.hintsUsed);
   const meta = useGameStore((s) => s.meta);
+  // RAZ-61: stable per-completion id from RAZ-81. Used to build the
+  // localStorage cache key so a refresh / reopen of the modal
+  // doesn't re-fire the (paid) AI debrief generation action.
+  const attemptId = useGameStore((s) => s.attemptId);
   const router = useRouter();
   const [sharing, setSharing] = useState(false);
 
@@ -352,6 +364,44 @@ export function CompletionModal({
             mistakes={mistakes}
             hintsUsed={hintsUsed}
             difficultyBucket={meta.difficultyBucket}
+          />
+        ) : null}
+
+        {/* RAZ-61 AI debrief card. Sits beneath the deterministic
+            breakdown so the player sees the numerical buckets first
+            and the AI prose second. Gated by both:
+              - `aiDebriefEnabled` (Edge Config flag), AND
+              - the modal `open` state — we don't want to fire the
+                action until the player has actually opened the
+                modal. The CompletionModal mounts on every game so
+                a render-while-closed would burn API budget for no
+                visible result.
+            We also gate on `attemptId` so a stale snapshot without
+            an attempt id doesn't accidentally reuse another run's
+            cached debrief — better to skip the card entirely than
+            mislabel data. */}
+        {aiDebriefEnabled && open && attemptId ? (
+          <AiDebriefCard
+            cacheKey={`${meta.mode}:${meta.puzzleId}:${attemptId}`}
+            input={{
+              elapsedMs,
+              mistakes,
+              hintsUsed,
+              difficultyBucket: meta.difficultyBucket,
+              // Map the modal's mode discriminator to the action's
+              // enum. CompletionModal already knows whether we're
+              // in quick-play; daily / random fall through.
+              mode: isQuickPlay
+                ? "quick"
+                : meta.mode === "daily"
+                  ? "daily"
+                  : challenge
+                    ? "challenge"
+                    : "random",
+              previousBestMs,
+              personalBestImproved:
+                previousBestMs !== null && elapsedMs < previousBestMs,
+            }}
           />
         ) : null}
 

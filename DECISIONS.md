@@ -33,3 +33,7 @@ Short, dated record of meaningful architectural decisions. Append-only.
 ## 2026-04 Daily puzzle: solution never reaches the client
 
 **Why:** A determined cheater with the solution can post any time. Hints go through `hintAction` which throttles + tracks; submission is verified server-side against the stored solution.
+
+## 2026-04 OpenAI as AI provider (RAZ-61)
+
+**Why:** First AI feature (post-game debrief) needs a model that supports JSON-schema-validated structured outputs natively. The official `openai` SDK ships with first-class support and the project plan explicitly says "OpenAI-first". We wire calls through `lib/server/openai.ts` (lazy singleton, key-presence helper) so subsequent AI features (RAZ-58 coach) reuse the same plumbing rather than each opening their own client. Model name is env-driven (`OPENAI_MODEL_DEBRIEF`) so prod can move tiers without a deploy. Without `OPENAI_API_KEY` set, every AI surface falls back to a deterministic local generator so previews and CI never need a paid key.

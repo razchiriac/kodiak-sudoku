@@ -11,6 +11,7 @@ import {
   postGameBreakdown,
   aiDebrief,
   stuckRescue,
+  adaptiveCoach,
   eventLog,
   progressiveHints,
   showMistakes,
@@ -78,6 +79,7 @@ export default async function CustomPlayPage({
     breakdownEnabled,
     aiDebriefEnabled,
     stuckRescueEnabled,
+    adaptiveCoachEnabled,
   ] = await Promise.all([
     haptics(),
     autoSwitchDigit(),
@@ -92,6 +94,7 @@ export default async function CustomPlayPage({
     postGameBreakdown(),
     aiDebrief(),
     stuckRescue(),
+    adaptiveCoach(),
   ]);
 
   return (
@@ -129,6 +132,7 @@ export default async function CustomPlayPage({
       breakdownEnabled={breakdownEnabled}
       aiDebriefEnabled={aiDebriefEnabled}
       stuckRescueEnabled={stuckRescueEnabled}
+      adaptiveCoachEnabled={adaptiveCoachEnabled}
       isCustom
     />
   );

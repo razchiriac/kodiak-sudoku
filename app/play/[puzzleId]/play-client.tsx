@@ -22,6 +22,7 @@ import { ShortcutsOverlay } from "@/components/game/shortcuts-overlay";
 import { SettingsDialog } from "@/components/game/settings-dialog";
 import { PrintDialog } from "@/components/game/print-dialog";
 import { RescueChip } from "@/components/game/rescue-chip";
+import { CoachTipBanner } from "@/components/game/coach-tip-banner";
 import { CoachPanel, type CoachSnapshot } from "@/components/game/coach-panel";
 import { Button } from "@/components/ui/button";
 import {
@@ -84,6 +85,7 @@ export function PlayClient({
   aiDebriefEnabled = false,
   aiCoachEnabled = false,
   stuckRescueEnabled = false,
+  adaptiveCoachEnabled = false,
 }: {
   puzzle: PuzzleProp;
   savedGame: SavedProp;
@@ -206,6 +208,11 @@ export function PlayClient({
   // the store so `useStuckDetector` can short-circuit instantly when
   // the flag is flipped off via Edge Config.
   stuckRescueEnabled?: boolean;
+  // RAZ-49: server-resolved value of `adaptive-coach`. Mirrored into
+  // the store so `useCoachTips` can short-circuit instantly when the
+  // flag is flipped off via Edge Config — same kill-switch shape as
+  // `stuckRescueEnabled`.
+  adaptiveCoachEnabled?: boolean;
 }) {
   const startGame = useGameStore((s) => s.startGame);
   const resumeFromSnapshot = useGameStore((s) => s.resumeFromSnapshot);
@@ -393,6 +400,14 @@ export function PlayClient({
   useEffect(() => {
     setFeatureFlag("stuckRescue", stuckRescueEnabled);
   }, [stuckRescueEnabled, setFeatureFlag]);
+
+  // RAZ-49: mirror the `adaptive-coach` flag so `useCoachTips`
+  // can read it from the store without a prop. Same kill-switch
+  // semantics as the rescue chip — flipping the flag off in Edge
+  // Config instantly hides the banner on the next tick.
+  useEffect(() => {
+    setFeatureFlag("adaptiveCoach", adaptiveCoachEnabled);
+  }, [adaptiveCoachEnabled, setFeatureFlag]);
 
   // Autosave: every time the relevant slice of state changes, debounce a
   // server action call. Only signed-in users autosave to the server;
@@ -965,6 +980,11 @@ export function PlayClient({
           doesn't reflow when it appears/disappears past the natural
           gap-3 between siblings. */}
       <RescueChip />
+      {/* RAZ-49: adaptive coach banner slot. Sits directly under the
+          rescue chip so the two systems can stack (both can fire at
+          once). Same render-nothing-when-empty contract as the chip
+          so the layout doesn't reflow when banners come and go. */}
+      <CoachTipBanner />
       {/* Below-board region: 5 equal columns. Left stack of 3
           control buttons, 3x3 number pad (col-span-3 internally),
           right stack of 3 control buttons. Heights line up in 3

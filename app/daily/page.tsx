@@ -28,6 +28,7 @@ import {
   aiCoach,
   printPuzzle,
   stuckRescue,
+  adaptiveCoach,
   eventLog,
   progressiveHints,
   shareResult,
@@ -142,6 +143,8 @@ export default async function DailyPage({
 
   // RAZ-48 / stuck-rescue flag. Forwarded to PlayClient.
   const stuckRescueEnabled = await stuckRescue();
+  // RAZ-49 / adaptive-coach flag. Forwarded to PlayClient.
+  const adaptiveCoachEnabled = await adaptiveCoach();
 
   // RAZ-5 / daily-archive flag. When on, surface a "Previous day" link
   // above the board so players can reach the archive from anywhere.
@@ -208,6 +211,7 @@ export default async function DailyPage({
         aiDebriefEnabled={aiDebriefEnabled}
         aiCoachEnabled={aiCoachEnabled}
         stuckRescueEnabled={stuckRescueEnabled}
+        adaptiveCoachEnabled={adaptiveCoachEnabled}
       />
     </>
   );

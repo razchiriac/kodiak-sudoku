@@ -404,4 +404,30 @@ export const FLAG_REGISTRY: readonly FlagSpec[] = [
       "Render the in-game AI Coach button + dialog. Suggestions are validated against the deterministic solver before reaching the user; hallucinated moves are dropped.",
     linearId: "RAZ-58",
   },
+  {
+    // RAZ-49: Adaptive Coach Mode (deterministic). Surfaces a
+    // small inline "coaching tip" banner under the board when one
+    // of the deterministic detectors fires (constraint conflict
+    // explainer, mistake streak, technique follow-up after a hint,
+    // notes-encouragement when the player isn't using notes). All
+    // tips are pure functions of board + recent events + settings;
+    // there is NO model call on this surface — that's RAZ-58's
+    // job. The banner is independent from the RAZ-48 rescue chip
+    // (which is purely about "you're stuck"); both can stack and
+    // both have their own per-kind cooldown.
+    //
+    // Default ON because the engine is deterministic and the
+    // worst-case is "a tip appears that the player ignores".
+    // Players also have a per-user "Coaching tips" toggle in the
+    // settings dialog (default on) — this flag is the kill switch
+    // for the entire surface (UI + hook). Flipping the flag off
+    // in Edge Config instantly hides every banner without a
+    // deploy.
+    key: "adaptive-coach",
+    envKey: "FLAG_ADAPTIVE_COACH",
+    defaultValue: true,
+    description:
+      "Render deterministic coaching-tip banner under the board (constraint explainer after conflicts, technique follow-up after hints, notes-encouragement, mistake-streak nudge). Pure local logic, no model calls.",
+    linearId: "RAZ-49",
+  },
 ];

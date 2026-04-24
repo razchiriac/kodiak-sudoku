@@ -23,6 +23,7 @@ import {
   aiCoach,
   printPuzzle,
   stuckRescue,
+  adaptiveCoach,
   eventLog,
   progressiveHints,
   quickPlay,
@@ -190,6 +191,10 @@ export default async function PuzzlePage({
   // which mirrors it into the store; the rescue chip never mounts
   // when the flag is off.
   const stuckRescueEnabled = await stuckRescue();
+  // RAZ-49 / adaptive-coach flag. Same forwarding pattern as the
+  // rescue chip — the play client mirrors it into the store so the
+  // banner hook can short-circuit on flag-off.
+  const adaptiveCoachEnabled = await adaptiveCoach();
 
   return (
     <PlayClient
@@ -236,6 +241,7 @@ export default async function PuzzlePage({
       aiDebriefEnabled={aiDebriefEnabled}
       aiCoachEnabled={aiCoachEnabled}
       stuckRescueEnabled={stuckRescueEnabled}
+      adaptiveCoachEnabled={adaptiveCoachEnabled}
     />
   );
 }

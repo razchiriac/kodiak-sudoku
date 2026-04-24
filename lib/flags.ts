@@ -297,6 +297,18 @@ export const aiDebrief = declareFlag("ai-debrief");
 // without a deploy.
 export const aiCoach = declareFlag("ai-coach");
 
+// RAZ-49 - Adaptive Coach Mode (deterministic). Surfaces a small
+// inline coaching-tip banner under the board when one of the
+// deterministic detectors fires (constraint explainer after a
+// conflict, technique follow-up after a hint, mistake-streak nudge,
+// notes-encouragement). Pure local logic — no AI calls, no network.
+// The banner is independent from the RAZ-48 stuck-rescue chip;
+// both can stack and both have their own per-kind cooldown. Default
+// on (deterministic, low risk); per-user "Coaching tips" toggle in
+// the settings dialog gives players a kill switch independent of
+// the flag.
+export const adaptiveCoach = declareFlag("adaptive-coach");
+
 // RAZ-15 - Per-cell mistake indicator. When on, the settings dialog
 // exposes a "Show mistakes" toggle; if the user enables it AND the
 // client has the puzzle solution (i.e. random non-daily puzzles where

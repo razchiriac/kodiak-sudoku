@@ -149,6 +149,17 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const recordEventsOn = useGameStore(
     (s) => s.settings.recordEvents === true,
   );
+  // RAZ-49: adaptive coach toggle. Flag-gated like every other
+  // optional surface — when the `adaptive-coach` flag is off we
+  // hide the row entirely so a player on the off cohort doesn't
+  // see a control that does nothing. Default on so first-paint
+  // matches the kill-switch default in the store.
+  const adaptiveCoachFlag = useGameStore(
+    (s) => s.featureFlags.adaptiveCoach,
+  );
+  const coachingTipsOn = useGameStore(
+    (s) => s.settings.coachingTips !== false,
+  );
   // RAZ-42: default-on; undefined from legacy persisted blobs means on.
   const autoNotesOn = useGameStore(
     (s) => s.settings.autoNotesEnabled !== false,
@@ -457,6 +468,35 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                 onChange={(e) => setSetting("showMistakes", e.target.checked)}
                 className="mt-1 h-4 w-4 accent-foreground"
                 aria-label="Show mistakes as you type"
+              />
+            </label>
+          )}
+
+          {/* RAZ-49: adaptive coach toggle. The deterministic banner
+              under the board (constraint explainer after a conflict,
+              technique follow-up after a hint, mistake-streak nudge,
+              notes-encouragement) is on by default — this is the
+              per-user kill switch. Flipping it off here hides EVERY
+              banner regardless of the Edge Config flag. The flag-off
+              cohort never sees this row at all. */}
+          {adaptiveCoachFlag && (
+            <label className="flex items-start justify-between gap-4 text-sm">
+              <span className="flex flex-col">
+                <span className="font-medium text-foreground">
+                  Coaching tips
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  Show short prompts under the board (e.g. why a
+                  placement caused a conflict, what kind of deduction
+                  a hint just used).
+                </span>
+              </span>
+              <input
+                type="checkbox"
+                checked={coachingTipsOn}
+                onChange={(e) => setSetting("coachingTips", e.target.checked)}
+                className="mt-1 h-4 w-4 accent-foreground"
+                aria-label="Show adaptive coaching tips"
               />
             </label>
           )}

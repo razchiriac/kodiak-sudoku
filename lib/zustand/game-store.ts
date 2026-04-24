@@ -233,6 +233,14 @@ type GameState = {
     // The selected value is applied via an attribute on <html>; see
     // globals.css for the overrides.
     palette: Palette;
+    // RAZ-49: per-user opt-out for the deterministic Adaptive Coach
+    // banner. Defaults true so the banner is on for everyone the
+    // first time the `adaptive-coach` flag flips on. When false, the
+    // banner never mounts regardless of the flag — same kill-switch
+    // pattern we use for haptics and showMistakes. The settings
+    // dialog renders the toggle only when the flag is on (so a
+    // flag-off cohort doesn't see a control that does nothing).
+    coachingTips: boolean;
   };
   // Feature-flag mirror. The *source* of truth is the server
   // (lib/flags.ts → Edge Config), which PlayClient evaluates server-
@@ -305,6 +313,12 @@ type GameState = {
     // short-circuits and the chip never mounts. Mirrored from
     // Edge Config via PlayClient — see `setFeatureFlag` calls.
     stuckRescue: boolean;
+    // RAZ-49: when on, the deterministic coaching-tip banner
+    // (`<CoachTipBanner />`) is allowed to mount under the board.
+    // When off, the banner never appears regardless of the per-user
+    // `coachingTips` setting — same kill-switch shape as
+    // `stuckRescue`. Mirrored from Edge Config via PlayClient.
+    adaptiveCoach: boolean;
     // RAZ-14: when on, the Hint button steps through three tiers (region
     // nudge → technique + location → place the digit). When off, every
     // `hint()` call applies the placement immediately — the pre-RAZ-14
@@ -377,6 +391,25 @@ type GameState = {
   // before a game has been started (the snapshot accessor returns null
   // in that case anyway, so this should never leak to the server).
   attemptId: string | null;
+  // RAZ-49: elapsedMs at the moment the most-recent hint was actually
+  // placed on the board. Set inside `applyHintPlacement` (the single
+  // funnel for hint placements — both progressive tier-3 and legacy
+  // one-shot reveals route through it). Null when no hint has been
+  // applied yet this attempt; reset by startGame / resumeFromSnapshot.
+  // Powers the coach-tips technique-followup detector.
+  lastHintAtMs: number | null;
+  // RAZ-49: technique of the most-recent hint placement (carried
+  // through from `HintSuggestion.technique`). Combined with
+  // `lastHintAtMs` so the technique-followup tip can render
+  // technique-specific copy without re-running the solver. Null
+  // before any hint has been used. When the last hint was a
+  // "from-solution" fallback the value is recorded as-is and the
+  // tip detector decides not to surface a teachable message.
+  lastHintTechnique:
+    | "naked-single"
+    | "hidden-single"
+    | "from-solution"
+    | null;
 };
 
 type GameActions = {
@@ -521,6 +554,11 @@ const INITIAL: GameState = {
     // user picks a preset (or tweaks any setting), this field flips
     // to a concrete value and persists per-device.
     selectedPreset: null,
+    // RAZ-49: default true — adaptive coach is on for everyone the
+    // first time the flag rolls out; players can opt out per-device
+    // from the settings dialog. The flag-off path hides the entire
+    // surface (including this toggle).
+    coachingTips: true,
   },
   featureFlags: {
     haptics: false,
@@ -549,6 +587,10 @@ const INITIAL: GameState = {
     // the resolved `stuck-rescue` Edge Config flag. Off = the rescue
     // chip never mounts.
     stuckRescue: false,
+    // RAZ-49: default false — hydrated by PlayClient on mount from
+    // the resolved `adaptive-coach` Edge Config flag. Off = the
+    // coach-tip banner never mounts.
+    adaptiveCoach: false,
   },
   hintSession: null,
   events: [],
@@ -560,6 +602,11 @@ const INITIAL: GameState = {
   // resumeFromSnapshot overwrite this with a fresh UUID before the
   // game becomes interactive.
   attemptId: null,
+  // RAZ-49: start with no hint context. applyHintPlacement assigns
+  // both fields when a hint is placed; startGame / resumeFromSnapshot
+  // reset them via the ...INITIAL spread.
+  lastHintAtMs: null,
+  lastHintTechnique: null,
 };
 
 // RAZ-16 helper. Given the digit that was just placed and the post-
@@ -666,7 +713,18 @@ function maybeRecord(
 //   set              — the zustand set callback
 function applyHintPlacement(
   s: GameState,
-  suggestion: { index: number; digit: number },
+  // RAZ-49: callers now pass the resolved technique alongside the
+  // (cell, digit) so the adaptive coach can render a
+  // technique-specific follow-up tip without re-running the solver.
+  // Optional because legacy callers + the remote-fetch fallback may
+  // not have a richer technique label; in those cases we fall back
+  // to "from-solution" which the tip engine treats as a generic
+  // "double-check the cell" nudge.
+  suggestion: {
+    index: number;
+    digit: number;
+    technique?: "naked-single" | "hidden-single" | "from-solution";
+  },
   opts: { incrementCounter: boolean; clearSession: boolean },
   set: (partial: Partial<GameState>) => void,
 ): void {
@@ -714,6 +772,14 @@ function applyHintPlacement(
     // the "Xs since last move" idle anchor so the rescue chip
     // doesn't immediately re-fire after the player accepts one.
     lastInputAtMs: s.elapsedMs,
+    // RAZ-49: stash the hint context so the adaptive coach's
+    // technique-followup detector can render technique-specific
+    // copy without re-running the solver. We always record the
+    // raw technique (including "from-solution") and let the tip
+    // engine decide whether to surface it — keeps the store
+    // dumb and the policy in one place.
+    lastHintAtMs: s.elapsedMs,
+    lastHintTechnique: suggestion.technique ?? "from-solution",
   });
 }
 
@@ -1223,6 +1289,10 @@ export const useGameStore = create<GameState & GameActions>()(
             {
               index: s.hintSession.suggestion.index,
               digit: s.hintSession.suggestion.digit,
+              // RAZ-49: forward the technique stashed at tier-1 so
+              // the adaptive coach can render a technique-specific
+              // follow-up after the placement lands.
+              technique: s.hintSession.suggestion.technique,
             },
             { incrementCounter: false, clearSession: true },
             set,
@@ -1277,7 +1347,14 @@ export const useGameStore = create<GameState & GameActions>()(
 
         return applyHintPlacement(
           s,
-          { index: localHint.index, digit: localHint.digit },
+          {
+            index: localHint.index,
+            digit: localHint.digit,
+            // RAZ-49: forward the technique so the adaptive coach
+            // can render a technique-specific follow-up tip after
+            // the placement lands.
+            technique: localHint.technique,
+          },
           { incrementCounter: true, clearSession: false },
           set,
         );

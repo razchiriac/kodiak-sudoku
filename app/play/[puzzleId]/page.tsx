@@ -20,6 +20,7 @@ import {
   pbRibbon,
   postGameBreakdown,
   aiDebrief,
+  aiCoach,
   printPuzzle,
   stuckRescue,
   eventLog,
@@ -179,6 +180,12 @@ export default async function PuzzlePage({
   // for the (paid) action call — the prop is just a render gate.
   const aiDebriefEnabled = await aiDebrief();
 
+  // RAZ-58 / ai-coach flag. Server-resolved here so the Coach button
+  // is hidden with zero client flicker when the kill-switch is
+  // flipped via Edge Config. Default off in the registry — see
+  // FLAG_REGISTRY for the rollout rationale.
+  const aiCoachEnabled = await aiCoach();
+
   // RAZ-48 / stuck-rescue flag. Pure UI gate forwarded to PlayClient
   // which mirrors it into the store; the rescue chip never mounts
   // when the flag is off.
@@ -227,6 +234,7 @@ export default async function PuzzlePage({
       modePresetsEnabled={modePresetsEnabled}
       breakdownEnabled={breakdownEnabled}
       aiDebriefEnabled={aiDebriefEnabled}
+      aiCoachEnabled={aiCoachEnabled}
       stuckRescueEnabled={stuckRescueEnabled}
     />
   );

@@ -1,7 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Keyboard, Printer, Settings as SettingsIcon, Swords } from "lucide-react";
+import {
+  Brain,
+  Keyboard,
+  Printer,
+  Settings as SettingsIcon,
+  Swords,
+} from "lucide-react";
 import { toast } from "sonner";
 import { readPersistedSnapshot, useGameStore } from "@/lib/zustand/game-store";
 import { SudokuGrid } from "@/components/game/sudoku-grid";
@@ -16,6 +22,7 @@ import { ShortcutsOverlay } from "@/components/game/shortcuts-overlay";
 import { SettingsDialog } from "@/components/game/settings-dialog";
 import { PrintDialog } from "@/components/game/print-dialog";
 import { RescueChip } from "@/components/game/rescue-chip";
+import { CoachPanel, type CoachSnapshot } from "@/components/game/coach-panel";
 import { Button } from "@/components/ui/button";
 import {
   flushInputEventsAction,
@@ -75,6 +82,7 @@ export function PlayClient({
   modePresetsEnabled = false,
   breakdownEnabled = false,
   aiDebriefEnabled = false,
+  aiCoachEnabled = false,
   stuckRescueEnabled = false,
 }: {
   puzzle: PuzzleProp;
@@ -187,6 +195,13 @@ export function PlayClient({
   // based on it. The card is responsible for firing its own server
   // action; the prop is just a render gate.
   aiDebriefEnabled?: boolean;
+  // RAZ-58: server-resolved value of `ai-coach`. Controls whether the
+  // header "Coach" button is rendered AND whether the CoachPanel is
+  // mounted at all. Custom puzzles silently disable the button (no
+  // DB row → no solution to validate against) regardless of the
+  // flag's value. The panel itself is responsible for firing its
+  // own server action; the prop is just a render gate.
+  aiCoachEnabled?: boolean;
   // RAZ-48: server-resolved value of `stuck-rescue`. Mirrored into
   // the store so `useStuckDetector` can short-circuit instantly when
   // the flag is flipped off via Edge Config.
@@ -751,6 +766,69 @@ export function PlayClient({
   // header button. Kept as a sibling to the other dialog state rather
   // than hoisted into the store because only this component cares.
   const [printOpen, setPrintOpen] = useState(false);
+  // RAZ-58: coach panel visibility. Same sibling-state pattern as the
+  // other dialogs above. Open exclusively via the "Coach" header
+  // button; close via the dialog X / overlay click. The panel is
+  // only mounted when aiCoachEnabled is true AND we have a real
+  // puzzle row (custom pasted puzzles have no DB row, so the action
+  // can't fetch a solution to validate against).
+  const [coachOpen, setCoachOpen] = useState(false);
+
+  // Snapshot helper for the CoachPanel. We pass it as a callback so
+  // the panel grabs a FRESH snapshot at the moment of open, not at
+  // render time — the player might press Coach mid-thought after
+  // changing several cells, and we want the action to receive the
+  // current board state, not the state at last re-render.
+  //
+  // We deliberately read from the store imperatively here (not via a
+  // hook subscription) so this component doesn't re-render on every
+  // cell change just to recompute the snapshot identity. The panel
+  // itself is unaware of the store.
+  const buildCoachSnapshot = useCallback((): CoachSnapshot => {
+    const st = useGameStore.getState();
+    // Convert the Uint8Array board to the 81-char string the action
+    // expects. Each cell is 0..9; '0' means empty.
+    let boardStr = "";
+    for (let i = 0; i < 81; i++) {
+      boardStr += String(st.board[i] ?? 0);
+    }
+    // The store's `mode` is "random" | "daily"; the CoachInput schema
+    // accepts a slightly wider set ("challenge", "quick"). Map daily
+    // and random straight through and let any future variants extend
+    // here without changing the action surface.
+    const coachMode: CoachSnapshot["mode"] =
+      st.meta?.mode === "daily" ? "daily" : "random";
+    const variant: CoachSnapshot["variant"] =
+      st.meta?.variant === "diagonal" ? "diagonal" : "standard";
+    return {
+      puzzleId: puzzle.id,
+      board: boardStr,
+      difficultyBucket: puzzle.difficultyBucket,
+      variant,
+      mode: coachMode,
+      selected: st.selection,
+      mistakesSoFar: st.mistakes,
+      hintsUsedSoFar: st.hintsUsed,
+    };
+  }, [puzzle.id, puzzle.difficultyBucket]);
+
+  // Apply the coach's validated suggestion. We use the existing
+  // selectCell + inputDigit pair — no new store action needed,
+  // and the move flows through the same undo/redo pipeline as a
+  // manual entry.
+  const applyCoachMove = useCallback(
+    (cellIndex: number, digit: number) => {
+      const st = useGameStore.getState();
+      st.selectCell(cellIndex);
+      st.inputDigit(digit);
+    },
+    [],
+  );
+
+  // Coach is only meaningful for DB-backed puzzles. Custom (pasted)
+  // puzzles have no row to look up the solution from, so even when
+  // the flag is on the button stays hidden. Same pattern Print uses.
+  const showCoach = aiCoachEnabled && !isCustom;
 
   if (!meta) return null; // first render before startGame() runs
 
@@ -847,6 +925,23 @@ export function PlayClient({
               <Printer />
             </Button>
           ) : null}
+          {/* RAZ-58: Coach button. Hidden for custom puzzles for the
+              same reason as Print — the action needs the puzzle's DB
+              row to fetch the solution server-side, and a custom
+              puzzle has none. Disabled (rather than hidden) once the
+              game is complete so the player can finish their session
+              without the coach UI hovering around. */}
+          {showCoach ? (
+            <Button
+              size="icon"
+              variant="ghost"
+              aria-label="Open coach"
+              onClick={() => setCoachOpen(true)}
+              disabled={isComplete}
+            >
+              <Brain />
+            </Button>
+          ) : null}
           {/* Settings dialog. Shown on all viewports because it owns
               the RAZ-19 haptics toggle (a mobile-only setting) plus any
               future per-device prefs. Icon-only keeps the header
@@ -913,6 +1008,19 @@ export function PlayClient({
           open={printOpen}
           onOpenChange={setPrintOpen}
           puzzleId={puzzle.id}
+        />
+      ) : null}
+      {/* RAZ-58: Coach panel — only mounted when the flag is on and
+          we have a real puzzle (not custom). Mounting conditionally
+          (rather than always-mounted-with-controlled-open) keeps the
+          initial bundle clean for the off-flag and custom-puzzle
+          cases since the panel pulls in the coach action surface. */}
+      {showCoach ? (
+        <CoachPanel
+          open={coachOpen}
+          onOpenChange={setCoachOpen}
+          snapshotProvider={buildCoachSnapshot}
+          onApplyMove={applyCoachMove}
         />
       ) : null}
     </div>

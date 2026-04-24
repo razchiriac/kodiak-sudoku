@@ -10,6 +10,8 @@ export {
   HINT_LIMITS,
   DEBRIEF_BUCKET,
   DEBRIEF_LIMITS,
+  COACH_BUCKET,
+  COACH_LIMITS,
   type RateLimitWindow,
 } from "./rate-limit-config";
 

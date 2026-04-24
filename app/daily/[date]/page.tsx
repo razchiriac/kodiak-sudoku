@@ -25,6 +25,7 @@ import {
   pbRibbon,
   postGameBreakdown,
   aiDebrief,
+  aiCoach,
   printPuzzle,
   stuckRescue,
   eventLog,
@@ -156,6 +157,9 @@ export default async function DailyArchivePage({
   // breakdownEnabled — the modal hides the AI card with no flicker
   // when the kill-switch flips.
   const aiDebriefEnabled = await aiDebrief();
+  // RAZ-58 / ai-coach flag. Same render-gate pattern as the debrief
+  // above. Coach button hides instantly when the kill-switch flips.
+  const aiCoachEnabled = await aiCoach();
   // RAZ-48 / stuck-rescue flag. Forwarded to PlayClient.
   const stuckRescueEnabled = await stuckRescue();
   const adjacent = await getAdjacentDailyDates(date);
@@ -215,6 +219,7 @@ export default async function DailyArchivePage({
         modePresetsEnabled={modePresetsEnabled}
         breakdownEnabled={breakdownEnabled}
         aiDebriefEnabled={aiDebriefEnabled}
+        aiCoachEnabled={aiCoachEnabled}
         stuckRescueEnabled={stuckRescueEnabled}
         isArchive
       />

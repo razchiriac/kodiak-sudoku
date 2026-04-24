@@ -53,3 +53,26 @@ export const DEBRIEF_LIMITS: RateLimitWindow[] = [
   { windowMs: 60 * 1000, max: 5, label: "5 per minute" },
   { windowMs: 60 * 60 * 1000, max: 30, label: "30 per hour" },
 ];
+
+// RAZ-58 — AI coach generation bucket. The coach fires DURING gameplay,
+// so the burst window is tighter than the debrief (which is once-per-
+// completion). A determined power user could press the Coach button
+// after every move; we want a sustained cap that catches that pattern
+// without blocking honest "I'm stuck on three cells in a row" usage.
+//
+// Why these numbers:
+//   * 4/minute = roughly one coach call per 15 seconds at peak, which
+//     is faster than any real human reads a 200-char message + applies
+//     a move. Anything above this rate is almost certainly UI-loop
+//     misbehavior or scripted abuse.
+//   * 25/hour assumes an absolute worst-case session length of ~1 hour
+//     and ~25 stuck cells; well above any realistic Expert solve.
+// Cost per call is comparable to debrief (small JSON output), so the
+// total per-actor ceiling lines up with what we already accept for the
+// debrief bucket.
+export const COACH_BUCKET = "ai-coach";
+
+export const COACH_LIMITS: RateLimitWindow[] = [
+  { windowMs: 60 * 1000, max: 4, label: "4 per minute" },
+  { windowMs: 60 * 60 * 1000, max: 25, label: "25 per hour" },
+];

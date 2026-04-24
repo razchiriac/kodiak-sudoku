@@ -59,6 +59,32 @@ import {
 
 export type GameMode = "value" | "notes";
 
+// RAZ-81: per-session idempotency token. We use crypto.randomUUID() when
+// available (every modern browser + Node 19+) and fall back to a
+// timestamp-prefixed Math.random string only on the rare host that lacks
+// it. The fallback is good enough because the token only needs to be
+// unique per (user, puzzle) submit window — a partial UUID worth of
+// entropy collides at roughly 1 in 10^15, which is well below the rate
+// at which a single user submits the same puzzle. Kept as a tiny pure
+// helper at module scope so the store itself stays framework-free.
+function randomAttemptId(): string {
+  try {
+    const c = (
+      typeof globalThis === "object" ? (globalThis as { crypto?: { randomUUID?: () => string } }).crypto : undefined
+    );
+    if (c && typeof c.randomUUID === "function") return c.randomUUID();
+  } catch {
+    // crypto access can throw in some sandboxes — fall through to the
+    // textual fallback rather than crashing the store.
+  }
+  // Fallback: timestamp + two Math.random fragments. Not crypto-grade
+  // but more than enough entropy for a per-(user,puzzle,minute) token.
+  const t = Date.now().toString(36);
+  const r1 = Math.random().toString(36).slice(2, 10);
+  const r2 = Math.random().toString(36).slice(2, 10);
+  return `${t}-${r1}-${r2}`;
+}
+
 // RAZ-25: supported sudoku-cell color palettes. We use a union of
 // string literals rather than an enum (project rule: avoid enums) so
 // the value round-trips through JSON for persistence without any
@@ -93,6 +119,12 @@ export type GameSnapshot = {
   isPaused: boolean;
   isComplete: boolean;
   startedAt: number;
+  // RAZ-81: client-generated idempotency token for this play session.
+  // Sent with every submitCompletionAction call so the server can
+  // dedupe retries — see drizzle/migrations/0008. Optional in the
+  // type so snapshots persisted before RAZ-81 still rehydrate; the
+  // store assigns a fresh UUID on resume when absent.
+  attemptId?: string | null;
 };
 
 type GameState = {
@@ -338,6 +370,13 @@ type GameState = {
   // — the idle detector treats that as "use elapsedMs as the anchor"
   // so the warmup-then-prompt UX for a fresh page-open still works.
   lastInputAtMs: number | null;
+  // RAZ-81: idempotency token for the active play session. Generated on
+  // startGame / resumeFromSnapshot and threaded into every
+  // submitCompletionAction call so a flaky-network retry storm never
+  // inserts a second `completed_games` row for the same solve. Null
+  // before a game has been started (the snapshot accessor returns null
+  // in that case anyway, so this should never leak to the server).
+  attemptId: string | null;
 };
 
 type GameActions = {
@@ -517,6 +556,10 @@ const INITIAL: GameState = {
   activeDigit: null,
   // RAZ-75: starts null — see field comment in GameState.
   lastInputAtMs: null,
+  // RAZ-81: starts null — see field comment in GameState. startGame /
+  // resumeFromSnapshot overwrite this with a fresh UUID before the
+  // game becomes interactive.
+  attemptId: null,
 };
 
 // RAZ-16 helper. Given the digit that was just placed and the post-
@@ -693,6 +736,10 @@ export const useGameStore = create<GameState & GameActions>()(
           history: emptyHistory(),
           conflicts: new Set(),
           startedAt: Date.now(),
+          // RAZ-81: a fresh play session gets a fresh idempotency token.
+          // randomAttemptId() handles the SSR / no-crypto edge case so
+          // this never throws on a server-render pass.
+          attemptId: randomAttemptId(),
           // RAZ-28: fresh attempt starts with an empty buffer and
           // resets the flush sequence. Any pending events from a
           // previous attempt are discarded — they're either already
@@ -725,6 +772,14 @@ export const useGameStore = create<GameState & GameActions>()(
           isPaused: snapshot.isPaused,
           isComplete: snapshot.isComplete,
           startedAt: snapshot.startedAt,
+          // RAZ-81: prefer the attemptId carried in the snapshot (set by
+          // a previous startGame on this device, persisted via the
+          // partialize block below). When absent (server-resume for a
+          // signed-in user, or a snapshot from before this field
+          // existed), generate a fresh one. The "absent" case loses
+          // dedupe across page reloads but still dedupes the much
+          // more common in-page-load retry storm.
+          attemptId: snapshot.attemptId ?? randomAttemptId(),
           // RAZ-28: resumed attempts start with an empty event buffer.
           // We can't replay the events the previous session captured
           // because they're either already flushed to the server OR
@@ -751,6 +806,12 @@ export const useGameStore = create<GameState & GameActions>()(
           isPaused: s.isPaused,
           isComplete: s.isComplete,
           startedAt: s.startedAt,
+          // RAZ-81: include the per-session idempotency token so callers
+          // (notably submitCompletionAction in play-client) can pass it
+          // through to the server. Reading it off the snapshot rather
+          // than the store directly keeps every call site that already
+          // takes a snapshot working without an extra selector.
+          attemptId: s.attemptId,
         };
       },
 
@@ -1340,6 +1401,13 @@ export const useGameStore = create<GameState & GameActions>()(
               isComplete: s.isComplete,
               startedAt: s.startedAt,
               puzzle: s.puzzle,
+              // RAZ-81: persist the idempotency token alongside the
+              // rest of the snapshot. Critical for the "user reloads
+              // the play page after the network ate the first submit"
+              // case — without this the rehydrated store would mint a
+              // new token and the retry could silently insert a second
+              // completed_games row.
+              attemptId: s.attemptId,
             }
           : null,
       }),

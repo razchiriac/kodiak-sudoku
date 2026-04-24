@@ -187,13 +187,39 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-sm">
+      {/* RAZ-80: this dialog packs a lot of rows (mode presets,
+          haptics + intensity profile + per-event probes, compact
+          controls, dyslexia font, jump-on-place, show-mistakes,
+          color palette, event log opt-in) and on a typical phone
+          viewport (~412×800) the rendered height comfortably
+          exceeds the viewport. Because the dialog is fixed +
+          centered (`top-50% translate-y-[-50%]`), the Close X at
+          `top-4 right-4` ends up rendered ABOVE the visible
+          viewport, and Radix's body-scroll lock means the player
+          can't scroll the page to bring it into view either. The
+          symptom report came in as "can't close after clicking
+          Speed preset" because Speed is the button the user
+          happened to click before discovering the dialog was
+          stuck — but the same issue triggers on any other
+          tap inside the dialog on a small viewport.
+
+          Fix: cap the dialog at 85vh and make the inner content
+          column the scroll container. The header (with the close
+          X) stays anchored at the top of the visible 85vh box, so
+          the X is always reachable regardless of how many rows
+          render below. The 85% (rather than 100%) leaves a small
+          visual breathing margin around the dialog, which is also
+          what the underlying scale-in animation expects to render
+          against. `flex-col` overrides the default `grid` from the
+          shadcn DialogContent so the inner scroll column can grow
+          to fill the remaining space below the header. */}
+      <DialogContent className="sm:max-w-sm flex flex-col max-h-[85vh] overflow-hidden">
         <DialogHeader>
           <DialogTitle>Settings</DialogTitle>
           <DialogDescription>Per-device preferences.</DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col gap-4 py-2">
+        <div className="flex flex-col gap-4 py-2 overflow-y-auto -mx-6 px-6">
           {/* RAZ-54: inline mode preset picker. Renders nothing when
               the flag is off, so a flag flip in Edge Config hides
               the entry point without leaving a stub behind.

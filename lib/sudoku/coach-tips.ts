@@ -55,6 +55,7 @@ import {
 } from "./board";
 import { findConflicts } from "./validate";
 import type { InputEvent } from "./input-events";
+import type { HintTechnique } from "./solver";
 
 // Tip kinds, ordered by intended priority (highest first). The
 // engine evaluates detectors in this exact order and returns the
@@ -168,11 +169,7 @@ export type CoachTipInput = {
   // so the detector can produce a technique-specific message
   // ("That hint was a Naked Single — only one digit fits there
   // given its peers.") without re-running the solver.
-  lastHintTechnique:
-    | "naked-single"
-    | "hidden-single"
-    | "from-solution"
-    | null;
+  lastHintTechnique: HintTechnique | null;
   // Whether the player currently has notes-mode enabled. Used by
   // `notes-encouragement` — if they're already toggling notes,
   // the nudge would be misplaced.
@@ -383,15 +380,38 @@ function detectTechniqueFollowup(input: CoachTipInput): CoachTip | null {
     };
   }
   // hidden-single
+  if (input.lastHintTechnique === "hidden-single") {
+    return {
+      kind: "technique-followup",
+      message: "That hint was a Hidden Single.",
+      detail:
+        "Look at one row, column, or box at a time — sometimes a digit can only go in one cell within that unit, even if other digits could too.",
+      severity: "info",
+      dedupeKey: `technique-followup:hidden-single:${input.lastHintAtMs}`,
+      focusCell: null,
+    };
+  }
   return {
     kind: "technique-followup",
-    message: "That hint was a Hidden Single.",
+    message: `That hint used ${techniqueLabel(input.lastHintTechnique)}.`,
     detail:
-      "Look at one row, column, or box at a time — sometimes a digit can only go in one cell within that unit, even if other digits could too.",
+      "Advanced techniques remove candidates first; the placement appears once enough impossible options are cleared away.",
     severity: "info",
-    dedupeKey: `technique-followup:hidden-single:${input.lastHintAtMs}`,
+    dedupeKey: `technique-followup:${input.lastHintTechnique}:${input.lastHintAtMs}`,
     focusCell: null,
   };
+}
+
+function techniqueLabel(technique: Exclude<HintTechnique, "from-solution">): string {
+  if (technique === "naked-single") return "a Naked Single";
+  if (technique === "hidden-single") return "a Hidden Single";
+  if (technique === "pointing-pair") return "a Pointing Pair";
+  if (technique === "box-line-reduction") return "Box-Line Reduction";
+  if (technique === "naked-pair") return "a Naked Pair";
+  if (technique === "naked-triple") return "a Naked Triple";
+  if (technique === "hidden-pair") return "a Hidden Pair";
+  if (technique === "x-wing") return "an X-Wing";
+  return "a Swordfish";
 }
 
 // Mistake-streak: counts wrong placements (or, when the solution

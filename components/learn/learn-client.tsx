@@ -324,9 +324,15 @@ function renderEmphasis(text: string): React.ReactNode[] {
 }
 
 function techniqueLabel(t: Lesson["technique"]): string {
-  // Map kept tiny; expand when we add more technique kinds.
   if (t === "naked-single") return "Naked Single";
   if (t === "hidden-single") return "Hidden Single";
+  if (t === "pointing-pair") return "Pointing Pair";
+  if (t === "box-line-reduction") return "Box-Line Reduction";
+  if (t === "naked-pair") return "Naked Pair";
+  if (t === "naked-triple") return "Naked Triple";
+  if (t === "hidden-pair") return "Hidden Pair";
+  if (t === "x-wing") return "X-Wing";
+  if (t === "swordfish") return "Swordfish";
   return "Mixed Techniques";
 }
 

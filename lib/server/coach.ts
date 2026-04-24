@@ -80,6 +80,13 @@ export type CoachInput = z.infer<typeof CoachInputSchema>;
 export const COACH_TECHNIQUES = [
   "naked-single",
   "hidden-single",
+  "pointing-pair",
+  "box-line-reduction",
+  "naked-pair",
+  "naked-triple",
+  "hidden-pair",
+  "x-wing",
+  "swordfish",
   "scanning",
   "pair",
   "general",
@@ -379,16 +386,14 @@ export function deterministicCoach(
   };
 }
 
-// Map a HintSuggestion technique to our coach technique enum. The
-// solver currently emits naked-single / hidden-single / from-solution;
-// we surface the first two as-is and map the third to "general"
-// (because "we just looked at the solution" isn't a teachable
-// technique to surface to the user).
+// Map a HintSuggestion technique to our coach technique enum. Solver
+// techniques are surfaced as-is, except the from-solution fallback
+// stays "general" because "we just looked at the answer" is not a
+// teachable technique.
 type CoachTechnique = (typeof COACH_TECHNIQUES)[number];
 
 function techniqueFromHint(hint: HintSuggestion): CoachTechnique {
-  if (hint.technique === "naked-single") return "naked-single";
-  if (hint.technique === "hidden-single") return "hidden-single";
+  if (hint.technique !== "from-solution") return hint.technique;
   return "general";
 }
 
@@ -408,6 +413,33 @@ function describeHint(hint: HintSuggestion): { message: string; rationale: strin
       return {
         message: `Place ${hint.digit} at ${cell}.`,
         rationale: `Within that ${hint.unit}, ${hint.digit} can only legally go in one cell — and it's this one.`,
+      };
+    case "pointing-pair":
+      return {
+        message: `Try ${hint.digit} at ${cell}.`,
+        rationale:
+          "A box-line interaction removes a candidate elsewhere, which makes this placement forced.",
+      };
+    case "box-line-reduction":
+      return {
+        message: `Try ${hint.digit} at ${cell}.`,
+        rationale:
+          "That row or column traps a digit inside one box, so the rest of the box can be cleaned up.",
+      };
+    case "naked-pair":
+    case "naked-triple":
+    case "hidden-pair":
+      return {
+        message: `Try ${hint.digit} at ${cell}.`,
+        rationale:
+          "A subset pattern reserves candidates in a few cells, which removes enough noise to force this move.",
+      };
+    case "x-wing":
+    case "swordfish":
+      return {
+        message: `Try ${hint.digit} at ${cell}.`,
+        rationale:
+          "A fish pattern lines up candidate positions across multiple rows or columns, unlocking this placement.",
       };
     default:
       return {

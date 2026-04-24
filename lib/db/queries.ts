@@ -141,6 +141,36 @@ export async function getSavedGame(userId: string, puzzleId: number) {
 
 // Most-recently-updated saved games. Powers the "Continue" card on the
 // dashboard.
+//
+// RAZ-79: the original query was a simple `where userId = ?`. Two
+// stale states could leak through and make the Continue card show
+// puzzles the player had already finished:
+//
+//   1. The `submitCompletionAction` finished, inserted into
+//      `completed_games`, but the post-insert `delete from
+//      saved_games` failed for whatever reason (RAZ-76 wrapped that
+//      delete in try/catch precisely so we don't fail the whole
+//      action on it). The puzzle was effectively complete, but the
+//      saved row lingered, so the dashboard re-offered it.
+//
+//   2. The player completed the puzzle while signed-out, then
+//      signed in. `migrateLocalProgressAction` wrote the fully-
+//      solved board to `saved_games` without any matching
+//      `completed_games` row (RAZ-76 also fixed this for new
+//      sign-ins by auto-promoting, but the historical bad rows are
+//      still in the DB).
+//
+// We defend against both:
+//
+//   - LEFT JOIN `completed_games` on (user_id, puzzle_id) and
+//     filter out any saved row that already has a completion.
+//     This handles case 1 (and any future "delete failed" cases).
+//   - SQL filter on the saved board: skip rows whose board has zero
+//     empty cells (no '0' character). A board with no empty cells
+//     either matches the solution (a finished but un-recorded game)
+//     or is illegal (every cell has SOMETHING in it but conflicts
+//     somewhere) — both are useless to "Continue" because the
+//     player can't make any more moves.
 export async function listRecentSavedGames(userId: string, limit = 5) {
   return db
     .select({
@@ -149,7 +179,26 @@ export async function listRecentSavedGames(userId: string, limit = 5) {
     })
     .from(savedGames)
     .innerJoin(puzzles, eq(puzzles.id, savedGames.puzzleId))
-    .where(eq(savedGames.userId, userId))
+    .leftJoin(
+      completedGames,
+      and(
+        eq(completedGames.userId, savedGames.userId),
+        eq(completedGames.puzzleId, savedGames.puzzleId),
+      ),
+    )
+    .where(
+      and(
+        eq(savedGames.userId, userId),
+        // No completion row exists for this (user, puzzle).
+        sql`${completedGames.id} is null`,
+        // Board still has at least one empty cell. position()
+        // returns 0 when the substring is absent, so `> 0` means
+        // "has at least one '0' character" → at least one empty
+        // cell. This is a cheap text scan, fine for the small
+        // number of rows we touch (limit defaults to 5).
+        sql`position('0' in ${savedGames.board}) > 0`,
+      ),
+    )
     .orderBy(desc(savedGames.updatedAt))
     .limit(limit);
 }

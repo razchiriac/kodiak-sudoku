@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useGameStore } from "./game-store";
 import { hasNote, peers } from "@/lib/sudoku/board";
 
@@ -659,5 +659,97 @@ describe("game-store: RAZ-75 lastInputAtMs activity anchor", () => {
     const second = useGameStore.getState().lastInputAtMs;
     expect(second).toBe(30_000);
     expect(second).toBeGreaterThan(first as number);
+  });
+});
+
+// RAZ-77: when the player has `showMistakes` turned OFF, the haptic
+// dispatcher must NOT fire the distinctive "conflict" pattern on a
+// wrong placement. Doing so would be an information leak — the
+// visual is intentionally hidden but the buzz tells them "that one
+// was wrong". Instead we fall back to the normal "place" pattern so
+// the haptic feedback matches the visual feedback exactly.
+//
+// We exercise the real `playHaptic` dispatcher via a stubbed
+// `navigator.vibrate`; we read the captured argument and compare to
+// the canonical patterns from `lib/haptics/patterns`. This catches
+// regressions in BOTH the gating logic and any future profile retune.
+describe("game-store: RAZ-77 conflict haptic respects showMistakes", () => {
+  beforeEach(start);
+
+  // Restore the real navigator after every test in this block.
+  // Using `vi.stubGlobal` instead of direct assignment because the
+  // node test env sometimes installs `navigator` as a getter-only
+  // property (see lib/haptics/patterns.test.ts for the same dance).
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  // PUZZLE row 0 is "530070000". Cell index 2 is empty; placing the
+  // digit 5 there is illegal (column-0 already has a 5 in the same
+  // row), giving us a deterministic conflicting placement.
+  const CONFLICT_INDEX = 2;
+  const CONFLICT_DIGIT = 5;
+
+  it("fires the 'conflict' pattern when showMistakes is ON", () => {
+    const vibrate = vi.fn(() => true);
+    vi.stubGlobal("navigator", { vibrate });
+
+    const { selectCell, inputDigit, setSetting, setFeatureFlag } =
+      useGameStore.getState();
+    setFeatureFlag("haptics", true);
+    setFeatureFlag("showMistakes", true);
+    setSetting("haptics", true);
+    setSetting("showMistakes", true);
+
+    selectCell(CONFLICT_INDEX);
+    inputDigit(CONFLICT_DIGIT);
+
+    expect(vibrate).toHaveBeenCalledTimes(1);
+    // The "standard" profile's conflict pattern after RAZ-77.
+    expect(vibrate).toHaveBeenCalledWith([22, 50, 22]);
+  });
+
+  it("fires the plain 'place' pattern when showMistakes is OFF (no leak)", () => {
+    const vibrate = vi.fn(() => true);
+    vi.stubGlobal("navigator", { vibrate });
+
+    const { selectCell, inputDigit, setSetting, setFeatureFlag } =
+      useGameStore.getState();
+    setFeatureFlag("haptics", true);
+    // Keep the feature flag itself ON — we want to prove the gate
+    // is the user setting, not the server flag.
+    setFeatureFlag("showMistakes", true);
+    setSetting("haptics", true);
+    setSetting("showMistakes", false);
+
+    selectCell(CONFLICT_INDEX);
+    inputDigit(CONFLICT_DIGIT);
+
+    expect(vibrate).toHaveBeenCalledTimes(1);
+    // Standard profile's "place" pattern after RAZ-77 — same as a
+    // legal placement, so the player can't distinguish a mistake
+    // from a correct move via touch alone.
+    expect(vibrate).toHaveBeenCalledWith([14]);
+  });
+
+  it("still increments the mistake counter when showMistakes is OFF", () => {
+    // The haptic gate is purely cosmetic. The mistake counter is
+    // shown in the post-game stats / completion modal, by which
+    // point the round is over — so suppressing it here would
+    // change the gameplay record, which we don't want.
+    const vibrate = vi.fn(() => true);
+    vi.stubGlobal("navigator", { vibrate });
+
+    const { selectCell, inputDigit, setSetting, setFeatureFlag } =
+      useGameStore.getState();
+    setFeatureFlag("haptics", true);
+    setFeatureFlag("showMistakes", true);
+    setSetting("haptics", true);
+    setSetting("showMistakes", false);
+
+    selectCell(CONFLICT_INDEX);
+    inputDigit(CONFLICT_DIGIT);
+
+    expect(useGameStore.getState().mistakes).toBe(1);
   });
 });

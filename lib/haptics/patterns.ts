@@ -85,21 +85,38 @@ export const PROFILES: readonly HapticProfile[] = [
     id: "standard",
     label: "Standard",
     description:
-      "The shipped default. Comfortable on most Android phones — distinguishable but not noisy.",
+      "The shipped default. Light, comfortable taps on most Android phones — distinguishable but not noisy.",
     patterns: {
-      // Matches today's `[20]` exactly. Existing users see no
-      // surprise change because `standard` is the default profile.
-      place: [20],
-      // Matches today's `[40, 60, 40]` exactly.
-      conflict: [40, 60, 40],
+      // RAZ-77: dialled DOWN from the original `[20]`. Multiple
+      // players (including the project owner) reported the default
+      // felt too punchy on devices with strong actuators (Pixel 8,
+      // Galaxy S24). 14ms still tests as clearly perceptible on
+      // those phones but disappears into the tap rhythm on a long
+      // solve, which is what we want — confirmation, not feedback.
+      place: [14],
+      // RAZ-77: lowered from `[40, 60, 40]`. The DOUBLE-pulse shape
+      // is preserved (it's the cue that tells the player "this was
+      // wrong, not just a tap") but each pulse is shorter so the
+      // total feel is closer to "two taps" than "the phone is
+      // angry". Note that this code path is now also gated by
+      // `settings.showMistakes` (see RAZ-77 in game-store), so when
+      // the player has opted out of mistake hints they get a plain
+      // `place` pulse here regardless of profile.
+      conflict: [22, 50, 22],
       // Slightly longer than `place` so the player can feel "yes,
       // a hint just landed" without confusing it with a placement.
-      hint: [25],
-      // A satisfying triple-pulse celebrating the solve. Total
-      // duration ~190ms which is plenty without dragging on.
-      complete: [50, 40, 50, 40, 50],
-      // Matches today's number-pad `[10]`.
-      noteToggle: [15],
+      // RAZ-77: also softened from 25 → 16 so a hint feels like a
+      // gentle nudge rather than a thud.
+      hint: [16],
+      // RAZ-77: completion buzz softened from `[50, 40, 50, 40, 50]`
+      // (~230ms total) to `[35, 30, 35, 30, 35]` (~165ms). Still a
+      // noticeable triple-pulse celebration, but doesn't feel like
+      // the phone went into alarm mode.
+      complete: [35, 30, 35, 30, 35],
+      // RAZ-77: long-press confirm softened from 15 → 12. The
+      // gesture itself is intentional (held button, not stray tap)
+      // so the haptic only needs to confirm receipt, not announce.
+      noteToggle: [12],
     },
   },
   {

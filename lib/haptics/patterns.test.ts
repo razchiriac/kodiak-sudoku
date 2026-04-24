@@ -54,13 +54,20 @@ describe("haptic pattern table", () => {
     }
   }
 
-  // Backwards-compat lock: standard profile MUST exactly match the
-  // patterns shipped before RAZ-72. Anyone tuning standard values
-  // should be making a deliberate decision; this test forces them
-  // to update the assertion (and think about it).
-  it("preserves legacy standard patterns for place + conflict", () => {
-    expect(getPattern("place", "standard")).toEqual([20]);
-    expect(getPattern("conflict", "standard")).toEqual([40, 60, 40]);
+  // Lock the active "standard" patterns. Originally this test
+  // pinned the pre-RAZ-72 patterns (place=[20], conflict=[40,60,40])
+  // as a backwards-compat anchor, but RAZ-77 lowered the defaults
+  // after multiple players reported them as too strong on
+  // modern actuators. The lock is still useful — it forces anyone
+  // tuning these values to make a deliberate change and update the
+  // assertion — but the values now reflect the post-RAZ-77 shipping
+  // defaults rather than the original RAZ-72 ones.
+  it("locks the active standard patterns", () => {
+    expect(getPattern("place", "standard")).toEqual([14]);
+    expect(getPattern("conflict", "standard")).toEqual([22, 50, 22]);
+    expect(getPattern("hint", "standard")).toEqual([16]);
+    expect(getPattern("complete", "standard")).toEqual([35, 30, 35, 30, 35]);
+    expect(getPattern("noteToggle", "standard")).toEqual([12]);
   });
 
   // Profile bookkeeping.

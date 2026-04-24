@@ -839,15 +839,29 @@ export const useGameStore = create<GameState & GameActions>()(
         //   - "complete" when this placement just finished the puzzle
         //     (most celebratory pattern; takes precedence over the
         //     "place" tick since the player just won).
-        //   - "conflict" when the placement creates a rule violation.
+        //   - "conflict" when the placement creates a rule violation
+        //     AND the player has opted in to seeing mistakes — see
+        //     RAZ-77 below.
         //   - "place" otherwise (the normal subtle tick).
         // `fireGameHaptic` handles flag/setting/feature-detect gating
         // and looks up the active profile's pattern from
         // lib/haptics/patterns.
+        //
+        // RAZ-77: when the player has `showMistakes` turned OFF, a
+        // distinct "conflict" buzz on a wrong placement is an
+        // information leak — the visual is intentionally hidden but
+        // the haptic still tells them "that one was wrong". Treat a
+        // mistake exactly like a normal placement in that case so the
+        // setting is respected end-to-end. The mistake counter still
+        // increments (it's invisible until the player views their
+        // post-game stats / completion modal, by which point the
+        // round is over).
+        const showMistakesOn =
+          s.featureFlags.showMistakes && s.settings.showMistakes === true;
         const willComplete = !isConflict && isComplete(board, v);
         const event: HapticEvent = willComplete
           ? "complete"
-          : isConflict
+          : isConflict && showMistakesOn
             ? "conflict"
             : "place";
         fireGameHaptic(s, event);

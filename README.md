@@ -78,6 +78,14 @@ See `/Users/raz/.cursor/plans/sudoku_web_app_build_plan_d9ec8836.plan.md` §16. 
 5. Add Sentry DSN, Resend SMTP for magic links, configure auth redirect URLs.
 6. Point Cloudflare DNS at Vercel.
 
+## Android app packaging (TWA)
+
+RAZ-85 ships Android as a Trusted Web Activity wrapper over the same web app.
+
+- Runbook: `docs/android-twa.md`
+- TWA template config: `android/twa-manifest.template.json`
+- Digital Asset Links endpoint: `/.well-known/assetlinks.json`
+
 ## Testing
 
 - Unit tests for the engine (`lib/sudoku/*`) via Vitest. Run with `npm test`.

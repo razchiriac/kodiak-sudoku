@@ -1,0 +1,21 @@
+{
+  "packageId": "com.example.sudoku",
+  "host": "your-production-domain.com",
+  "name": "Sudoku",
+  "launcherName": "Sudoku",
+  "display": "standalone",
+  "themeColor": "#0a0a0a",
+  "navigationColor": "#0a0a0a",
+  "backgroundColor": "#ffffff",
+  "startUrl": "/",
+  "orientation": "portrait",
+  "enableNotifications": false,
+  "appVersionName": "1.0.0",
+  "appVersionCode": 1,
+  "maskableIconPath": "android/assets/maskable-512.png",
+  "fallbackType": "customtabs",
+  "features": {
+    "playBilling": false,
+    "locationDelegation": false
+  }
+}

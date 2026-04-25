@@ -63,7 +63,8 @@ npm run dev
 | `npm run typecheck`            | `tsc --noEmit`                            |
 | `npm run test`                 | Vitest (engine + scripts)                 |
 | `npm run lint`                 | Next.js / ESLint                          |
-| `npm run db:migrate`           | Apply hand-written SQL migrations         |
+| `npm run db:migrate`           | Apply hand-written SQL migrations (local/dev) |
+| `npm run guard:schema-migration` | CI guard: schema.ts change must include SQL migration |
 | `npm run puzzles:import`       | Import the Kaggle dataset                 |
 | `npm run puzzles:seed-daily`   | Pre-seed daily puzzles                    |
 
@@ -73,7 +74,7 @@ See `/Users/raz/.cursor/plans/sudoku_web_app_build_plan_d9ec8836.plan.md` §16. 
 
 1. Two Supabase projects: `sudoku-dev` and `sudoku-prod`.
 2. Vercel project pointed at `main`. Set env vars from `.env.example`.
-3. Run `npm run db:migrate` once against prod.
+3. Apply SQL migrations to prod using your Supabase migration path first.
 4. Import puzzles + seed daily once against prod.
 5. Add Sentry DSN, Resend SMTP for magic links, configure auth redirect URLs.
 6. Point Cloudflare DNS at Vercel.

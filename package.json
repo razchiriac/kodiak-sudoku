@@ -17,6 +17,7 @@
     "db:migrate": "tsx --env-file=.env scripts/migrate.ts",
     "db:studio": "drizzle-kit studio",
     "db:rebalance-difficulty": "tsx --env-file=.env scripts/rebalance-difficulty.ts",
+    "guard:schema-migration": "tsx scripts/check-schema-migration-guard.ts",
     "puzzles:import": "tsx --env-file=.env scripts/import-puzzles.ts",
     "puzzles:seed-local": "tsx --env-file=.env scripts/seed-local-puzzles.ts",
     "puzzles:seed-daily": "tsx --env-file=.env scripts/seed-daily.ts",

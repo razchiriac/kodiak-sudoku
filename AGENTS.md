@@ -52,6 +52,14 @@ This project is being built solo with heavy AI assistance (Cursor, Claude). The 
 - Do not introduce a Redux/Jotai/Recoil. Zustand only.
 - Do not couple game logic to React.
 
+## Migration workflow (RAZ-83)
+
+- Source of truth for **production-applied** migrations is Supabase's tracker (`supabase_migrations`).
+- Keep SQL files in `drizzle/migrations/*.sql` as the canonical migration artifacts in git.
+- For local/dev DBs you can still run `npm run db:migrate`.
+- For production, apply migrations via the Supabase migration path (CLI or controlled migration runner) and then deploy app code.
+- Any PR that edits `lib/db/schema.ts` must include a matching `drizzle/migrations/*.sql` change. CI enforces this guard.
+
 ## Review checklist
 
 Before merging an AI-generated change:

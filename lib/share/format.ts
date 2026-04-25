@@ -29,6 +29,12 @@ export type ShareInput = {
   today?: string;
 };
 
+const SHARE_ATTRIBUTION = {
+  source: "sudoku_app",
+  medium: "share",
+  campaign: "completion_share",
+} as const;
+
 // Build the human-readable share text. Deliberately short so it fits
 // in an SMS / tweet preview without the URL getting cut off.
 //
@@ -42,8 +48,8 @@ export function buildShareText(input: ShareInput): string {
   const label = DIFFICULTY_LABEL[input.difficultyBucket] ?? "Sudoku";
   const headline =
     input.mode === "daily" && input.dailyDate
-      ? `Sudoku Daily · ${label} · ${input.dailyDate}`
-      : `Sudoku · ${label}`;
+      ? `Sudoku Daily solved · ${label} · ${input.dailyDate}`
+      : `Sudoku solved · ${label}`;
 
   // We keep the stats block small - just the three numbers the modal
   // also surfaces. No star rating / no emoji grid: Sudoku doesn't
@@ -55,7 +61,11 @@ export function buildShareText(input: ShareInput): string {
     `💡 ${input.hintsUsed} hint${input.hintsUsed === 1 ? "" : "s"}`,
   ].join(" · ");
 
-  return `${headline}\n${stats}`;
+  const cta =
+    input.mode === "daily"
+      ? "Can you beat this daily run?"
+      : "Can you beat my time?";
+  return `${headline}\n${stats}\n${cta}`;
 }
 
 // Build the URL to include in the shared text. We append the stats as
@@ -76,6 +86,10 @@ export function buildShareUrl(
     h: String(input.hintsUsed),
     d: String(input.difficultyBucket),
     mode: input.mode,
+    utm_source: SHARE_ATTRIBUTION.source,
+    utm_medium: SHARE_ATTRIBUTION.medium,
+    utm_campaign: SHARE_ATTRIBUTION.campaign,
+    utm_content: input.mode === "daily" ? "daily_result" : "random_result",
   });
   if (input.mode === "daily") {
     if (!input.dailyDate) {

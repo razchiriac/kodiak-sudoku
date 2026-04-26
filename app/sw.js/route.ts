@@ -6,14 +6,36 @@
 // JavaScript with the correct MIME type and a long cache + SW
 // update headers.
 //
-// The actual SW code is minimal: it listens for `push` events and
-// shows a notification. When the user clicks the notification it
-// opens /daily.
+// The actual SW code now handles two concerns:
+// 1) push notifications (RAZ-7),
+// 2) navigation fallback for offline PWA/TWA sessions (RAZ-85).
 
 const SW_SOURCE = /* js */ `
-// Sudoku daily-reminder service worker.
-// Kept intentionally tiny — the only job is to show + route push
-// notifications. Heavy lifting lives in the cron / server actions.
+// Sudoku service worker (RAZ-7 + RAZ-85).
+const OFFLINE_URL = "/offline";
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches
+      .open("sudoku-shell-v1")
+      .then((cache) => cache.addAll([OFFLINE_URL]))
+      .catch(() => {}),
+  );
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(self.clients.claim());
+});
+
+self.addEventListener("fetch", (event) => {
+  if (event.request.mode !== "navigate") return;
+  event.respondWith(
+    fetch(event.request).catch(async () => {
+      const cache = await caches.open("sudoku-shell-v1");
+      return (await cache.match(OFFLINE_URL)) || Response.error();
+    }),
+  );
+});
 
 self.addEventListener("push", (event) => {
   const fallback = { title: "Sudoku", body: "Your daily puzzle is waiting!", url: "/daily" };
@@ -57,7 +79,8 @@ export async function GET() {
       // max-age lets us roll out fixes within an hour while still
       // avoiding a fetch on every page load.
       "Cache-Control": "public, max-age=3600, s-maxage=3600",
-      // Scope the worker to the root so it can intercept /daily clicks.
+      // Scope the worker to the root so it can handle navigation
+      // fallback and notification deep-links app-wide.
       "Service-Worker-Allowed": "/",
     },
   });

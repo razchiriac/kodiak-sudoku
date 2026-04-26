@@ -6,6 +6,7 @@ import { Toaster } from "sonner";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { DyslexiaFontLoader } from "@/components/layout/dyslexia-font-loader";
 import { PaletteLoader } from "@/components/layout/palette-loader";
+import { PwaServiceWorker } from "@/components/layout/pwa-service-worker";
 
 // Single client component that wires up React Query, theming, and the
 // toast portal. Keeps the root layout a clean Server Component.
@@ -49,6 +50,10 @@ export function Providers({
             html[data-palette] attribute based on the persisted
             user choice. */}
         <PaletteLoader flagEnabled={colorPaletteFlag} />
+        {/* RAZ-85: always register the root service worker so PWA/TWA
+            installs get offline navigation fallback + cached shell
+            behavior even when the user never opens the push settings. */}
+        <PwaServiceWorker />
         {children}
         <Toaster position="bottom-right" />
       </ThemeProvider>

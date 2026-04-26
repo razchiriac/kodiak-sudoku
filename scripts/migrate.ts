@@ -9,10 +9,30 @@ import postgres from "postgres";
 //
 // The migrations table is intentionally simple: one row per filename. Re-
 // running this script is a no-op for already-applied files.
+//
+// RAZ-83: local/dev helper only.
+// Production uses Supabase migration tracking (`supabase_migrations`).
+// We hard-block accidental prod usage unless explicitly overridden.
 
 async function main() {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL is not set");
+  const allowProdLegacyMigrate =
+    process.env.ALLOW_PROD_LEGACY_MIGRATE === "1" ||
+    process.env.ALLOW_PROD_LEGACY_MIGRATE === "true";
+  const looksLikeSupabaseHosted = url.includes(".supabase.co");
+  const looksLikeProductionEnv =
+    process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production";
+  if (looksLikeSupabaseHosted && looksLikeProductionEnv && !allowProdLegacyMigrate) {
+    throw new Error(
+      [
+        "Refusing to run scripts/migrate.ts against Supabase in production.",
+        "Use the Supabase migration path for prod (CLI or apply_migration tool) so",
+        "tracker state stays aligned with supabase_migrations.",
+        "If this is an emergency one-off, rerun with ALLOW_PROD_LEGACY_MIGRATE=1.",
+      ].join(" "),
+    );
+  }
 
   const sql = postgres(url, { prepare: false, max: 1 });
 

@@ -41,3 +41,7 @@ Short, dated record of meaningful architectural decisions. Append-only.
 ## 2026-04 Solver-validated AI suggestions (RAZ-58)
 
 **Why:** The in-game AI Coach can propose a "next move" that includes a concrete (cell, digit) pair. A hallucinated digit placed on the player's board is the worst possible failure mode — silently wrong moves erode trust faster than any latency would. Every model-proposed move is re-validated server-side via `validateSuggestion()` against the stored puzzle solution AND the deterministic `nextHint` solver before being shipped to the UI. Failed validations drop the move (the prose still ships) and emit a `suggestion-rejected` telemetry tag so we can spot a model regression. The validation guard is the load-bearing test in `lib/server/coach.test.ts`. The action also runs a clue-tampering check on every request (the submitted board's clue cells must equal the original puzzle's clue cells) so a malicious client can't redirect the validator at a different solution.
+
+## 2026-04 Schema/migration drift guard in CI (RAZ-83)
+
+**Why:** We had a production outage where app code referenced a DB column before its migration was applied. The fastest reliable prevention is a CI guard that fails any PR changing `lib/db/schema.ts` without a paired `drizzle/migrations/*.sql` file. We also treat `scripts/migrate.ts` as local/dev tooling and hard-block accidental production use by default, so production migration tracking remains aligned with Supabase's migration tracker.

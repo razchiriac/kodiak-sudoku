@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Route } from "next";
-import { Calendar, Keyboard, Trophy, Zap } from "lucide-react";
+import { Calendar, Keyboard, Trophy, Users, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { customPaste, quickPlay } from "@/lib/flags";
 
@@ -90,6 +90,32 @@ export default async function HomePage() {
             href="/leaderboard/quick"
           />
         ) : null}
+      </section>
+
+      <section className="w-full max-w-4xl rounded-xl border bg-card p-6 sm:p-8">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-2">
+            <p className="inline-flex items-center gap-2 text-sm font-medium text-primary">
+              <Users className="h-4 w-4" aria-hidden />
+              Social play loop
+            </p>
+            <h2 className="text-2xl font-semibold tracking-tight">
+              Solve today&apos;s puzzle, then challenge your friends
+            </h2>
+            <p className="max-w-2xl text-sm text-muted-foreground sm:text-base">
+              Daily solves feed the leaderboard, and every completion can turn into a challenge
+              link. Use it to start friendly rivalries and bring people back each day.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild variant="outline">
+              <Link href="/leaderboard">View daily board</Link>
+            </Button>
+            <Button asChild>
+              <Link href={"/friends" as Route}>Play with friends</Link>
+            </Button>
+          </div>
+        </div>
       </section>
     </div>
   );

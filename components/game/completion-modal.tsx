@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { track } from "@vercel/analytics";
 import { RotateCcw, Share2, Sparkles, Swords, Trophy, Users } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -51,6 +52,7 @@ export function CompletionModal({
   challenge = null,
   challengeLinkEnabled = false,
   currentUsername = null,
+  isSignedIn = false,
   rankContext = null,
   breakdownEnabled = false,
   aiDebriefEnabled = false,
@@ -103,6 +105,8 @@ export function CompletionModal({
   // `/play/<id>?from=<username>`. Null when anonymous or when the
   // signed-in user has never set a username — the action is hidden.
   currentUsername?: string | null;
+  // RAZ-86: auth context for share-funnel analytics.
+  isSignedIn?: boolean;
   // RAZ-32: rank context returned by `submitCompletionAction` for a
   // successful daily submit. Drives the "You beat X% of today's
   // solvers" banner. Null for random mode, archive completions,
@@ -131,6 +135,22 @@ export function CompletionModal({
   const attemptId = useGameStore((s) => s.attemptId);
   const router = useRouter();
   const [sharing, setSharing] = useState(false);
+  const telemetryContext = useMemo(
+    () =>
+      ({
+        mode: meta?.mode ?? "random",
+        difficulty_bucket: meta?.difficultyBucket ?? 0,
+        hint_band: toCountBand(hintsUsed),
+        mistake_band: toCountBand(mistakes),
+        auth_state: isSignedIn ? "signed-in" : "anonymous",
+      }) as const,
+    [hintsUsed, isSignedIn, meta?.difficultyBucket, meta?.mode, mistakes],
+  );
+
+  useEffect(() => {
+    if (!open || !meta) return;
+    safeTrack("completion_modal_shown", telemetryContext);
+  }, [meta, open, telemetryContext]);
 
   if (!meta) return null;
 
@@ -142,6 +162,10 @@ export function CompletionModal({
   async function handleShare() {
     if (!meta) return;
     setSharing(true);
+    safeTrack("completion_share_clicked", {
+      ...telemetryContext,
+      surface: "result",
+    });
     try {
       const baseUrl =
         typeof window !== "undefined" ? window.location.origin : "";
@@ -172,6 +196,11 @@ export function CompletionModal({
       if (nav.share && (!nav.canShare || nav.canShare(payload))) {
         try {
           await nav.share(payload);
+          safeTrack("completion_share_native_success", {
+            ...telemetryContext,
+            surface: "result",
+          });
+          toast.success("Shared from your device");
           return;
         } catch (err) {
           // AbortError: user cancelled the sheet. Don't fall through
@@ -183,8 +212,16 @@ export function CompletionModal({
       }
       const block = buildShareBlock(shareInput, { baseUrl });
       await navigator.clipboard.writeText(block);
-      toast.success("Copied to clipboard");
+      safeTrack("completion_share_clipboard_success", {
+        ...telemetryContext,
+        surface: "result",
+      });
+      toast.success("Result copied to clipboard");
     } catch {
+      safeTrack("completion_share_clipboard_failure", {
+        ...telemetryContext,
+        surface: "result",
+      });
       toast.error("Couldn't share. Try again?");
     } finally {
       setSharing(false);
@@ -207,12 +244,13 @@ export function CompletionModal({
   // rendered banner, not as a query param the receiver could fake.
   async function handleChallenge() {
     if (!meta || !currentUsername) return;
+    safeTrack("completion_challenge_clicked", telemetryContext);
     try {
       const baseUrl =
         typeof window !== "undefined" ? window.location.origin : "";
       const url = `${baseUrl}/play/${meta.puzzleId}?from=${encodeURIComponent(
         currentUsername,
-      )}`;
+      )}&utm_source=sudoku_app&utm_medium=share&utm_campaign=challenge_share&utm_content=completion_modal`;
       const nav = navigator as Navigator & {
         share?: (data: { text?: string; url?: string; title?: string }) => Promise<void>;
         canShare?: (data: { text?: string; url?: string; title?: string }) => boolean;
@@ -225,14 +263,18 @@ export function CompletionModal({
       if (nav.share && (!nav.canShare || nav.canShare(payload))) {
         try {
           await nav.share(payload);
+          safeTrack("completion_challenge_native_success", telemetryContext);
+          toast.success("Challenge sent");
           return;
         } catch (err) {
           if (err instanceof Error && err.name === "AbortError") return;
         }
       }
       await navigator.clipboard.writeText(url);
+      safeTrack("completion_challenge_clipboard_success", telemetryContext);
       toast.success("Challenge link copied");
     } catch {
+      safeTrack("completion_challenge_failure", telemetryContext);
       toast.error("Couldn't copy link. Try again?");
     }
   }
@@ -447,7 +489,7 @@ export function CompletionModal({
               aria-label="Share your result"
             >
               <Share2 className="mr-2 h-4 w-4" aria-hidden />
-              Share
+              {meta.mode === "daily" ? "Share daily result" : "Share result"}
             </Button>
           ) : null}
           {/* RAZ-13: "Challenge a friend" copies a clean
@@ -461,7 +503,7 @@ export function CompletionModal({
               aria-label="Challenge a friend to beat your time"
             >
               <Swords className="mr-2 h-4 w-4" aria-hidden />
-              Challenge
+              Challenge a friend
             </Button>
           ) : null}
           {/* RAZ-34: in quick-play we override both the primary CTA
@@ -498,4 +540,19 @@ function Stat({ label, value }: { label: string; value: string }) {
       <dd className="font-mono text-lg tabular-nums">{value}</dd>
     </div>
   );
+}
+
+function toCountBand(value: number): "0" | "1-2" | "3-5" | "6+" {
+  if (value <= 0) return "0";
+  if (value <= 2) return "1-2";
+  if (value <= 5) return "3-5";
+  return "6+";
+}
+
+function safeTrack(name: string, properties: Record<string, string | number>) {
+  try {
+    track(name, properties);
+  } catch {
+    // Tracking failures should never block gameplay or share actions.
+  }
 }

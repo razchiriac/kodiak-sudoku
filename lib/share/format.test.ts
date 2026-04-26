@@ -19,7 +19,7 @@ describe("buildShareText", () => {
       dailyDate: "2026-04-19",
     });
     expect(text).toBe(
-      "Sudoku Daily · Hard · 2026-04-19\n⏱ 03:12 · 🎯 0 mistakes · 💡 0 hints",
+      "Sudoku Daily solved · Hard · 2026-04-19\n⏱ 03:12 · 🎯 0 mistakes · 💡 0 hints\nCan you beat this daily run?",
     );
   });
 
@@ -32,7 +32,7 @@ describe("buildShareText", () => {
       hintsUsed: 1,
     });
     expect(text).toBe(
-      "Sudoku · Medium\n⏱ 05:41 · 🎯 1 mistake · 💡 1 hint",
+      "Sudoku solved · Medium\n⏱ 05:41 · 🎯 1 mistake · 💡 1 hint\nCan you beat my time?",
     );
   });
 
@@ -44,7 +44,7 @@ describe("buildShareText", () => {
       mistakes: 0,
       hintsUsed: 0,
     });
-    expect(text.startsWith("Sudoku · Sudoku")).toBe(true);
+    expect(text.startsWith("Sudoku solved · Sudoku")).toBe(true);
   });
 });
 
@@ -68,6 +68,10 @@ describe("buildShareUrl", () => {
     expect(url).toContain("d=3");
     expect(url).toContain("mode=daily");
     expect(url).toContain("date=2026-04-19");
+    expect(url).toContain("utm_source=sudoku_app");
+    expect(url).toContain("utm_medium=share");
+    expect(url).toContain("utm_campaign=completion_share");
+    expect(url).toContain("utm_content=daily_result");
   });
 
   it("links to /daily/<date> for archive shares", () => {
@@ -100,6 +104,7 @@ describe("buildShareUrl", () => {
     );
     expect(url.startsWith(`${BASE}/play/42?`)).toBe(true);
     expect(url).toContain("m=2");
+    expect(url).toContain("utm_content=random_result");
   });
 
   it("throws when puzzleId is missing for random mode", () => {
@@ -163,7 +168,7 @@ describe("buildShareBlock", () => {
     );
     const parts = block.split("\n\n");
     expect(parts).toHaveLength(2);
-    expect(parts[0]).toContain("Sudoku · Easy");
+    expect(parts[0]).toContain("Sudoku solved · Easy");
     expect(parts[1]).toContain(`${BASE}/play/7?`);
   });
 });

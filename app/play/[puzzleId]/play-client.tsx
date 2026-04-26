@@ -1012,6 +1012,7 @@ export function PlayClient({
         challenge={challenge}
         challengeLinkEnabled={challengeLinkEnabled}
         currentUsername={currentUsername}
+        isSignedIn={isSignedIn}
         rankContext={rankContext}
         breakdownEnabled={breakdownEnabled}
         aiDebriefEnabled={aiDebriefEnabled}

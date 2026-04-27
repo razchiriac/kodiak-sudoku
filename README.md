@@ -84,8 +84,10 @@ See `/Users/raz/.cursor/plans/sudoku_web_app_build_plan_d9ec8836.plan.md` §16. 
 RAZ-85 ships Android as a Trusted Web Activity wrapper over the same web app.
 
 - Runbook: `docs/android-twa.md`
+- Internal QA template: `docs/android-internal-testing-checklist.md`
 - TWA template config: `android/twa-manifest.template.json`
 - Digital Asset Links endpoint: `/.well-known/assetlinks.json`
+- Asset links verification command: `npm run android:assetlinks:check -- --url=https://<your-domain>`
 
 ## Testing
 

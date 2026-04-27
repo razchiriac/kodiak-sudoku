@@ -9,6 +9,9 @@ export function Footer() {
           <Link href="/privacy" className="hover:text-foreground">
             Privacy
           </Link>
+          <Link href="/account-deletion" className="hover:text-foreground">
+            Delete account
+          </Link>
           <Link href="/terms" className="hover:text-foreground">
             Terms
           </Link>

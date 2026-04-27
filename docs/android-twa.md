@@ -30,6 +30,18 @@ Expected:
 - package name matches TWA app package
 - SHA-256 fingerprint matches release signing key
 
+You can also validate this automatically with the repo script:
+
+```bash
+npm run android:assetlinks:check -- --url=https://<your-domain>
+```
+
+This command fails fast when:
+
+- the endpoint is unreachable or non-JSON
+- `android_app` entry is missing for your package
+- certificate fingerprints do not match expected env vars
+
 ## 3) Generate Android project
 
 Using Bubblewrap:
@@ -69,6 +81,9 @@ Before production:
    - Technique Journey pages
    - profile / leaderboard routes
    - haptics and settings toggles
+
+Use `docs/android-internal-testing-checklist.md` to record test evidence and
+go/no-go signoff.
 
 ## 6) Keystore handling
 

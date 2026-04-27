@@ -18,6 +18,10 @@ export default function PrivacyPage() {
         <a href="mailto:hello@example.com"> hello@example.com</a>; your profile, saved games, and
         completion history will be removed within 7 days.
       </p>
+      <p>
+        You can also use our dedicated <a href="/account-deletion">Account deletion</a> page for
+        full request instructions and retention details.
+      </p>
     </div>
   );
 }

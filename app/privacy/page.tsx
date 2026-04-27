@@ -15,7 +15,7 @@ export default function PrivacyPage() {
       </p>
       <p>
         You can request deletion of your account by signing in and emailing
-        <a href="mailto:hello@example.com"> hello@example.com</a>; your profile, saved games, and
+        <a href="mailto:raz@kodiak.quest"> raz@kodiak.quest</a>; your profile, saved games, and
         completion history will be removed within 7 days.
       </p>
       <p>

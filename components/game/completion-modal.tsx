@@ -409,20 +409,17 @@ export function CompletionModal({
           />
         ) : null}
 
-        {/* RAZ-61 AI debrief card. Sits beneath the deterministic
-            breakdown so the player sees the numerical buckets first
-            and the AI prose second. Gated by both:
+        {/* RAZ-61 AI debrief card.
+            RAZ-100: when Breakdown is already visible, this card can
+            duplicate nearly the same deterministic copy ("steady
+            pace / no mistakes / no hints"). To keep the solved modal
+            concise and avoid repeated text, we suppress the card if
+            breakdownEnabled is true.
+            Still gated by:
               - `aiDebriefEnabled` (Edge Config flag), AND
-              - the modal `open` state — we don't want to fire the
-                action until the player has actually opened the
-                modal. The CompletionModal mounts on every game so
-                a render-while-closed would burn API budget for no
-                visible result.
-            We also gate on `attemptId` so a stale snapshot without
-            an attempt id doesn't accidentally reuse another run's
-            cached debrief — better to skip the card entirely than
-            mislabel data. */}
-        {aiDebriefEnabled && open && attemptId ? (
+              - `open` (don't fire while modal is closed), AND
+              - `attemptId` (stable cache key). */}
+        {aiDebriefEnabled && !breakdownEnabled && open && attemptId ? (
           <AiDebriefCard
             cacheKey={`${meta.mode}:${meta.puzzleId}:${attemptId}`}
             input={{

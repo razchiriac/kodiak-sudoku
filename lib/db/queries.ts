@@ -197,6 +197,11 @@ export async function listRecentSavedGames(userId: string, limit = 5) {
         // cell. This is a cheap text scan, fine for the small
         // number of rows we touch (limit defaults to 5).
         sql`position('0' in ${savedGames.board}) > 0`,
+        // RAZ-101: don't show zero-progress placeholders in Continue.
+        // These rows are usually created when a puzzle is opened but
+        // never meaningfully played (0m in UI), and they can linger
+        // after edge-case completion flows.
+        sql`${savedGames.elapsedMs} > 0`,
       ),
     )
     .orderBy(desc(savedGames.updatedAt))

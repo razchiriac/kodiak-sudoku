@@ -71,4 +71,47 @@ test.describe("authed: post-completion submission", () => {
     // "error" suggests something went wrong server-side.
     await expect(modal.getByText(/error|failed|could not/i)).toHaveCount(0);
   });
+
+  test("a solved puzzle is removed from the /play Continue list", async ({
+    page,
+  }) => {
+    await gotoPlayPuzzle(page, PUZZLE_ID);
+
+    await page.evaluate(() => {
+      const win = window as unknown as {
+        __sudokuStore: {
+          getState: () => {
+            board: Uint8Array;
+            meta: { solution: string | null } | null;
+            selectCell: (i: number) => void;
+            setMode: (m: "value" | "notes") => void;
+            inputDigit: (d: number) => void;
+          };
+        };
+      };
+      const st = win.__sudokuStore.getState();
+      const solution = st.meta?.solution;
+      if (!solution) throw new Error("no client-side solution on /play/2");
+      st.setMode("value");
+      for (let i = 0; i < st.board.length; i++) {
+        if (st.board[i] !== 0) continue;
+        st.selectCell(i);
+        st.inputDigit(Number(solution[i]));
+      }
+    });
+
+    const modal = page.getByRole("dialog");
+    await expect(modal).toBeVisible();
+    await expect(modal.getByText(/error|failed|could not/i)).toHaveCount(0);
+
+    await page.goto("/play");
+    const continueSection = page
+      .locator("section")
+      .filter({ has: page.getByRole("heading", { name: "Continue" }) });
+    if ((await continueSection.count()) > 0) {
+      await expect(
+        continueSection.locator(`a[href="/play/${PUZZLE_ID}"]`),
+      ).toHaveCount(0);
+    }
+  });
 });

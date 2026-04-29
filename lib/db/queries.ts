@@ -608,3 +608,50 @@ export async function getProfileById(id: string) {
   const rows = await db.select().from(profiles).where(eq(profiles.id, id)).limit(1);
   return rows[0] ?? null;
 }
+
+// Derive streak stats directly from completed daily rows. This is a
+// resilience fallback for environments where profile streak columns may
+// be stale due to trigger drift; callers can prefer profile columns when
+// non-zero and fall back to this shape when needed.
+export async function getDerivedDailyStreak(userId: string): Promise<{
+  currentStreak: number;
+  longestStreak: number;
+}> {
+  const rows = await db.execute<{ current_streak: number; longest_streak: number }>(
+    sql`with daily_dates as (
+          select distinct ${completedGames.dailyDate}::date as d
+          from ${completedGames}
+          where ${completedGames.userId} = ${userId}
+            and ${completedGames.mode} = 'daily'
+            and ${completedGames.dailyDate} is not null
+        ),
+        grouped as (
+          select
+            d,
+            d - (row_number() over (order by d))::int as grp
+          from daily_dates
+        ),
+        runs as (
+          select
+            min(d) as start_date,
+            max(d) as end_date,
+            count(*)::int as len
+          from grouped
+          group by grp
+        ),
+        latest_run as (
+          select len
+          from runs
+          order by end_date desc
+          limit 1
+        )
+        select
+          coalesce((select len from latest_run), 0)::int as current_streak,
+          coalesce((select max(len) from runs), 0)::int as longest_streak`,
+  );
+  const first = execRows<{ current_streak: number; longest_streak: number }>(rows)[0];
+  return {
+    currentStreak: first?.current_streak ?? 0,
+    longestStreak: first?.longest_streak ?? 0,
+  };
+}

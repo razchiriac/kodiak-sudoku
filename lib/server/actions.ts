@@ -174,6 +174,7 @@ export async function submitCompletionAction(raw: SubmitInput) {
 
   const user = await getCurrentUser();
   if (!user) return fail("unauthenticated");
+  const userId = user.id;
 
   let input: SubmitInput;
   try {
@@ -191,6 +192,20 @@ export async function submitCompletionAction(raw: SubmitInput) {
   const puzzle = await getPuzzleById(input.puzzleId);
   if (!puzzle) return fail("puzzle_not_found");
 
+  async function cleanupSavedGameAfterSolved(reason: string) {
+    // Continue cards exist only for random saved games; daily progress
+    // is intentionally not autosaved to the server.
+    if (input.mode !== "random") return;
+    try {
+      await db
+        .delete(savedGames)
+        .where(and(eq(savedGames.userId, userId), eq(savedGames.puzzleId, input.puzzleId)));
+      log("saved_games_cleanup", { reason });
+    } catch (err) {
+      console.error("[submitCompletion] saved_games cleanup_failed", err);
+    }
+  }
+
   // Verify the submitted board. RAZ-18: use the puzzle's variant for
   // conflict detection so diagonal puzzles are validated correctly.
   const variant = (puzzle.variant ?? "standard") as import("@/lib/sudoku/board").Variant;
@@ -205,6 +220,7 @@ export async function submitCompletionAction(raw: SubmitInput) {
 
   // Time floor sanity check.
   if (input.elapsedMs < TIME_FLOOR_MS[puzzle.difficultyBucket]) {
+    await cleanupSavedGameAfterSolved("reject_time_floor");
     return fail("time_floor", { difficultyBucket: puzzle.difficultyBucket });
   }
 
@@ -218,13 +234,14 @@ export async function submitCompletionAction(raw: SubmitInput) {
     const savedRow = await db
       .select({ startedAt: savedGames.startedAt })
       .from(savedGames)
-      .where(and(eq(savedGames.userId, user.id), eq(savedGames.puzzleId, input.puzzleId)))
+      .where(and(eq(savedGames.userId, userId), eq(savedGames.puzzleId, input.puzzleId)))
       .limit(1);
     const startedAt = savedRow[0]?.startedAt;
     if (startedAt) {
       const wallClockMs = Date.now() - startedAt.getTime();
       const maxAllowedMs = wallClockMs * SOLVE_TIME_MULT_SLACK + SOLVE_TIME_ABS_SLACK_MS;
       if (input.elapsedMs > maxAllowedMs) {
+        await cleanupSavedGameAfterSolved("reject_solve_time_mismatch");
         return fail("solve_time_mismatch", {
           wallClockMs,
           maxAllowedMs,
@@ -255,7 +272,7 @@ export async function submitCompletionAction(raw: SubmitInput) {
   // retry storm cannot pollute the random-mode leaderboard.
   try {
     await db.insert(completedGames).values({
-      userId: user.id,
+      userId,
       puzzleId: input.puzzleId,
       difficultyBucket: puzzle.difficultyBucket,
       timeMs: input.elapsedMs,
@@ -265,7 +282,7 @@ export async function submitCompletionAction(raw: SubmitInput) {
       dailyDate,
       attemptId: input.attemptId ?? null,
     });
-    log("inserted", { userId: user.id, attemptId: input.attemptId ?? null });
+    log("inserted", { userId, attemptId: input.attemptId ?? null });
   } catch (e: unknown) {
     // Unique violation. We need to know WHICH unique index fired:
     //   - `completed_games_daily_user_bucket_uniq` → the player already
@@ -292,6 +309,7 @@ export async function submitCompletionAction(raw: SubmitInput) {
         //   - achievements re-evaluation is keyed on (user, key) and
         //     will simply find them already earned
       } else {
+        await cleanupSavedGameAfterSolved("duplicate_completion");
         return fail("already_completed_today");
       }
     } else {
@@ -312,13 +330,7 @@ export async function submitCompletionAction(raw: SubmitInput) {
   // experience of "I see the completion in the modal but the
   // continue card on /play also still shows it" is much smaller
   // than "completion silently doesn't count".
-  try {
-    await db
-      .delete(savedGames)
-      .where(and(eq(savedGames.userId, user.id), eq(savedGames.puzzleId, input.puzzleId)));
-  } catch (err) {
-    console.error("[submitCompletion] saved_games delete_failed", err);
-  }
+  await cleanupSavedGameAfterSolved("submit_ok");
 
   // Invalidate the leaderboard and dashboard caches so the new entry
   // shows up immediately on the next request. RAZ-74: a plain

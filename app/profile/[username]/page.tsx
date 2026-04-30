@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Flame, Snowflake, Trophy } from "lucide-react";
 import {
+  getCompletionDates,
   getProfileByUsername,
   getRecentTimesByBucket,
   getSolveTimestamps,
@@ -9,6 +10,7 @@ import {
   getUserStats,
 } from "@/lib/db/queries";
 import { listEarnedAchievements } from "@/lib/server/achievements";
+import { computePlayingStreak, utcDateToday } from "@/lib/profile/streak";
 import { DIFFICULTY_LABEL, formatTime } from "@/lib/utils";
 import { Sparkline } from "@/components/profile/sparkline";
 import { SolveHeatmap } from "@/components/profile/heatmap";
@@ -45,6 +47,7 @@ export default async function ProfilePage({
     trendExpert,
     heatmapTimestamps,
     earnedAchievements,
+    completionDates,
   ] = await Promise.all([
     getUserStats(profile.id),
     listRecentCompletions(profile.id, 20),
@@ -60,7 +63,13 @@ export default async function ProfilePage({
     // renders locked badges too, so we don't need the catalog
     // here — just the earned list.
     listEarnedAchievements(profile.id),
+    // RAZ-103/104: distinct UTC completion dates so the displayed
+    // streak reflects actual playing history (any mode), not just
+    // the trigger-maintained `current_daily_streak` column which
+    // only ever advances on `mode='daily'` rows.
+    getCompletionDates(profile.id),
   ]);
+  const playingStreak = computePlayingStreak(completionDates, utcDateToday());
   // Index trends by bucket so the difficulty map below can look each
   // one up by number without a chain of conditionals.
   const trendsByBucket: Record<number, { timeMs: number }[]> = {
@@ -84,8 +93,8 @@ export default async function ProfilePage({
           <Stat
             icon={<Flame className="h-4 w-4" />}
             label="Streak"
-            value={profile.currentDailyStreak.toString()}
-            sub={`best ${profile.longestDailyStreak}`}
+            value={playingStreak.current.toString()}
+            sub={`best ${playingStreak.longest}`}
           />
           {/* RAZ-8: Streak freezes — spent automatically by the
               Postgres trigger to forgive missed days. We surface the

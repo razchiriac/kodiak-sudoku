@@ -174,6 +174,7 @@ export async function submitCompletionAction(raw: SubmitInput) {
 
   const user = await getCurrentUser();
   if (!user) return fail("unauthenticated");
+  const userId = user.id;
 
   let input: SubmitInput;
   try {
@@ -191,6 +192,32 @@ export async function submitCompletionAction(raw: SubmitInput) {
   const puzzle = await getPuzzleById(input.puzzleId);
   if (!puzzle) return fail("puzzle_not_found");
 
+  // RAZ-104: helper for the saved_games cleanup. Wrapped in a function
+  // so we can call it from EVERY exit path that represents "this
+  // (user, puzzle) pair is no longer resumable" — not just the success
+  // branch. This includes the rejected paths (time_floor,
+  // solve_time_mismatch) and the duplicate / idempotent-replay
+  // branches, all of which leave a player believing the puzzle is
+  // done. We deliberately ignore mode here: a "daily" submit can
+  // legitimately race against a stale `random` saved row from a prior
+  // attempt at the same underlying puzzle id, and clearing it does no
+  // harm because `daily` progress is not autosaved.
+  async function cleanupSavedGameRow(reason: string) {
+    try {
+      await db
+        .delete(savedGames)
+        .where(
+          and(
+            eq(savedGames.userId, userId),
+            eq(savedGames.puzzleId, input.puzzleId),
+          ),
+        );
+      log("saved_games_cleanup", { reason });
+    } catch (err) {
+      console.error("[submitCompletion] saved_games cleanup_failed", err);
+    }
+  }
+
   // Verify the submitted board. RAZ-18: use the puzzle's variant for
   // conflict detection so diagonal puzzles are validated correctly.
   const variant = (puzzle.variant ?? "standard") as import("@/lib/sudoku/board").Variant;
@@ -205,6 +232,12 @@ export async function submitCompletionAction(raw: SubmitInput) {
 
   // Time floor sanity check.
   if (input.elapsedMs < TIME_FLOOR_MS[puzzle.difficultyBucket]) {
+    // RAZ-104: the board IS solved at this point (we passed
+    // `incorrect_solution` above), the player just blew through the
+    // anti-cheat floor. Their UI is already showing "Solved!" — don't
+    // leave a stale `saved_games` row behind that re-appears in the
+    // dashboard's "Continue" list.
+    await cleanupSavedGameRow("reject_time_floor");
     return fail("time_floor", { difficultyBucket: puzzle.difficultyBucket });
   }
 
@@ -218,13 +251,17 @@ export async function submitCompletionAction(raw: SubmitInput) {
     const savedRow = await db
       .select({ startedAt: savedGames.startedAt })
       .from(savedGames)
-      .where(and(eq(savedGames.userId, user.id), eq(savedGames.puzzleId, input.puzzleId)))
+      .where(and(eq(savedGames.userId, userId), eq(savedGames.puzzleId, input.puzzleId)))
       .limit(1);
     const startedAt = savedRow[0]?.startedAt;
     if (startedAt) {
       const wallClockMs = Date.now() - startedAt.getTime();
       const maxAllowedMs = wallClockMs * SOLVE_TIME_MULT_SLACK + SOLVE_TIME_ABS_SLACK_MS;
       if (input.elapsedMs > maxAllowedMs) {
+        // RAZ-104: same logic as the time_floor branch above — the
+        // submitted board IS solved, the player just tripped a sanity
+        // check. Don't leave the saved row behind.
+        await cleanupSavedGameRow("reject_solve_time_mismatch");
         return fail("solve_time_mismatch", {
           wallClockMs,
           maxAllowedMs,
@@ -255,7 +292,7 @@ export async function submitCompletionAction(raw: SubmitInput) {
   // retry storm cannot pollute the random-mode leaderboard.
   try {
     await db.insert(completedGames).values({
-      userId: user.id,
+      userId,
       puzzleId: input.puzzleId,
       difficultyBucket: puzzle.difficultyBucket,
       timeMs: input.elapsedMs,
@@ -265,7 +302,7 @@ export async function submitCompletionAction(raw: SubmitInput) {
       dailyDate,
       attemptId: input.attemptId ?? null,
     });
-    log("inserted", { userId: user.id, attemptId: input.attemptId ?? null });
+    log("inserted", { userId, attemptId: input.attemptId ?? null });
   } catch (e: unknown) {
     // Unique violation. We need to know WHICH unique index fired:
     //   - `completed_games_daily_user_bucket_uniq` → the player already
@@ -292,6 +329,11 @@ export async function submitCompletionAction(raw: SubmitInput) {
         //   - achievements re-evaluation is keyed on (user, key) and
         //     will simply find them already earned
       } else {
+        // RAZ-104: same pattern — a duplicate completion still means
+        // "this puzzle is finished for this user", so the saved row
+        // is stale and must go. The unique violation we just hit is
+        // proof of an existing completed_games row.
+        await cleanupSavedGameRow("duplicate_completion");
         return fail("already_completed_today");
       }
     } else {
@@ -308,17 +350,8 @@ export async function submitCompletionAction(raw: SubmitInput) {
   // "Continue" card doesn't show a finished puzzle. Wrapped so a
   // delete failure (rare — would only happen on a connection blip
   // between the insert and this statement) cannot mask the fact
-  // that the row IS inserted; we just log and continue. The user
-  // experience of "I see the completion in the modal but the
-  // continue card on /play also still shows it" is much smaller
-  // than "completion silently doesn't count".
-  try {
-    await db
-      .delete(savedGames)
-      .where(and(eq(savedGames.userId, user.id), eq(savedGames.puzzleId, input.puzzleId)));
-  } catch (err) {
-    console.error("[submitCompletion] saved_games delete_failed", err);
-  }
+  // that the row IS inserted; we just log and continue.
+  await cleanupSavedGameRow("submit_ok");
 
   // Invalidate the leaderboard and dashboard caches so the new entry
   // shows up immediately on the next request. RAZ-74: a plain
@@ -379,7 +412,7 @@ export async function submitCompletionAction(raw: SubmitInput) {
   // to show a celebratory toast.
   let newlyEarned: { key: string; title: string; icon: string }[] = [];
   try {
-    const defs = await evaluateAndAwardAchievements(user.id);
+    const defs = await evaluateAndAwardAchievements(userId);
     newlyEarned = defs.map((d) => ({
       key: d.key,
       title: d.title,

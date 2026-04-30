@@ -71,4 +71,69 @@ test.describe("authed: post-completion submission", () => {
     // "error" suggests something went wrong server-side.
     await expect(modal.getByText(/error|failed|could not/i)).toHaveCount(0);
   });
+
+  // RAZ-104: after a successful completion the puzzle must NOT show up
+  // under the dashboard's "Continue" list. This is the user-visible
+  // contract of `submitCompletionAction`'s `cleanupSavedGameRow` step
+  // plus the eager stale-row cleanup baked into `listRecentSavedGames`.
+  // The previous regression let solved puzzles linger as "in progress"
+  // for hours; the test reproduces that lifecycle in one pass.
+  test("a solved puzzle disappears from /play Continue", async ({ page }) => {
+    await gotoPlayPuzzle(page, PUZZLE_ID);
+
+    // Make at least one move BEFORE the auto-fill so a saved_games row
+    // is guaranteed to exist (the autosave debounce is 4s; touching
+    // the board first makes it impossible to race past).
+    await page.evaluate(() => {
+      const win = window as unknown as {
+        __sudokuStore: {
+          getState: () => {
+            board: Uint8Array;
+            meta: { solution: string | null } | null;
+            selectCell: (i: number) => void;
+            setMode: (m: "value" | "notes") => void;
+            inputDigit: (d: number) => void;
+          };
+        };
+      };
+      const st = win.__sudokuStore.getState();
+      const solution = st.meta?.solution;
+      if (!solution) throw new Error("no client-side solution on /play/2");
+      st.setMode("value");
+      // Place one cell, then fill the rest. The first placement
+      // ensures the autosave effect fires (it gates on `board`
+      // changes); the rest brings the board to a solved state.
+      for (let i = 0; i < st.board.length; i++) {
+        if (st.board[i] !== 0) continue;
+        st.selectCell(i);
+        st.inputDigit(Number(solution[i]));
+      }
+    });
+
+    const modal = page.getByRole("dialog");
+    await expect(modal).toBeVisible();
+    await expect(
+      modal.getByRole("heading", { name: "Solved!" }),
+    ).toBeVisible();
+    await expect(modal.getByText(/error|failed|could not/i)).toHaveCount(0);
+
+    // Give the server action's cleanupSavedGameRow a moment to land
+    // before we navigate away. The submit modal is open AS SOON AS
+    // the insert resolves, which is also when the cleanup fires;
+    // 1s is generous enough to absorb DB latency on a cold function.
+    await page.waitForTimeout(1000);
+
+    await page.goto("/play");
+
+    // The Continue section is conditionally rendered when at least
+    // one resumable saved row exists. If the section is missing
+    // entirely, that's a stronger pass than "section exists but
+    // empty". Either is acceptable; we just need to ensure THIS
+    // puzzle's link isn't there.
+    const puzzleLink = page.locator(`a[href="/play/${PUZZLE_ID}"]`);
+    const continueHeading = page.getByRole("heading", { name: "Continue" });
+    if (await continueHeading.isVisible().catch(() => false)) {
+      await expect(puzzleLink).toHaveCount(0);
+    }
+  });
 });

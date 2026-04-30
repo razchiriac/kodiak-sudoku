@@ -128,9 +128,81 @@ export async function getAdjacentDailyDates(
   return { prev: row?.prev ?? null, next: row?.next ?? null };
 }
 
+// RAZ-104 — Eagerly remove `saved_games` rows that are clearly stale
+// for the given user. We define a row as stale when ANY of:
+//
+//   * a `completed_games` row already exists for the same (user, puzzle)
+//     — the player finished the puzzle but the post-submit cleanup
+//     never landed (or this is historical data from before the cleanup
+//     was wired up correctly), or
+//   * the saved board is fully filled (no `'0'` characters left) — the
+//     player either finished but the submit never reached the server,
+//     or the board is in an unsalvageable filled-but-conflicting state;
+//     either way, "Continue" is meaningless.
+//
+// This runs from any read path that surfaces saved games to the user
+// (`listRecentSavedGames`, `getSavedGame`) so production data
+// self-heals on first visit, without us having to ship a one-off
+// migration. Scoped to `(user_id, puzzle_id?)` to keep the index hits
+// minimal — no full-table scans even if the user has hundreds of rows.
+//
+// We deliberately do NOT delete `elapsed_ms = 0` rows here: a row with
+// no progress yet may belong to a player who just opened the puzzle
+// and is still under the autosave debounce window.
+async function deleteStaleSavedGamesFor(
+  userId: string,
+  puzzleId?: number,
+): Promise<void> {
+  try {
+    if (puzzleId !== undefined) {
+      await db.execute(sql`
+        delete from ${savedGames}
+        where ${savedGames.userId} = ${userId}
+          and ${savedGames.puzzleId} = ${puzzleId}
+          and (
+            exists (
+              select 1
+              from ${completedGames}
+              where ${completedGames.userId} = ${savedGames.userId}
+                and ${completedGames.puzzleId} = ${savedGames.puzzleId}
+            )
+            or position('0' in ${savedGames.board}) = 0
+          )
+      `);
+    } else {
+      await db.execute(sql`
+        delete from ${savedGames}
+        where ${savedGames.userId} = ${userId}
+          and (
+            exists (
+              select 1
+              from ${completedGames}
+              where ${completedGames.userId} = ${savedGames.userId}
+                and ${completedGames.puzzleId} = ${savedGames.puzzleId}
+            )
+            or position('0' in ${savedGames.board}) = 0
+          )
+      `);
+    }
+  } catch (err) {
+    // A failure here must never block the read path. We log loudly
+    // because if this starts failing, the "Continue" list will start
+    // re-leaking stale rows on the next deploy.
+    console.error("[queries] deleteStaleSavedGames failed", err);
+  }
+}
+
 // User's saved game for a specific puzzle (if any). Used by the resume
 // flow on the dashboard and the play page.
+//
+// RAZ-104: eagerly removes a stale row before the SELECT so the
+// `/play/[puzzleId]` page never resumes from a fully-filled board (the
+// cause of the "completion modal opens immediately with a negative
+// timer" report — the resumed snapshot's `started_at` was hours-old,
+// which made `Date.now() - startedAt + saved.elapsed_ms` swing
+// negative once the timer reset).
 export async function getSavedGame(userId: string, puzzleId: number) {
+  await deleteStaleSavedGamesFor(userId, puzzleId);
   const rows = await db
     .select()
     .from(savedGames)
@@ -172,6 +244,12 @@ export async function getSavedGame(userId: string, puzzleId: number) {
 //     somewhere) — both are useless to "Continue" because the
 //     player can't make any more moves.
 export async function listRecentSavedGames(userId: string, limit = 5) {
+  // RAZ-104: eagerly clean up stale rows before SELECTing so historical
+  // bad rows from before the post-submit cleanup was hardened are
+  // self-healed on every dashboard visit. The `WHERE` predicates below
+  // still keep the read defensive in case a DELETE fails or the
+  // schedule races a concurrent insert.
+  await deleteStaleSavedGamesFor(userId);
   return db
     .select({
       saved: savedGames,
@@ -607,4 +685,22 @@ export async function getProfileByUsername(username: string) {
 export async function getProfileById(id: string) {
   const rows = await db.select().from(profiles).where(eq(profiles.id, id)).limit(1);
   return rows[0] ?? null;
+}
+
+// RAZ-104: distinct UTC dates the user completed any puzzle on. Powers
+// the displayed "playing streak" (lib/profile/streak.ts) which uses the
+// player's actual completion history rather than the trigger-only
+// `current_daily_streak` column. Returns YYYY-MM-DD strings.
+//
+// We cast to UTC explicitly so a player who plays at 23:30 local time
+// in a UTC+1 zone still gets credited to the same UTC calendar day
+// the leaderboard / daily features already use everywhere else.
+export async function getCompletionDates(userId: string): Promise<string[]> {
+  const rows = await db.execute<{ d: string }>(
+    sql`select distinct ((${completedGames.completedAt} at time zone 'UTC')::date)::text as d
+        from ${completedGames}
+        where ${completedGames.userId} = ${userId}
+        order by d desc`,
+  );
+  return execRows<{ d: string }>(rows).map((r) => r.d);
 }

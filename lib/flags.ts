@@ -319,3 +319,12 @@ export const adaptiveCoach = declareFlag("adaptive-coach");
 // behaves as before. Daily puzzles never show mistake tint because
 // the solution is kept server-side (otherwise we'd leak it).
 export const showMistakes = declareFlag("show-mistakes");
+
+// RAZ-106 - Offline sudoku gameplay. When on, the app pre-fetches a bank
+// of random puzzles into IndexedDB via /api/puzzles/offline-bank so new
+// puzzles can be started without a network connection. The /play/offline
+// route serves puzzles from IndexedDB and skips autosave + live completion
+// submission (queued locally, drained on reconnect). Default off — the
+// service-worker cache version bump is the highest-risk part of this change
+// and should be validated in staging before production.
+export const offlinePlay = declareFlag("offline-play");

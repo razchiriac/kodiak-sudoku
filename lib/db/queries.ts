@@ -48,6 +48,36 @@ export async function getRandomPuzzleByBucket(
   return fallback[0] ?? null;
 }
 
+// RAZ-106: Batch variant of getRandomPuzzleByBucket for the offline puzzle
+// bank. Returns up to `count` distinct random puzzles from a bucket so the
+// /api/puzzles/offline-bank endpoint can prefetch multiple puzzles in one
+// query per bucket. TABLESAMPLE with a larger sample size (count * 5, min 20)
+// gives enough rows to deduplicate; falls back to random() scan if the
+// sample is empty (very small buckets, unusual but possible in staging).
+export async function getRandomPuzzlesByBucket(
+  bucket: number,
+  count: number,
+  variant: string = "standard",
+): Promise<Puzzle[]> {
+  const sampleSize = Math.max(count * 5, 20);
+  const sample = await db.execute<Puzzle>(
+    sql`select * from ${puzzles}
+        tablesample system_rows(${sampleSize})
+        where ${puzzles.difficultyBucket} = ${bucket}
+          and ${puzzles.variant} = ${variant}
+        limit ${count}`,
+  );
+  const rows = execRows<Puzzle>(sample);
+  if (rows.length > 0) return rows;
+
+  return db
+    .select()
+    .from(puzzles)
+    .where(and(eq(puzzles.difficultyBucket, bucket), eq(puzzles.variant, variant)))
+    .orderBy(sql`random()`)
+    .limit(count);
+}
+
 export async function getPuzzleById(id: number): Promise<Puzzle | null> {
   const rows = await db.select().from(puzzles).where(eq(puzzles.id, id)).limit(1);
   return rows[0] ?? null;

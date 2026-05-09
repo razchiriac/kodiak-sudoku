@@ -86,6 +86,12 @@ export function PlayClient({
   aiCoachEnabled = false,
   stuckRescueEnabled = false,
   adaptiveCoachEnabled = false,
+  // RAZ-106: true when this session was entered via /play/offline (puzzle
+  // was claimed from the IndexedDB offline bank). When true, autosave is
+  // skipped (no server DB row to upsert) and completion is enqueued into
+  // the local IndexedDB completion-queue instead of being submitted
+  // directly. The queue is drained as soon as the device reconnects.
+  isOffline = false,
 }: {
   puzzle: PuzzleProp;
   savedGame: SavedProp;
@@ -213,6 +219,10 @@ export function PlayClient({
   // flag is flipped off via Edge Config — same kill-switch shape as
   // `stuckRescueEnabled`.
   adaptiveCoachEnabled?: boolean;
+  // RAZ-106: true for puzzles served from the IndexedDB offline bank via
+  // /play/offline. Autosave and live submission are skipped; completion is
+  // enqueued locally and synced on reconnect.
+  isOffline?: boolean;
 }) {
   const startGame = useGameStore((s) => s.startGame);
   const resumeFromSnapshot = useGameStore((s) => s.resumeFromSnapshot);
@@ -423,6 +433,10 @@ export function PlayClient({
     // RAZ-35: user-pasted puzzles have no DB row, so there's nothing
     // the autosave endpoint could upsert into. Skip entirely.
     if (isCustom) return;
+    // RAZ-106: offline puzzles are claimed from IndexedDB and have no
+    // saved_games row on the server. Skip autosave; Zustand/localStorage
+    // already persists the state locally.
+    if (isOffline) return;
     if (debounce.current) window.clearTimeout(debounce.current);
     debounce.current = window.setTimeout(() => {
       const snap = snapshot();
@@ -443,7 +457,7 @@ export function PlayClient({
     // We deliberately only depend on values that should trigger save. The
     // store's `snapshot` is stable so it's safe to omit from deps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [board, elapsedMs, isPaused, meta, isSignedIn, mode, isCustom]);
+  }, [board, elapsedMs, isPaused, meta, isSignedIn, mode, isCustom, isOffline]);
 
   // On completion, submit to the server once. We track submission status
   // for the completion modal so the user gets feedback if it failed.
@@ -675,6 +689,34 @@ export function PlayClient({
       submitted.current = true;
       return;
     }
+    // RAZ-106: for offline puzzles, enqueue the completion locally and
+    // attempt an immediate drain (succeeds instantly if the device has
+    // reconnected by now). If the drain fails, the Background Sync /
+    // `online` event handler in providers.tsx will drain on the next
+    // reconnect. We do NOT call runSubmit — there's no server
+    // saved_games row for this puzzle, and the queue handles the
+    // eventual consistency.
+    if (isOffline) {
+      submitted.current = true;
+      const snap = snapshot();
+      if (snap) {
+        void import("@/lib/offline/completion-queue").then(
+          ({ enqueueCompletion, drainCompletionQueue }) => {
+            void enqueueCompletion({
+              puzzleId: snap.meta.puzzleId,
+              board: snap.board,
+              elapsedMs: snap.elapsedMs,
+              mistakes: snap.mistakes,
+              hintsUsed: snap.hintsUsed,
+              mode: "random",
+              dailyDate: null,
+              attemptId: snap.attemptId ?? null,
+            }).then(() => drainCompletionQueue());
+          },
+        );
+      }
+      return;
+    }
     submitted.current = true;
     // RAZ-78: delegated to the extracted `runSubmit` callback above.
     // It is a strict superset of the RAZ-76 inlined IIFE — same
@@ -686,7 +728,7 @@ export function PlayClient({
     // because they don't belong in `runSubmit` — they're decisions
     // about WHETHER to submit, not HOW.
     void runSubmit();
-  }, [isComplete, meta, isSignedIn, isArchive, isCustom, runSubmit]);
+  }, [isComplete, meta, isSignedIn, isArchive, isCustom, isOffline, runSubmit, snapshot]);
 
   // RAZ-28 — Periodic flush of the in-memory input-event ring buffer
   // to the server. We fire under three triggers: every ~15 seconds

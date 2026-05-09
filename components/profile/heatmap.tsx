@@ -36,7 +36,13 @@ import {
   WEEKDAY_LABELS,
 } from "@/lib/profile/heatmap";
 
-export function SolveHeatmap({ timestamps }: { timestamps: Date[] }) {
+// RAZ-108: accept string | Date because Next.js RSC serialises Date
+// objects to ISO strings before they arrive at this client component.
+export function SolveHeatmap({
+  timestamps,
+}: {
+  timestamps: (Date | string)[];
+}) {
   // The profile page passes serialised Date objects (Next.js
   // marshals these via the RSC wire format). `useMemo` is a
   // defensive optimisation: if the parent re-renders for any

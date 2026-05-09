@@ -24,19 +24,29 @@ export type HeatmapGrid = number[][];
  * server that's UTC; in a browser it's the viewer's tz. The profile
  * page calls this from a client component so buckets reflect the
  * viewer's local wall clock.
+ *
+ * RAZ-108: accepts `Date | string | number` because Next.js RSC
+ * serializes `Date` objects from server components into ISO-8601
+ * strings before they arrive at the client component. The previous
+ * `ts instanceof Date` guard silently skipped every timestamp (strings
+ * are not Date instances), making the heatmap show "No solves yet"
+ * even when the user had real completions.
  */
-export function bucketSolves(timestamps: Iterable<Date>): HeatmapGrid {
+export function bucketSolves(
+  timestamps: Iterable<Date | string | number>,
+): HeatmapGrid {
   const grid: HeatmapGrid = Array.from({ length: 7 }, () =>
     Array(24).fill(0),
   );
   for (const ts of timestamps) {
-    // Guard against bad input: completed_at is non-null in the DB
-    // but we might be fed junk via tests. A NaN date silently
-    // landing in grid[NaN][NaN] would pollute the output; better
-    // to skip and move on.
-    if (!(ts instanceof Date) || Number.isNaN(ts.getTime())) continue;
-    const dow = ts.getDay();
-    const hour = ts.getHours();
+    // Normalise: accept Date objects, ISO strings, and epoch ms.
+    // `new Date(existingDate)` clones correctly; `new Date(isoString)`
+    // parses correctly; `new Date(epochMs)` also works.
+    const d = ts instanceof Date ? ts : new Date(ts);
+    // Guard against bad input (NaN dates from malformed strings, etc.)
+    if (Number.isNaN(d.getTime())) continue;
+    const dow = d.getDay();
+    const hour = d.getHours();
     grid[dow][hour] += 1;
   }
   return grid;

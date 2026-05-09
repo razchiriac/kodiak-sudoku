@@ -348,3 +348,10 @@ export const colorCodeMode = declareFlag("color-code-mode");
 // service-worker cache version bump is the highest-risk part of this change
 // and should be validated in staging before production.
 export const offlinePlay = declareFlag("offline-play");
+
+// RAZ-120 - Arrow Sudoku. When on, the play page renders the ArrowOverlay
+// component for puzzles whose variant is "arrow". The overlay draws circles
+// and directional lines on the grid to indicate sum constraints. Only
+// affects display — the constraint validation engine (lib/sudoku/arrow.ts)
+// runs regardless for server-side correctness checks.
+export const arrowSudoku = declareFlag("arrow-sudoku");

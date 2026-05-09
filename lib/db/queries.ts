@@ -288,17 +288,36 @@ export async function listRecentSavedGames(userId: string, limit = 5) {
 
 // User's completion history. Used on the profile page; cap at 50 to keep
 // the page snappy.
+//
+// RAZ-105: use LEFT JOIN instead of INNER JOIN so that any completed_games
+// row whose puzzle_id has no matching puzzles row is still returned (with
+// puzzle: null) rather than silently dropped. Without this, a single orphaned
+// completion causes the entire list to render as "No completions yet." The
+// caller (profile page) filters out null-puzzle rows before rendering; we log
+// them here so the anomaly shows up in Vercel runtime logs.
 export async function listRecentCompletions(userId: string, limit = 20) {
-  return db
+  const rows = await db
     .select({
       completed: completedGames,
       puzzle: puzzles,
     })
     .from(completedGames)
-    .innerJoin(puzzles, eq(puzzles.id, completedGames.puzzleId))
+    .leftJoin(puzzles, eq(puzzles.id, completedGames.puzzleId))
     .where(eq(completedGames.userId, userId))
     .orderBy(desc(completedGames.completedAt))
     .limit(limit);
+
+  for (const r of rows) {
+    if (!r.puzzle) {
+      console.error("[RAZ-105] orphaned completion — no matching puzzle row", {
+        completionId: r.completed.id,
+        puzzleId: r.completed.puzzleId,
+        userId,
+      });
+    }
+  }
+
+  return rows;
 }
 
 // Single-difficulty best time for a user. Used by the personal-best

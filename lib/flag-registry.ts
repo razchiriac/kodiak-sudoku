@@ -430,4 +430,24 @@ export const FLAG_REGISTRY: readonly FlagSpec[] = [
       "Render deterministic coaching-tip banner under the board (constraint explainer after conflicts, technique follow-up after hints, notes-encouragement, mistake-streak nudge). Pure local logic, no model calls.",
     linearId: "RAZ-49",
   },
+  {
+    // RAZ-106: Offline sudoku gameplay. When on, the app pre-fetches a
+    // bank of random puzzles per difficulty bucket into IndexedDB so the
+    // player can start a new puzzle without a network connection. Completions
+    // recorded while offline are queued locally and submitted automatically
+    // when the device reconnects (Background Sync API; fallback: drain on
+    // next `navigator.online` event). The /play/offline route serves puzzles
+    // directly from IndexedDB and renders PlayClient with isOffline=true so
+    // autosave and live completion submission are skipped.
+    //
+    // Default OFF for initial rollout — the service worker cache version
+    // bump (v1 → v2) is a higher-risk change that should be validated in
+    // staging before going live. Flip in Edge Config to enable per-env.
+    key: "offline-play",
+    envKey: "FLAG_OFFLINE_PLAY",
+    defaultValue: false,
+    description:
+      "Pre-fetch puzzle bank into IndexedDB and enable /play/offline route for network-free gameplay. Completions are queued and synced on reconnect.",
+    linearId: "RAZ-106",
+  },
 ];

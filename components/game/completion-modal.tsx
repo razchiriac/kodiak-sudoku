@@ -509,20 +509,27 @@ export function CompletionModal({
               Daily mode keeps its original leaderboard-only footer. */}
           {isQuickPlay ? (
             <>
+              {/* RAZ-104: router.refresh() busts the Next.js client-side
+                  Router Cache before pushing so the /play dashboard always
+                  re-fetches its saved_games list from the server rather than
+                  serving a stale RSC payload that still shows the completed
+                  puzzle in "Continue". revalidatePath("/play") in
+                  submitCompletionAction handles the server cache; this handles
+                  the client cache. */}
               <Button
                 variant="outline"
-                onClick={() => router.push("/leaderboard/quick")}
+                onClick={() => { router.refresh(); router.push("/leaderboard/quick"); }}
               >
                 Weekly board
               </Button>
-              <Button onClick={() => router.push("/play/quick")}>
+              <Button onClick={() => { router.refresh(); router.push("/play/quick"); }}>
                 Next puzzle
               </Button>
             </>
           ) : meta.mode === "daily" ? (
             <Button onClick={() => router.push("/leaderboard")}>View leaderboard</Button>
           ) : (
-            <Button onClick={() => router.push("/play")}>New puzzle</Button>
+            <Button onClick={() => { router.refresh(); router.push("/play"); }}>New puzzle</Button>
           )}
         </DialogFooter>
       </DialogContent>

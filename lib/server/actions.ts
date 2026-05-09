@@ -612,12 +612,26 @@ export async function updateProfileAction(raw: z.infer<typeof UpdateProfileSchem
   if (!user) return { ok: false as const, error: "unauthenticated" };
   const input = UpdateProfileSchema.parse(raw);
 
+  // RAZ-130: use UPSERT so users whose profile row wasn't created by the
+  // on_auth_user_created trigger (e.g. accounts that predate the trigger)
+  // still get their username stored. A bare UPDATE is a silent no-op when
+  // the row is missing, which meant those users could never be found by
+  // username in the friends search.
   try {
-    const { profiles } = await import("@/lib/db/schema");
     await db
-      .update(profiles)
-      .set({ username: input.username, displayName: input.displayName ?? input.username })
-      .where(eq(profiles.id, user.id));
+      .insert(profiles)
+      .values({
+        id: user.id,
+        username: input.username,
+        displayName: input.displayName ?? input.username,
+      })
+      .onConflictDoUpdate({
+        target: profiles.id,
+        set: {
+          username: input.username,
+          displayName: input.displayName ?? input.username,
+        },
+      });
   } catch (e: unknown) {
     if (typeof e === "object" && e && "code" in e && (e as { code: string }).code === "23505") {
       return { ok: false as const, error: "username_taken" };

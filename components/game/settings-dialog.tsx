@@ -164,6 +164,8 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const autoNotesOn = useGameStore(
     (s) => s.settings.autoNotesEnabled !== false,
   );
+  // RAZ-111: Speed Notes — default on.
+  const speedNotesOn = useGameStore((s) => s.settings.speedNotes !== false);
   // RAZ-110: zero-based mode — no feature flag needed, purely a display
   // preference. Default off so existing players see no change.
   const zeroBasedMode = useGameStore(
@@ -261,6 +263,28 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
               onChange={(e) => setSetting("autoNotesEnabled", e.target.checked)}
               className="mt-1 h-4 w-4 accent-foreground"
               aria-label="Enable auto-notes button"
+            />
+          </label>
+
+          {/* RAZ-111: Speed Notes toggle. Always available — no feature flag.
+              Shift+N fills candidates for the selected cell; Ctrl+Shift+N (or
+              long-press the Notes button) fills all empty cells. Merge
+              semantics: existing pencil marks are never removed. */}
+          <label className="flex items-start justify-between gap-4 text-sm">
+            <span className="flex flex-col">
+              <span className="font-medium text-foreground">Speed Notes</span>
+              <span className="text-xs text-muted-foreground">
+                ⇧N fills candidates for the selected cell; ⌃⇧N fills all empty
+                cells. Holding the Notes button also fills all. Existing marks
+                are preserved.
+              </span>
+            </span>
+            <input
+              type="checkbox"
+              checked={speedNotesOn}
+              onChange={(e) => setSetting("speedNotes", e.target.checked)}
+              className="mt-1 h-4 w-4 accent-foreground"
+              aria-label="Speed Notes shortcuts"
             />
           </label>
 

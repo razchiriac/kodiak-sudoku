@@ -35,6 +35,9 @@ export function KeyboardListener({ onShortcuts }: { onShortcuts?: () => void }) 
   const selectCell = useGameStore((s) => s.selectCell);
   // RAZ-110: zero-based mode changes which keys are digit inputs vs erase.
   const zeroBasedMode = useGameStore((s) => s.settings.zeroBasedMode);
+  // RAZ-111: Speed Notes shortcuts.
+  const fillCellCandidates = useGameStore((s) => s.fillCellCandidates);
+  const fillAllCandidates = useGameStore((s) => s.fillAllCandidates);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -81,7 +84,22 @@ export function KeyboardListener({ onShortcuts }: { onShortcuts?: () => void }) 
         return;
       }
 
-      if (key === "n" || key === "N") return moveAndPrevent(e, toggleMode);
+      // RAZ-111: Shift+N / Ctrl+Shift+N → Speed Notes. Must come before the
+      // plain-N branch because Shift+N produces key === "N" with shiftKey=true.
+      if (key === "n" || key === "N") {
+        const meta = e.metaKey || e.ctrlKey;
+        if (meta && e.shiftKey) {
+          e.preventDefault();
+          fillAllCandidates();
+          return;
+        }
+        if (e.shiftKey) {
+          e.preventDefault();
+          fillCellCandidates();
+          return;
+        }
+        return moveAndPrevent(e, toggleMode);
+      }
       if (key === "H" || key === "h") {
         // 'h' alone moves selection left (vim binding); only treat 'H'
         // (shift+h) as hint to avoid conflict.
@@ -117,6 +135,8 @@ export function KeyboardListener({ onShortcuts }: { onShortcuts?: () => void }) 
     selectCell,
     onShortcuts,
     zeroBasedMode,
+    fillCellCandidates,
+    fillAllCandidates,
   ]);
 
   return null;

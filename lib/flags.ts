@@ -320,6 +320,13 @@ export const adaptiveCoach = declareFlag("adaptive-coach");
 // the solution is kept server-side (otherwise we'd leak it).
 export const showMistakes = declareFlag("show-mistakes");
 
+// RAZ-113 - Solve Replay. When on, the completion modal renders a "Watch
+// Replay" button for games where input events were recorded (RAZ-28).
+// Opens a modal replay viewer with play/pause, speed selector (1x/2x/5x/
+// 10x), and a seekable scrubber. Entirely client-side after the initial
+// fetch — no API calls during playback. Flag off = button is hidden.
+export const solveReplay = declareFlag("solve-replay");
+
 // RAZ-106 - Offline sudoku gameplay. When on, the app pre-fetches a bank
 // of random puzzles into IndexedDB via /api/puzzles/offline-bank so new
 // puzzles can be started without a network connection. The /play/offline

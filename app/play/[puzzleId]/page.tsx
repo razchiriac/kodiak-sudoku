@@ -29,6 +29,7 @@ import {
   quickPlay,
   shareResult,
   showMistakes,
+  solveReplay,
 } from "@/lib/flags";
 import { buildShareOgMetadata } from "@/lib/share/og-metadata";
 import { PlayClient } from "./play-client";
@@ -196,6 +197,10 @@ export default async function PuzzlePage({
   // banner hook can short-circuit on flag-off.
   const adaptiveCoachEnabled = await adaptiveCoach();
 
+  // RAZ-113 / solve-replay flag. When on AND input events were
+  // recorded, the completion modal shows a "Watch Replay" button.
+  const replayEnabled = await solveReplay();
+
   return (
     <PlayClient
       puzzle={{
@@ -242,6 +247,7 @@ export default async function PuzzlePage({
       aiCoachEnabled={aiCoachEnabled}
       stuckRescueEnabled={stuckRescueEnabled}
       adaptiveCoachEnabled={adaptiveCoachEnabled}
+      replayEnabled={replayEnabled}
     />
   );
 }

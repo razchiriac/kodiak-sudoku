@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { track } from "@vercel/analytics";
-import { RotateCcw, Share2, Sparkles, Swords, Trophy, Users } from "lucide-react";
+import { Film, RotateCcw, Share2, Sparkles, Swords, Trophy, Users } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -16,9 +16,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { BreakdownPanel } from "@/components/game/breakdown-panel";
 import { AiDebriefCard } from "@/components/game/debrief-card";
+import { ReplayViewer } from "@/components/game/replay-viewer";
 import { useGameStore } from "@/lib/zustand/game-store";
 import { DIFFICULTY_LABEL, formatTime } from "@/lib/utils";
 import { buildShareBlock, buildShareText, buildShareUrl } from "@/lib/share/format";
+import { fetchReplayAction } from "@/lib/server/actions";
+import { stitchBatches } from "@/lib/sudoku/replay";
+import type { InputEvent } from "@/lib/sudoku/input-events";
 
 // RAZ-78: map of submitCompletionAction error codes to user-facing
 // copy. Anything not in the map falls through to "Couldn't save:
@@ -56,6 +60,7 @@ export function CompletionModal({
   rankContext = null,
   breakdownEnabled = false,
   aiDebriefEnabled = false,
+  replayEnabled = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -124,6 +129,10 @@ export function CompletionModal({
   // + attempt id) and persists the result to localStorage so a
   // refresh / reopen doesn't burn another OpenAI call.
   aiDebriefEnabled?: boolean;
+  // RAZ-113: server-resolved value of `solve-replay`. When on AND
+  // input events were recorded for this game, we render a "Watch
+  // Replay" button that fetches event batches and opens ReplayViewer.
+  replayEnabled?: boolean;
 }) {
   const elapsedMs = useGameStore((s) => s.elapsedMs);
   const mistakes = useGameStore((s) => s.mistakes);
@@ -135,6 +144,47 @@ export function CompletionModal({
   const attemptId = useGameStore((s) => s.attemptId);
   const router = useRouter();
   const [sharing, setSharing] = useState(false);
+
+  // RAZ-113: replay viewer state. `replayEvents` is null until the
+  // user clicks "Watch Replay" and the server action responds.
+  const [replayOpen, setReplayOpen] = useState(false);
+  const [replayEvents, setReplayEvents] = useState<InputEvent[] | null>(null);
+  const [replayLoading, setReplayLoading] = useState(false);
+  // We read the puzzle string from the Zustand store (fixed + filled
+  // cells for the initial clue state).
+  const puzzleStr = useGameStore((s) => s.puzzle);
+  const hasEventLog = useGameStore((s) => s.events.length > 0);
+
+  const handleWatchReplay = useCallback(async () => {
+    if (!meta) return;
+    setReplayLoading(true);
+
+    // Prefer locally buffered events — avoids a server round trip and
+    // works for anonymous users. Fall back to a server fetch.
+    const localEvents = useGameStore.getState().events;
+    if (localEvents.length > 0) {
+      setReplayEvents([...localEvents]);
+      setReplayOpen(true);
+      setReplayLoading(false);
+      return;
+    }
+
+    try {
+      const result = await fetchReplayAction({ puzzleId: meta.puzzleId });
+      if (result.ok) {
+        const events = stitchBatches(result.batches);
+        setReplayEvents(events);
+        setReplayOpen(true);
+      } else {
+        toast.error("No replay data found for this puzzle.");
+      }
+    } catch {
+      toast.error("Failed to load replay data.");
+    } finally {
+      setReplayLoading(false);
+    }
+  }, [meta]);
+
   const telemetryContext = useMemo(
     () =>
       ({
@@ -480,7 +530,20 @@ export function CompletionModal({
           <p className="text-center text-sm text-muted-foreground">Saving your time...</p>
         )}
 
-        <DialogFooter className="sm:justify-center">
+        <DialogFooter className="sm:justify-center flex-wrap">
+          {/* RAZ-113: "Watch Replay" — available when replay flag is on
+              AND input events are available (locally or on server). */}
+          {replayEnabled && hasEventLog ? (
+            <Button
+              variant="outline"
+              onClick={handleWatchReplay}
+              disabled={replayLoading}
+              aria-label="Watch your solve replay"
+            >
+              <Film className="mr-2 h-4 w-4" aria-hidden />
+              {replayLoading ? "Loading…" : "Watch Replay"}
+            </Button>
+          ) : null}
           {shareEnabled ? (
             <Button
               variant="outline"
@@ -536,6 +599,18 @@ export function CompletionModal({
           )}
         </DialogFooter>
       </DialogContent>
+
+      {/* RAZ-113: Replay viewer overlay. Rendered as a sibling Dialog
+          so it can open/close independently from the completion modal. */}
+      {replayEvents && (
+        <ReplayViewer
+          open={replayOpen}
+          onOpenChange={setReplayOpen}
+          puzzle={puzzleStr}
+          events={replayEvents}
+          totalMs={elapsedMs}
+        />
+      )}
     </Dialog>
   );
 }

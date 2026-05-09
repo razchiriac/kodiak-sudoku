@@ -16,11 +16,11 @@ import {
 import { evaluateAndAwardAchievements } from "./achievements";
 import { canonicalPair, getFriendship } from "./friends";
 import { getCurrentUser } from "@/lib/supabase/server";
-import { getDailyRankContext, getPuzzleById } from "@/lib/db/queries";
+import { getDailyRankContext, getPuzzleById, getReplayBatches } from "@/lib/db/queries";
 import { findConflicts, isCorrect, isFilled } from "@/lib/sudoku/validate";
 import { parseBoard } from "@/lib/sudoku/board";
 import { nextHint } from "@/lib/sudoku/solver";
-import { dailyCompare, eventLog, solveTimeSanity } from "@/lib/flags";
+import { dailyCompare, eventLog, solveReplay, solveTimeSanity } from "@/lib/flags";
 import {
   HINT_BUCKET,
   HINT_LIMITS,
@@ -966,4 +966,40 @@ export async function unsubscribePushAction() {
 
   revalidatePath("/profile/edit");
   return { ok: true as const };
+}
+
+// RAZ-113: Fetch input-event batches for a completed puzzle so the
+// client can render a solve replay. Returns the stitched events or
+// an error. Only available for the puzzle's owner (the user who
+// recorded the events). Flag-gated so we can kill the feature from
+// Edge Config without touching client code.
+const FetchReplaySchema = z.object({
+  puzzleId: z.number().int().positive(),
+});
+
+export async function fetchReplayAction(raw: { puzzleId: number }) {
+  if (!(await solveReplay())) {
+    return { ok: false as const, error: "flag_off" };
+  }
+  const input = FetchReplaySchema.parse(raw);
+  const user = await getCurrentUser();
+  if (!user) return { ok: false as const, error: "unauthenticated" };
+
+  const batches = await getReplayBatches(user.id, input.puzzleId);
+  if (batches.length === 0) {
+    return { ok: false as const, error: "no_events" };
+  }
+
+  return {
+    ok: true as const,
+    batches: batches.map((b) => ({
+      seq: b.seq,
+      events: b.events.map((e) => ({
+        c: e.c,
+        d: e.d,
+        t: e.t,
+        k: e.k as "v" | "e" | "h",
+      })),
+    })),
+  };
 }

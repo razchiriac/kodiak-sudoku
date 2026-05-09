@@ -241,6 +241,12 @@ type GameState = {
     // dialog renders the toggle only when the flag is on (so a
     // flag-off cohort doesn't see a control that does nothing).
     coachingTips: boolean;
+    // RAZ-110: display digits as 0–8 instead of 1–9. The internal
+    // representation stays 1-indexed throughout (solver, DB, leaderboards);
+    // only the presentation layer (cell values, note marks, number-pad labels,
+    // keyboard input) transforms the digits. Default false so existing players
+    // see no change. No feature flag needed — it's a pure display preference.
+    zeroBasedMode: boolean;
   };
   // Feature-flag mirror. The *source* of truth is the server
   // (lib/flags.ts → Edge Config), which PlayClient evaluates server-
@@ -557,6 +563,8 @@ const INITIAL: GameState = {
     // from the settings dialog. The flag-off path hides the entire
     // surface (including this toggle).
     coachingTips: true,
+    // RAZ-110: off by default — existing players see no change.
+    zeroBasedMode: false,
   },
   featureFlags: {
     haptics: false,

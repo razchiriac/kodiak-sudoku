@@ -2,6 +2,10 @@
 
 import { useEffect } from "react";
 import { useGameStore } from "@/lib/zustand/game-store";
+// RAZ-110: key-to-digit mapping and erase detection that are aware of
+// zero-based mode. parseInputDigit maps "0"–"8" → 1–9 when the mode is
+// on; isEraseKey keeps "0" as erase only in normal mode.
+import { parseInputDigit, isEraseKey } from "@/lib/sudoku/display";
 
 // Single global keyboard listener mounted once per play page. Avoids
 // per-cell focus management while still giving us a true keyboard-first
@@ -9,8 +13,10 @@ import { useGameStore } from "@/lib/zustand/game-store";
 //
 // Bindings (mirrors the shortcuts overlay):
 //   arrows / hjkl: move selection
-//   1..9         : input digit (or toggle note in notes mode)
-//   0/Backspace  : erase
+//   1..9         : input digit (or toggle note in notes mode) [normal mode]
+//   0..8         : input digit [zero-based mode]
+//   0/Backspace  : erase [normal mode]
+//   Backspace    : erase [zero-based mode]
 //   N            : toggle notes mode
 //   H            : hint
 //   U / Cmd+Z    : undo
@@ -27,6 +33,8 @@ export function KeyboardListener({ onShortcuts }: { onShortcuts?: () => void }) 
   const redo = useGameStore((s) => s.redo);
   const togglePause = useGameStore((s) => s.togglePause);
   const selectCell = useGameStore((s) => s.selectCell);
+  // RAZ-110: zero-based mode changes which keys are digit inputs vs erase.
+  const zeroBasedMode = useGameStore((s) => s.settings.zeroBasedMode);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -57,12 +65,17 @@ export function KeyboardListener({ onShortcuts }: { onShortcuts?: () => void }) 
       if (key === "ArrowLeft" || key === "h") return moveAndPrevent(e, () => moveSelection(-1, 0));
       if (key === "ArrowRight" || key === "l") return moveAndPrevent(e, () => moveSelection(1, 0));
 
-      if (key >= "1" && key <= "9") {
+      // RAZ-110: parseInputDigit handles both normal (1–9) and zero-based
+      // (0–8) modes, returning the internal 1-indexed digit or null.
+      const digit = parseInputDigit(key, zeroBasedMode);
+      if (digit !== null) {
         e.preventDefault();
-        inputDigit(Number(key));
+        inputDigit(digit);
         return;
       }
-      if (key === "0" || key === "Backspace" || key === "Delete") {
+
+      // RAZ-110: isEraseKey treats "0" as erase only in normal mode.
+      if (isEraseKey(key, zeroBasedMode)) {
         e.preventDefault();
         erase();
         return;
@@ -103,6 +116,7 @@ export function KeyboardListener({ onShortcuts }: { onShortcuts?: () => void }) 
     togglePause,
     selectCell,
     onShortcuts,
+    zeroBasedMode,
   ]);
 
   return null;

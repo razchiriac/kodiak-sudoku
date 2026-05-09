@@ -2,6 +2,7 @@
 
 import { memo } from "react";
 import { cn } from "@/lib/utils";
+import { displayDigit } from "@/lib/sudoku/display";
 
 // One cell of the 9x9 grid. Memoized aggressively because rerenders happen
 // 81 times for any board change; we only re-render a cell when one of its
@@ -34,6 +35,10 @@ type CellProps = {
   // filled cell is selected, so empty cells telegraph "here's a
   // candidate for the selected value".
   highlightNoteDigit: number;
+  // RAZ-110: when true, show digits as 0–8 instead of 1–9. The
+  // internal value (1–9) is unchanged; only the displayed glyph
+  // and aria-label text are transformed here.
+  zeroBasedMode: boolean;
   onSelect: (index: number) => void;
 };
 
@@ -48,6 +53,7 @@ function CellInner({
   isConflict,
   isMistake,
   highlightNoteDigit,
+  zeroBasedMode,
   onSelect,
 }: CellProps) {
   const row = Math.floor(index / 9);
@@ -59,6 +65,11 @@ function CellInner({
   // reading which is useless on a 9x9 board.
   const rowIndex = row + 1;
   const colIndex = col + 1;
+
+  // RAZ-110: the display digit is 0–8 in zero-based mode, 1–9 otherwise.
+  // Used for both the visual render and the aria-label so screen readers
+  // announce the same glyph the player sees.
+  const displayValue = value > 0 ? displayDigit(value, zeroBasedMode) : null;
 
   // Background priority: wrong (conflict or mistake) > selected >
   // sameDigit > peer > base. The order matters: a cell can be both
@@ -98,7 +109,9 @@ function CellInner({
       // standard error signal rather than baked into the label text.
       aria-invalid={isConflict || undefined}
       aria-label={`row ${rowIndex}, column ${colIndex}, ${
-        value > 0 ? `value ${value}${isFixed ? " (clue)" : ""}` : "empty"
+        displayValue != null
+          ? `value ${displayValue}${isFixed ? " (clue)" : ""}`
+          : "empty"
       }${isConflict ? ", conflict" : isMistake ? ", incorrect" : ""}`}
       tabIndex={-1}
       onMouseDown={(e) => {
@@ -129,10 +142,10 @@ function CellInner({
         "focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring",
       )}
     >
-      {value > 0 ? (
-        value
+      {displayValue != null ? (
+        displayValue
       ) : notesMask !== 0 ? (
-        <NoteGrid mask={notesMask} highlightDigit={highlightNoteDigit} />
+        <NoteGrid mask={notesMask} highlightDigit={highlightNoteDigit} zeroBasedMode={zeroBasedMode} />
       ) : null}
     </button>
   );
@@ -147,7 +160,17 @@ function CellInner({
 // when the player selects a filled cell of value N, every empty cell
 // with N in its pencil marks shows N highlighted while leaving the
 // other notes alone.
-function NoteGrid({ mask, highlightDigit }: { mask: number; highlightDigit: number }) {
+//
+// RAZ-110: `zeroBasedMode` transforms each note glyph (d-1 instead of d).
+function NoteGrid({
+  mask,
+  highlightDigit,
+  zeroBasedMode,
+}: {
+  mask: number;
+  highlightDigit: number;
+  zeroBasedMode: boolean;
+}) {
   const cells: React.ReactNode[] = [];
   for (let d = 1; d <= 9; d++) {
     const has = (mask & (1 << (d - 1))) !== 0;
@@ -169,7 +192,7 @@ function NoteGrid({ mask, highlightDigit }: { mask: number; highlightDigit: numb
           isHit && "rounded-sm bg-cell-same font-semibold text-foreground",
         )}
       >
-        {d}
+        {displayDigit(d, zeroBasedMode)}
       </span>,
     );
   }
@@ -191,6 +214,7 @@ export const Cell = memo(CellInner, (a, b) => {
     a.isConflict === b.isConflict &&
     a.isMistake === b.isMistake &&
     a.highlightNoteDigit === b.highlightNoteDigit &&
+    a.zeroBasedMode === b.zeroBasedMode &&
     a.onSelect === b.onSelect &&
     a.index === b.index
   );

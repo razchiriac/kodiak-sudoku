@@ -321,7 +321,10 @@ export function CompletionModal({
           >
             <Sparkles className="h-4 w-4" aria-hidden />
             <span>
-              New personal best! -{formatTime(deltaMs)} vs {formatTime(previousBestMs!)}
+              {/* RAZ-109: deltaMs is always positive (previousBestMs - elapsedMs)
+                  so we must NOT prefix it with "-". Show "saved X" to make
+                  it clear the delta is a time reduction, not a negative value. */}
+              New personal best! Saved {formatTime(deltaMs)} vs {formatTime(previousBestMs!)}
             </span>
           </div>
         )}

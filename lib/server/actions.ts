@@ -61,6 +61,28 @@ export async function saveGameAction(raw: SaveGameInput) {
   const puzzle = await getPuzzleById(input.puzzleId);
   if (!puzzle) return { ok: false as const, error: "puzzle_not_found" };
 
+  // RAZ-104: server-side belt-and-suspenders for the autosave race.
+  // The client guards against autosaving a completed board via the
+  // `isComplete` check in the autosave effect, but a debounce that
+  // was already in-flight before the guard fired can still reach us.
+  // A fully-filled board (no '0' remaining) that already has a
+  // completed_games row is a re-insert we must reject — the row was
+  // just deleted by submitCompletionAction and recreating it would
+  // make the puzzle reappear in "Continue".
+  if (!input.board.includes("0")) {
+    const done = await db
+      .select({ id: completedGames.id })
+      .from(completedGames)
+      .where(
+        and(
+          eq(completedGames.userId, user.id),
+          eq(completedGames.puzzleId, input.puzzleId),
+        ),
+      )
+      .limit(1);
+    if (done.length > 0) return { ok: true as const };
+  }
+
   await db
     .insert(savedGames)
     .values({

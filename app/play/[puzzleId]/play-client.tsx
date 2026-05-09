@@ -437,6 +437,14 @@ export function PlayClient({
     // saved_games row on the server. Skip autosave; Zustand/localStorage
     // already persists the state locally.
     if (isOffline) return;
+    // RAZ-104: the autosave debounce is scheduled on every board/timer
+    // change, which means it can fire AFTER submitCompletionAction has
+    // already deleted the saved_games row. If it fires, saveGameAction
+    // re-inserts the row and the puzzle reappears in "Continue".
+    // Guard: once the store marks the puzzle complete, stop autosaving —
+    // there is nothing left to resume and the server-side completion
+    // cleanup has already run (or is in flight).
+    if (isComplete) return;
     if (debounce.current) window.clearTimeout(debounce.current);
     debounce.current = window.setTimeout(() => {
       const snap = snapshot();
@@ -457,7 +465,9 @@ export function PlayClient({
     // We deliberately only depend on values that should trigger save. The
     // store's `snapshot` is stable so it's safe to omit from deps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [board, elapsedMs, isPaused, meta, isSignedIn, mode, isCustom, isOffline]);
+    // `isComplete` added so the guard above fires immediately when the
+    // puzzle is solved, cancelling any pending debounce before it fires.
+  }, [board, elapsedMs, isPaused, meta, isSignedIn, mode, isCustom, isOffline, isComplete]);
 
   // On completion, submit to the server once. We track submission status
   // for the completion modal so the user gets feedback if it failed.

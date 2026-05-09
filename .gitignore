@@ -59,3 +59,19 @@ drizzle/*
 !drizzle/migrations/
 !drizzle/migrations/**
 .cursor/
+
+# Claude Code session state (worktrees, plans, memory — all ephemeral)
+.claude/
+
+# Android TWA: Gradle build cache and compiled outputs.
+# Source files (gradlew, build.gradle, app/src/, etc.) are tracked.
+android/twa-app/.gradle/
+android/twa-app/build/
+android/twa-app/app/build/
+android/twa-app/*.apk
+android/twa-app/*.aab
+android/twa-app/*.idsig
+
+# Content POC run artifacts (webm recordings, JSON dumps).
+# The scripts that generate them are tracked; the outputs are not.
+artifacts/

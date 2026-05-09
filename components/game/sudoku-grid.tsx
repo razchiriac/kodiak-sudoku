@@ -20,6 +20,12 @@ export function SudokuGrid() {
   // RAZ-110: zero-based mode — pass to Cell so digit display is consistent
   // across the entire board without each cell re-subscribing to the store.
   const zeroBasedMode = useGameStore((s) => s.settings.zeroBasedMode);
+  // RAZ-116: symbol set — pass to Cell so colors/shapes render consistently.
+  // When the feature flag is off we force "digits" regardless of the stored
+  // setting so the kill-switch works without clearing user preferences.
+  const colorCodeFlag = useGameStore((s) => s.featureFlags.colorCodeMode);
+  const symbolSetRaw = useGameStore((s) => s.settings.symbolSet);
+  const symbolSet = colorCodeFlag ? (symbolSetRaw ?? "digits") : "digits";
   const selectCell = useGameStore((s) => s.selectCell);
   // RAZ-15: derive the set of "mistake" cells — any non-fixed cell
   // whose current value disagrees with the puzzle solution. Only
@@ -119,6 +125,7 @@ export function SudokuGrid() {
             highlightSameDigit && selectedDigit > 0 ? selectedDigit : 0
           }
           zeroBasedMode={zeroBasedMode}
+          symbolSet={symbolSet}
           onSelect={handleSelect}
         />
       ))}

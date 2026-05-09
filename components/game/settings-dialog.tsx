@@ -1,7 +1,14 @@
 "use client";
 
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { PALETTES, type Palette, useGameStore } from "@/lib/zustand/game-store";
+import {
+  SYMBOL_SET_IDS,
+  SYMBOL_SET_LABEL,
+  getSymbol,
+  type SymbolSetId,
+} from "@/lib/sudoku/symbols";
 import { ModePresetPicker } from "@/components/game/mode-preset-picker";
 import { Button } from "@/components/ui/button";
 // RAZ-72: profile metadata + per-event dispatcher for the new haptic
@@ -170,6 +177,11 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   // preference. Default off so existing players see no change.
   const zeroBasedMode = useGameStore(
     (s) => s.settings.zeroBasedMode === true,
+  );
+  // RAZ-116: Color Code Mode — symbol set picker. Flag-gated.
+  const colorCodeFlag = useGameStore((s) => s.featureFlags.colorCodeMode);
+  const currentSymbolSet = useGameStore(
+    (s) => (s.settings.symbolSet ?? "digits") as SymbolSetId,
   );
   // RAZ-112: Iron Mode toggle. Flag-gated like every other optional
   // surface — when the `iron-mode` flag is off, the row is hidden and
@@ -350,6 +362,54 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                 aria-label="Iron Mode — one wrong move ends the run"
               />
             </label>
+          )}
+
+          {/* RAZ-116: Symbol Mode picker. Renders a radio group of the
+              four symbol sets with a small inline preview of three
+              symbols per option. Flag-gated on `color-code-mode`. */}
+          {colorCodeFlag && (
+            <div className="flex flex-col gap-2">
+              <span className="text-sm font-medium text-foreground">Symbol mode</span>
+              <span className="text-xs text-muted-foreground">
+                Replace digits with colors, shapes, or both. Great for
+                kids and visual thinkers. Colors + Shapes is fully
+                colorblind-safe.
+              </span>
+              <div className="grid grid-cols-2 gap-1.5">
+                {SYMBOL_SET_IDS.map((setId) => {
+                  const isActive = currentSymbolSet === setId;
+                  const preview = [1, 2, 3].map((d) => getSymbol(d, setId));
+                  return (
+                    <button
+                      key={setId}
+                      type="button"
+                      onClick={() => setSetting("symbolSet", setId)}
+                      className={cn(
+                        "flex flex-col items-center gap-1 rounded-md border p-2 text-xs transition-colors",
+                        isActive
+                          ? "border-primary bg-primary/10 ring-1 ring-primary"
+                          : "border-border hover:bg-accent",
+                      )}
+                      aria-pressed={isActive}
+                      aria-label={SYMBOL_SET_LABEL[setId]}
+                    >
+                      <span className="flex items-center gap-1.5 text-base">
+                        {preview.map((sym) =>
+                          sym ? (
+                            <span key={sym.value} style={sym.color ? { color: sym.color } : undefined}>
+                              {sym.glyph}
+                            </span>
+                          ) : null,
+                        )}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground">
+                        {SYMBOL_SET_LABEL[setId]}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           )}
 
           {/* RAZ-19 haptics toggle. Rendered only when the server-side

@@ -335,6 +335,11 @@ export const ironMode = declareFlag("iron-mode");
 // fetch — no API calls during playback. Flag off = button is hidden.
 export const solveReplay = declareFlag("solve-replay");
 
+// RAZ-116 - Color Code Mode. When on, the settings dialog renders the
+// Symbol Mode picker and cells/number-pad show the active set (colors,
+// shapes, or color+shapes). Flag off = digits only, picker hidden.
+export const colorCodeMode = declareFlag("color-code-mode");
+
 // RAZ-106 - Offline sudoku gameplay. When on, the app pre-fetches a bank
 // of random puzzles into IndexedDB via /api/puzzles/offline-bank so new
 // puzzles can be started without a network connection. The /play/offline

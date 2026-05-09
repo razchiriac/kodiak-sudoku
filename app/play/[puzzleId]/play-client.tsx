@@ -92,6 +92,10 @@ export function PlayClient({
   // one-wrong-move rule. Off = toggle is hidden and ironMode has no
   // gameplay effect.
   ironModeEnabled = false,
+  // RAZ-116: server-resolved value of `color-code-mode`. Mirrored into
+  // the store so the settings dialog gates the Symbol Mode picker and
+  // Cell/NumberPad render the active symbol set.
+  colorCodeModeEnabled = false,
   // RAZ-106: true when this session was entered via /play/offline (puzzle
   // was claimed from the IndexedDB offline bank). When true, autosave is
   // skipped (no server DB row to upsert) and completion is enqueued into
@@ -230,6 +234,8 @@ export function PlayClient({
   // store so the settings dialog gates the toggle and inputDigit
   // enforces the one-wrong-move rule.
   ironModeEnabled?: boolean;
+  // RAZ-116: server-resolved value of `color-code-mode`. See prop docs.
+  colorCodeModeEnabled?: boolean;
   // RAZ-106: true for puzzles served from the IndexedDB offline bank via
   // /play/offline. Autosave and live submission are skipped; completion is
   // enqueued locally and synced on reconnect.
@@ -439,6 +445,12 @@ export function PlayClient({
   useEffect(() => {
     setFeatureFlag("ironMode", ironModeEnabled);
   }, [ironModeEnabled, setFeatureFlag]);
+
+  // RAZ-116: mirror the `color-code-mode` flag so the settings dialog
+  // gates the Symbol Mode picker and Cell/NumberPad render symbols.
+  useEffect(() => {
+    setFeatureFlag("colorCodeMode", colorCodeModeEnabled);
+  }, [colorCodeModeEnabled, setFeatureFlag]);
 
   // Autosave: every time the relevant slice of state changes, debounce a
   // server action call. Only signed-in users autosave to the server;

@@ -253,6 +253,7 @@ export function LearnClient({ lesson, nextLessonId }: LearnClientProps) {
               // RAZ-110: learn boards always use normal 1–9 display;
               // zero-based mode is a play-page-only preference.
               zeroBasedMode={false}
+              symbolSet="digits"
               onSelect={setSelection}
             />
           ))}

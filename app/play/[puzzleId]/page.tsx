@@ -31,6 +31,7 @@ import {
   shareResult,
   showMistakes,
   solveReplay,
+  colorCodeMode,
 } from "@/lib/flags";
 import { buildShareOgMetadata } from "@/lib/share/og-metadata";
 import { PlayClient } from "./play-client";
@@ -207,6 +208,10 @@ export default async function PuzzlePage({
   // recorded, the completion modal shows a "Watch Replay" button.
   const replayEnabled = await solveReplay();
 
+  // RAZ-116 / color-code-mode flag. When on, the settings dialog shows
+  // the Symbol Mode picker and cells/number-pad render the active set.
+  const colorCodeModeEnabled = await colorCodeMode();
+
   return (
     <PlayClient
       puzzle={{
@@ -255,6 +260,7 @@ export default async function PuzzlePage({
       adaptiveCoachEnabled={adaptiveCoachEnabled}
       ironModeEnabled={ironModeEnabled}
       replayEnabled={replayEnabled}
+      colorCodeModeEnabled={colorCodeModeEnabled}
     />
   );
 }

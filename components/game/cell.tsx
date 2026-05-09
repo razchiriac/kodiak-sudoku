@@ -3,6 +3,7 @@
 import { memo } from "react";
 import { cn } from "@/lib/utils";
 import { displayDigit } from "@/lib/sudoku/display";
+import { getSymbol, type SymbolSetId } from "@/lib/sudoku/symbols";
 
 // One cell of the 9x9 grid. Memoized aggressively because rerenders happen
 // 81 times for any board change; we only re-render a cell when one of its
@@ -39,6 +40,10 @@ type CellProps = {
   // internal value (1–9) is unchanged; only the displayed glyph
   // and aria-label text are transformed here.
   zeroBasedMode: boolean;
+  // RAZ-116: which symbol set to use for rendering. "digits" is the
+  // default pass-through; "colors"/"shapes"/"colorShapes" render
+  // colored glyphs instead of plain digit text.
+  symbolSet: SymbolSetId;
   onSelect: (index: number) => void;
 };
 
@@ -54,6 +59,7 @@ function CellInner({
   isMistake,
   highlightNoteDigit,
   zeroBasedMode,
+  symbolSet,
   onSelect,
 }: CellProps) {
   const row = Math.floor(index / 9);
@@ -66,10 +72,17 @@ function CellInner({
   const rowIndex = row + 1;
   const colIndex = col + 1;
 
+  // RAZ-116: resolve the symbol definition for the current value.
+  // In "digits" mode, falls back to the RAZ-110 displayDigit path.
+  const sym = value > 0 ? getSymbol(value, symbolSet) : null;
+  const useSymbols = symbolSet !== "digits";
+
   // RAZ-110: the display digit is 0–8 in zero-based mode, 1–9 otherwise.
   // Used for both the visual render and the aria-label so screen readers
   // announce the same glyph the player sees.
-  const displayValue = value > 0 ? displayDigit(value, zeroBasedMode) : null;
+  const displayValue = value > 0
+    ? (useSymbols ? sym?.ariaLabel ?? String(value) : displayDigit(value, zeroBasedMode))
+    : null;
 
   // Background priority: wrong (conflict or mistake) > selected >
   // sameDigit > peer > base. The order matters: a cell can be both
@@ -125,7 +138,12 @@ function CellInner({
         // before — the clamp range covers the same span continuously.
         "relative flex aspect-square select-none items-center justify-center text-[clamp(1.25rem,5vw,1.875rem)] font-medium transition-colors",
         bg,
-        isFixed ? "text-foreground" : "text-primary",
+        // RAZ-116: in symbol mode with a custom color, let the inline
+        // style own the text color. Only apply the default text tokens
+        // for digits mode or when no custom color is set.
+        useSymbols && sym?.color && !isWrong
+          ? ""
+          : isFixed ? "text-foreground" : "text-primary",
         // RAZ-15: mistake text color mirrors conflict — a wrong digit
         // should look wrong, period. We reuse text-destructive for
         // both branches so the theme stays cohesive (dark mode,
@@ -142,10 +160,20 @@ function CellInner({
         "focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring",
       )}
     >
-      {displayValue != null ? (
-        displayValue
+      {value > 0 && sym ? (
+        useSymbols ? (
+          <span
+            className="leading-none"
+            style={sym.color ? { color: isWrong ? undefined : sym.color } : undefined}
+            aria-hidden
+          >
+            {sym.glyph}
+          </span>
+        ) : (
+          displayDigit(value, zeroBasedMode)
+        )
       ) : notesMask !== 0 ? (
-        <NoteGrid mask={notesMask} highlightDigit={highlightNoteDigit} zeroBasedMode={zeroBasedMode} />
+        <NoteGrid mask={notesMask} highlightDigit={highlightNoteDigit} zeroBasedMode={zeroBasedMode} symbolSet={symbolSet} />
       ) : null}
     </button>
   );
@@ -162,37 +190,35 @@ function CellInner({
 // other notes alone.
 //
 // RAZ-110: `zeroBasedMode` transforms each note glyph (d-1 instead of d).
+// RAZ-116: `symbolSet` renders colored dots/shapes instead of digit text.
 function NoteGrid({
   mask,
   highlightDigit,
   zeroBasedMode,
+  symbolSet,
 }: {
   mask: number;
   highlightDigit: number;
   zeroBasedMode: boolean;
+  symbolSet: SymbolSetId;
 }) {
+  const useSymbols = symbolSet !== "digits";
   const cells: React.ReactNode[] = [];
   for (let d = 1; d <= 9; d++) {
     const has = (mask & (1 << (d - 1))) !== 0;
     const isHit = has && d === highlightDigit;
+    const noteSym = useSymbols ? getSymbol(d, symbolSet) : null;
     cells.push(
       <span
         key={d}
         className={cn(
-          // Pencil marks scale with viewport width so they stay
-          // legible on a 560px board without overflowing a 350px
-          // mobile cell. Bumped the clamp up: 10px floor, 14px
-          // ceiling, so the marks read clearly without crowding
-          // the sub-cell.
           "flex items-center justify-center text-[clamp(0.625rem,2vw,0.875rem)] leading-none text-muted-foreground",
           !has && "opacity-0",
-          // Same-digit highlight applied per sub-cell: reuse the
-          // board-level bg-cell-same token so the treatment reads
-          // as a single visual system.
           isHit && "rounded-sm bg-cell-same font-semibold text-foreground",
         )}
+        style={useSymbols && noteSym?.color && has ? { color: noteSym.color } : undefined}
       >
-        {displayDigit(d, zeroBasedMode)}
+        {useSymbols && noteSym ? noteSym.glyph : displayDigit(d, zeroBasedMode)}
       </span>,
     );
   }
@@ -215,6 +241,7 @@ export const Cell = memo(CellInner, (a, b) => {
     a.isMistake === b.isMistake &&
     a.highlightNoteDigit === b.highlightNoteDigit &&
     a.zeroBasedMode === b.zeroBasedMode &&
+    a.symbolSet === b.symbolSet &&
     a.onSelect === b.onSelect &&
     a.index === b.index
   );

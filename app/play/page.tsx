@@ -15,7 +15,17 @@ export const dynamic = "force-dynamic";
 // "Continue" card directly from saved_games without a client fetch.
 export default async function PlayHomePage() {
   const user = await getCurrentUser();
-  const saved = user ? await listRecentSavedGames(user.id, 3) : [];
+  // RAZ-131: wrap the saved-games query so a DB outage (e.g. connection
+  // pool exhaustion) degrades to an empty "Continue" section instead of
+  // crashing the entire /play page with a 500.
+  let saved: Awaited<ReturnType<typeof listRecentSavedGames>> = [];
+  if (user) {
+    try {
+      saved = await listRecentSavedGames(user.id, 3);
+    } catch (err) {
+      console.error("[play] listRecentSavedGames failed, rendering without Continue section", err);
+    }
+  }
   // RAZ-54: resolve the Mode Presets flag server-side so the client
   // picker hides itself instantly when the flag is off — no flicker
   // from a client effect that runs after first paint.

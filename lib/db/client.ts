@@ -24,7 +24,12 @@ function getConnection() {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL is not set");
   if (!globalThis.__sudokuPg) {
-    globalThis.__sudokuPg = postgres(url, { prepare: false, max: 5, idle_timeout: 30 });
+    // RAZ-131: reduced from max:5 to max:1. In serverless (Vercel Fluid
+    // Compute), each function instance is short-lived and concurrent
+    // instances each open their own pool. max:5 × N instances quickly
+    // exhausts Supabase's session-mode connection limit, causing
+    // "MaxClientsInSessionMode" 500s on /play and /play/[puzzleId].
+    globalThis.__sudokuPg = postgres(url, { prepare: false, max: 1, idle_timeout: 20 });
   }
   return globalThis.__sudokuPg;
 }

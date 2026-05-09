@@ -5,6 +5,12 @@ import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { getBrowserSupabase } from "@/lib/supabase/browser";
 
+// RAZ-107: always direct Supabase back to the canonical domain so the
+// auth callback never lands on sudoku.kodiak.quest. Falls back to the
+// current origin in local dev where NEXT_PUBLIC_SITE_URL is unset.
+const CANONICAL_ORIGIN =
+  process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ?? "";
+
 // Sign-in form. Two methods: magic link (primary) and Google (one-click).
 // Email/password is intentionally absent — see plan §12.
 export function SignInForm() {
@@ -29,7 +35,7 @@ export function SignInForm() {
     const { error } = await sb.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+        emailRedirectTo: `${CANONICAL_ORIGIN || window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
       },
     });
     setPending(false);
@@ -48,7 +54,7 @@ export function SignInForm() {
     const { error } = await sb.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+        redirectTo: `${CANONICAL_ORIGIN || window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
       },
     });
     // On success the browser navigates away to Google's OAuth screen,

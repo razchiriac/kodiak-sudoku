@@ -11,8 +11,16 @@ import { getServerSupabase } from "@/lib/supabase/server";
 //     descriptive error so they don't end up silently unsigned at /profile.
 //   - exchangeCodeForSession returns an error (expired code, replayed
 //     code, misconfigured provider, etc.). Same treatment.
+
+// RAZ-107: post-auth redirects always land on the canonical domain so the
+// session cookie is set on the right origin. Falls back to the request's
+// own origin so local dev (where NEXT_PUBLIC_SITE_URL is unset) still works.
+const CANONICAL_ORIGIN =
+  process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ?? "";
+
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
+  const origin = CANONICAL_ORIGIN || url.origin;
   const code = url.searchParams.get("code");
   const next = url.searchParams.get("next") ?? "/profile";
   const errorDescription = url.searchParams.get("error_description");
@@ -24,14 +32,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(
       new URL(
         `/auth/sign-in?error=${encodeURIComponent(errorDescription)}`,
-        url.origin,
+        origin,
       ),
     );
   }
 
   if (!code) {
     return NextResponse.redirect(
-      new URL("/auth/sign-in?error=Missing+code", url.origin),
+      new URL("/auth/sign-in?error=Missing+code", origin),
     );
   }
 
@@ -41,10 +49,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(
       new URL(
         `/auth/sign-in?error=${encodeURIComponent(error.message)}`,
-        url.origin,
+        origin,
       ),
     );
   }
 
-  return NextResponse.redirect(new URL(next, url.origin));
+  return NextResponse.redirect(new URL(next, origin));
 }

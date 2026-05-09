@@ -431,6 +431,19 @@ export const FLAG_REGISTRY: readonly FlagSpec[] = [
     linearId: "RAZ-49",
   },
   {
+    // RAZ-112: Iron Mode ("Flawless Mode"). When on, the settings dialog
+    // exposes an "Iron Mode ⚔️" toggle and the game store enforces the
+    // one-wrong-move-ends-the-run rule. Hints and AI Coach are disabled
+    // while Iron Mode is active. Default ON so CI previews exercise the
+    // path; the per-user setting defaults to OFF (opt-in challenge).
+    key: "iron-mode",
+    envKey: "FLAG_IRON_MODE",
+    defaultValue: true,
+    description:
+      "Expose Iron Mode toggle: one wrong placement ends the run immediately. Hints and AI Coach are disabled. Successful completions earn an ⚔️ badge.",
+    linearId: "RAZ-112",
+  },
+  {
     // RAZ-113: Solve Replay. When on, the completion modal shows a
     // "Watch Replay" button for games that have an input event log.
     // The button opens a modal replay viewer with play/pause, speed

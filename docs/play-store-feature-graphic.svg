@@ -1,0 +1,29 @@
+<svg width="1024" height="500" viewBox="0 0 1024 500" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1024" y2="500" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0A0A0A"/>
+      <stop offset="1" stop-color="#121212"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="500" fill="url(#bg)"/>
+  <rect x="76" y="74" width="352" height="352" rx="28" fill="#121212" stroke="#2B2B2B" stroke-width="6"/>
+  <line x1="193.333" y1="74" x2="193.333" y2="426" stroke="#363636" stroke-width="3"/>
+  <line x1="310.667" y1="74" x2="310.667" y2="426" stroke="#363636" stroke-width="3"/>
+  <line x1="76" y1="191.333" x2="428" y2="191.333" stroke="#363636" stroke-width="3"/>
+  <line x1="76" y1="308.667" x2="428" y2="308.667" stroke="#363636" stroke-width="3"/>
+  <rect x="310.667" y="191.333" width="117.333" height="117.333" fill="#2BE4FF"/>
+  <text x="133" y="160" fill="#F3F3F3" font-family="Inter, Arial, sans-serif" font-size="62" font-weight="700">7</text>
+  <text x="246" y="160" fill="#F3F3F3" font-family="Inter, Arial, sans-serif" font-size="62" font-weight="700">3</text>
+  <text x="360" y="160" fill="#F3F3F3" font-family="Inter, Arial, sans-serif" font-size="62" font-weight="700">9</text>
+  <text x="133" y="277" fill="#F3F3F3" font-family="Inter, Arial, sans-serif" font-size="62" font-weight="700">8</text>
+  <text x="246" y="277" fill="#F3F3F3" font-family="Inter, Arial, sans-serif" font-size="62" font-weight="700">1</text>
+  <text x="360" y="277" fill="#0A0A0A" font-family="Inter, Arial, sans-serif" font-size="62" font-weight="800">5</text>
+  <text x="133" y="394" fill="#F3F3F3" font-family="Inter, Arial, sans-serif" font-size="62" font-weight="700">4</text>
+  <text x="246" y="394" fill="#F3F3F3" font-family="Inter, Arial, sans-serif" font-size="62" font-weight="700">6</text>
+  <text x="360" y="394" fill="#F3F3F3" font-family="Inter, Arial, sans-serif" font-size="62" font-weight="700">2</text>
+  <text x="476" y="206" fill="#FFFFFF" font-family="Inter, Arial, sans-serif" font-size="72" font-weight="800">Kodiak Sudoku</text>
+  <text x="476" y="266" fill="#D0D0D0" font-family="Inter, Arial, sans-serif" font-size="30" font-weight="500">Fast, keyboard-first Sudoku.</text>
+  <text x="476" y="312" fill="#D0D0D0" font-family="Inter, Arial, sans-serif" font-size="30" font-weight="500">Daily puzzles, streaks, and leaderboards.</text>
+  <rect x="476" y="352" width="286" height="58" rx="29" fill="#1E1E1E" stroke="#2BE4FF" stroke-width="2"/>
+  <text x="515" y="390" fill="#2BE4FF" font-family="Inter, Arial, sans-serif" font-size="28" font-weight="700">Play every day</text>
+</svg>

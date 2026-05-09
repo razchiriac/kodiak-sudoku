@@ -171,6 +171,21 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const zeroBasedMode = useGameStore(
     (s) => s.settings.zeroBasedMode === true,
   );
+  // RAZ-112: Iron Mode toggle. Flag-gated like every other optional
+  // surface — when the `iron-mode` flag is off, the row is hidden and
+  // the setting has no gameplay effect. The toggle cannot be changed
+  // mid-game because a player toggling it on after already placing
+  // wrong digits would get an instant failure. We disable the checkbox
+  // when a game is in progress (board has non-fixed cells filled).
+  const ironModeFlag = useGameStore((s) => s.featureFlags.ironMode);
+  const ironModeOn = useGameStore((s) => s.settings.ironMode === true);
+  const hasStartedGame = useGameStore((s) => {
+    if (!s.meta) return false;
+    for (let i = 0; i < 81; i++) {
+      if (!s.fixed[i] && s.board[i] !== 0) return true;
+    }
+    return false;
+  });
   // RAZ-54: mode-presets mirror. Read directly from the store (the
   // PlayClient mirrors the server-resolved value on mount). The
   // inline picker component renders nothing when the flag is off so
@@ -309,6 +324,33 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
               aria-label="Zero-based digit mode"
             />
           </label>
+
+          {/* RAZ-112: Iron Mode toggle. Flag-gated; disabled mid-game
+              because toggling after already placing digits would cause
+              an immediate failure. The tooltip explains what it does. */}
+          {ironModeFlag && (
+            <label className="flex items-start justify-between gap-4 text-sm">
+              <span className="flex flex-col">
+                <span className="font-medium text-foreground">
+                  Iron Mode ⚔️
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  One wrong move ends the run. No undo, no hints, no mercy.
+                  {hasStartedGame && !ironModeOn
+                    ? " Start a new game to enable."
+                    : ""}
+                </span>
+              </span>
+              <input
+                type="checkbox"
+                checked={ironModeOn}
+                onChange={(e) => setSetting("ironMode", e.target.checked)}
+                disabled={hasStartedGame && !ironModeOn}
+                className="mt-1 h-4 w-4 accent-foreground"
+                aria-label="Iron Mode — one wrong move ends the run"
+              />
+            </label>
+          )}
 
           {/* RAZ-19 haptics toggle. Rendered only when the server-side
               feature flag is on; anonymous and signed-in users both see

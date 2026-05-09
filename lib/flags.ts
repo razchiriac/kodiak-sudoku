@@ -320,6 +320,14 @@ export const adaptiveCoach = declareFlag("adaptive-coach");
 // the solution is kept server-side (otherwise we'd leak it).
 export const showMistakes = declareFlag("show-mistakes");
 
+// RAZ-112 - Iron Mode ("Flawless Mode"). When on, the settings dialog
+// exposes an "Iron Mode ⚔️" toggle. One wrong placement ends the run —
+// no undo, no recovery. Hints and AI Coach are disabled while Iron Mode
+// is active. Successful Iron completions earn an ⚔️ badge on the
+// leaderboard. The flag gates the toggle; the per-user setting (default
+// off) gates the gameplay enforcement.
+export const ironMode = declareFlag("iron-mode");
+
 // RAZ-106 - Offline sudoku gameplay. When on, the app pre-fetches a bank
 // of random puzzles into IndexedDB via /api/puzzles/offline-bank so new
 // puzzles can be started without a network connection. The /play/offline

@@ -43,6 +43,13 @@ export function ControlPanel({ side }: { side: "left" | "right" }) {
     notesMatchComputedCandidates(s.board, s.notes, s.meta?.variant),
   );
   const isComplete = useGameStore((s) => s.isComplete);
+  // RAZ-112: Iron Mode blocks hints AND undo/redo/erase — we read the
+  // active state once so all affected buttons can reference it. Also
+  // checks ironFailed to keep buttons disabled after the run ends.
+  const ironActive = useGameStore(
+    (s) => s.featureFlags.ironMode && s.settings.ironMode === true,
+  );
+  const ironFailed = useGameStore((s) => s.ironFailed);
   // RAZ-14 — subscribe to the tiered hint session so we can (a) show
   // a "1/3" / "2/3" badge on the Hint button, (b) fire a sonner toast
   // whenever the session transitions to a new tier. Both the left and
@@ -138,21 +145,21 @@ export function ControlPanel({ side }: { side: "left" | "right" }) {
               label="Undo"
               shortcut="U"
               onClick={undo}
-              disabled={isComplete}
+              disabled={isComplete || !!ironFailed}
               icon={<Undo2 />}
             />
             <ControlButton
               label="Redo"
               shortcut="R"
               onClick={redo}
-              disabled={isComplete}
+              disabled={isComplete || !!ironFailed}
               icon={<Redo2 />}
             />
             <ControlButton
               label="Erase"
               shortcut="Backspace"
               onClick={erase}
-              disabled={isComplete}
+              disabled={isComplete || !!ironFailed}
               icon={<Eraser />}
             />
           </>
@@ -185,17 +192,19 @@ export function ControlPanel({ side }: { side: "left" | "right" }) {
                 shows the plain label. */}
             <ControlButton
               label={
-                hintSession
-                  ? hintSession.tier === 1
-                    ? "Hint 2/3"
-                    : "Hint 3/3"
-                  : "Hint"
+                ironActive
+                  ? "Hint"
+                  : hintSession
+                    ? hintSession.tier === 1
+                      ? "Hint 2/3"
+                      : "Hint 3/3"
+                    : "Hint"
               }
               shortcut="H"
               onClick={() => void hint()}
-              disabled={isComplete}
+              disabled={isComplete || ironActive || !!ironFailed}
               icon={<Lightbulb />}
-              active={!!hintSession}
+              active={!ironActive && !!hintSession}
             />
             {/* RAZ-42: optional — hidden when the user turns off "Auto-notes"
                 in Settings (persisted). Replaces every empty cell's pencil

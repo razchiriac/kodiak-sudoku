@@ -14,6 +14,7 @@ import {
   challengeLink,
   compactControls,
   haptics,
+  ironMode,
   jumpOnPlace,
   longPressNote,
   modePresets,
@@ -196,6 +197,11 @@ export default async function PuzzlePage({
   // banner hook can short-circuit on flag-off.
   const adaptiveCoachEnabled = await adaptiveCoach();
 
+  // RAZ-112 / iron-mode flag. Same forwarding pattern — the settings
+  // dialog reads it to gate the Iron Mode toggle, and inputDigit reads
+  // it to enforce the one-wrong-move rule.
+  const ironModeEnabled = await ironMode();
+
   return (
     <PlayClient
       puzzle={{
@@ -242,6 +248,7 @@ export default async function PuzzlePage({
       aiCoachEnabled={aiCoachEnabled}
       stuckRescueEnabled={stuckRescueEnabled}
       adaptiveCoachEnabled={adaptiveCoachEnabled}
+      ironModeEnabled={ironModeEnabled}
     />
   );
 }

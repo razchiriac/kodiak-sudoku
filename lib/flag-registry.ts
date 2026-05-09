@@ -458,6 +458,20 @@ export const FLAG_REGISTRY: readonly FlagSpec[] = [
     linearId: "RAZ-113",
   },
   {
+    // RAZ-116: Color Code Mode. When on, the settings dialog renders a
+    // Symbol Mode picker (Digits / Colors / Shapes / Colors + Shapes)
+    // and the Cell + NumberPad components render the active symbol set
+    // instead of plain digits. Default ON so CI previews exercise the
+    // path. When off, the picker is hidden and digits render normally
+    // regardless of the persisted symbolSet setting.
+    key: "color-code-mode",
+    envKey: "FLAG_COLOR_CODE_MODE",
+    defaultValue: true,
+    description:
+      "Show Symbol Mode picker in settings: replace digits 1–9 with colors, shapes, or color+shape combos. Fully accessible for colorblind users.",
+    linearId: "RAZ-116",
+  },
+  {
     // RAZ-106: Offline sudoku gameplay. When on, the app pre-fetches a
     // bank of random puzzles per difficulty bucket into IndexedDB so the
     // player can start a new puzzle without a network connection. Completions

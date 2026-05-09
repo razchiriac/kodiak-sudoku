@@ -33,6 +33,7 @@ import {
   type InputEvent,
   type InputEventKind,
 } from "@/lib/sudoku/input-events";
+import type { SymbolSetId } from "@/lib/sudoku/symbols";
 import {
   applyPresetToSettings,
   settingsMatchPreset,
@@ -248,6 +249,12 @@ type GameState = {
     // keyboard input) transforms the digits. Default false so existing players
     // see no change. No feature flag needed — it's a pure display preference.
     zeroBasedMode: boolean;
+    // RAZ-116: Color Code Mode — replace digits with colors, shapes, or
+    // color+shape combos. Internal 1–9 representation is unchanged; only
+    // the display layer (Cell, NumberPad, notes) uses the symbol set.
+    // Default "digits" so existing players see no change. Persisted to
+    // localStorage via the existing settings partition.
+    symbolSet: SymbolSetId;
     // RAZ-111: Speed Notes — one-tap auto-fill candidates for a cell or the
     // full board. Shift+N fills the selected cell; Ctrl+Shift+N fills all.
     // Merge semantics: existing manual pencil marks are preserved, new
@@ -350,6 +357,11 @@ type GameState = {
     // rule. When off, the toggle is hidden and ironMode has no effect
     // even if persisted as true — instant kill switch from Edge Config.
     ironMode: boolean;
+    // RAZ-116: when on, the settings dialog renders the Symbol Mode
+    // picker (Digits / Colors / Shapes / Colors + Shapes). When off,
+    // the picker is hidden and the default "digits" rendering is used
+    // regardless of the persisted user setting.
+    colorCodeMode: boolean;
   };
   // RAZ-14: active progressive-hint session. A hint session starts on the
   // first click of the Hint button and advances through tiers on
@@ -602,6 +614,8 @@ const INITIAL: GameState = {
     coachingTips: true,
     // RAZ-110: off by default — existing players see no change.
     zeroBasedMode: false,
+    // RAZ-116: Color Code Mode — default to classic digits.
+    symbolSet: "digits" as SymbolSetId,
     // RAZ-111: on by default so Shift+N / Ctrl+Shift+N work immediately.
     speedNotes: true,
     // RAZ-112: off by default — Iron Mode is an opt-in challenge.
@@ -641,6 +655,9 @@ const INITIAL: GameState = {
     // the resolved `adaptive-coach` Edge Config flag. Off = the
     // coach-tip banner never mounts.
     adaptiveCoach: false,
+    // RAZ-116: default false — hydrated by PlayClient on mount from
+    // the resolved `color-code-mode` Edge Config flag.
+    colorCodeMode: false,
   },
   hintSession: null,
   // RAZ-112: no Iron failure until a wrong placement in Iron Mode.

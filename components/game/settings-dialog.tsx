@@ -164,6 +164,11 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const autoNotesOn = useGameStore(
     (s) => s.settings.autoNotesEnabled !== false,
   );
+  // RAZ-110: zero-based mode — no feature flag needed, purely a display
+  // preference. Default off so existing players see no change.
+  const zeroBasedMode = useGameStore(
+    (s) => s.settings.zeroBasedMode === true,
+  );
   // RAZ-54: mode-presets mirror. Read directly from the store (the
   // PlayClient mirrors the server-resolved value on mount). The
   // inline picker component renders nothing when the flag is off so
@@ -256,6 +261,28 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
               onChange={(e) => setSetting("autoNotesEnabled", e.target.checked)}
               className="mt-1 h-4 w-4 accent-foreground"
               aria-label="Enable auto-notes button"
+            />
+          </label>
+
+          {/* RAZ-110: zero-based mode. Always available — no feature flag.
+              Digits on the board, in notes, and on the number pad show
+              0–8 instead of 1–9. The internal 1-indexed representation
+              is unchanged (solver, DB, leaderboards unaffected). */}
+          <label className="flex items-start justify-between gap-4 text-sm">
+            <span className="flex flex-col">
+              <span className="font-medium text-foreground">Zero-based digits</span>
+              <span className="text-xs text-muted-foreground">
+                Show digits as 0–8 instead of 1–9. Keys 0–8 place digits;
+                Backspace erases. Useful for programmers and competitive players
+                who think in zero-indexed systems.
+              </span>
+            </span>
+            <input
+              type="checkbox"
+              checked={zeroBasedMode}
+              onChange={(e) => setSetting("zeroBasedMode", e.target.checked)}
+              className="mt-1 h-4 w-4 accent-foreground"
+              aria-label="Zero-based digit mode"
             />
           </label>
 

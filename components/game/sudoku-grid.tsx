@@ -17,6 +17,9 @@ export function SudokuGrid() {
   const conflicts = useGameStore((s) => s.conflicts);
   const isPaused = useGameStore((s) => s.isPaused);
   const highlightSameDigit = useGameStore((s) => s.settings.highlightSameDigit);
+  // RAZ-110: zero-based mode — pass to Cell so digit display is consistent
+  // across the entire board without each cell re-subscribing to the store.
+  const zeroBasedMode = useGameStore((s) => s.settings.zeroBasedMode);
   const selectCell = useGameStore((s) => s.selectCell);
   // RAZ-15: derive the set of "mistake" cells — any non-fixed cell
   // whose current value disagrees with the puzzle solution. Only
@@ -115,6 +118,7 @@ export function SudokuGrid() {
           highlightNoteDigit={
             highlightSameDigit && selectedDigit > 0 ? selectedDigit : 0
           }
+          zeroBasedMode={zeroBasedMode}
           onSelect={handleSelect}
         />
       ))}

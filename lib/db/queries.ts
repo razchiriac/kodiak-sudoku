@@ -6,6 +6,7 @@ import {
   completedGames,
   dailyPuzzles,
   profiles,
+  puzzleAttempts,
   puzzles,
   savedGames,
   type Puzzle,
@@ -752,4 +753,25 @@ export async function getCompletionDates(userId: string): Promise<string[]> {
         order by d desc`,
   );
   return execRows<{ d: string }>(rows).map((r) => r.d);
+}
+
+// RAZ-113: Fetch all input_batch rows for a given puzzle + user,
+// ordered by seq. Returns the raw payload objects so the replay
+// engine can stitch them into a single sorted event stream.
+export async function getReplayBatches(
+  userId: string,
+  puzzleId: number,
+): Promise<{ seq: number; completed: boolean; events: { c: number; d: number; t: number; k: string }[] }[]> {
+  const rows = await db.execute<{
+    payload: { seq: number; completed: boolean; events: { c: number; d: number; t: number; k: string }[] };
+  }>(
+    sql`select ${puzzleAttempts.payload}
+        from ${puzzleAttempts}
+        where ${puzzleAttempts.userId} = ${userId}
+          and ${puzzleAttempts.puzzleId} = ${puzzleId}
+          and ${puzzleAttempts.event} = 'input_batch'
+        order by ${puzzleAttempts.createdAt} asc`,
+  );
+  type Row = { payload: { seq: number; completed: boolean; events: { c: number; d: number; t: number; k: string }[] } };
+  return execRows<Row>(rows).map((r) => r.payload);
 }

@@ -98,6 +98,7 @@ export function PlayClient({
   // the local IndexedDB completion-queue instead of being submitted
   // directly. The queue is drained as soon as the device reconnects.
   isOffline = false,
+  replayEnabled = false,
 }: {
   puzzle: PuzzleProp;
   savedGame: SavedProp;
@@ -233,6 +234,10 @@ export function PlayClient({
   // /play/offline. Autosave and live submission are skipped; completion is
   // enqueued locally and synced on reconnect.
   isOffline?: boolean;
+  // RAZ-113: server-resolved value of `solve-replay`. Forwarded to the
+  // CompletionModal which shows/hides the "Watch Replay" button based
+  // on it. The button fetches event batches via a server action.
+  replayEnabled?: boolean;
 }) {
   const startGame = useGameStore((s) => s.startGame);
   const resumeFromSnapshot = useGameStore((s) => s.resumeFromSnapshot);
@@ -1089,6 +1094,7 @@ export function PlayClient({
         rankContext={rankContext}
         breakdownEnabled={breakdownEnabled}
         aiDebriefEnabled={aiDebriefEnabled}
+        replayEnabled={replayEnabled}
       />
       <ShortcutsOverlay open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />

@@ -444,6 +444,20 @@ export const FLAG_REGISTRY: readonly FlagSpec[] = [
     linearId: "RAZ-112",
   },
   {
+    // RAZ-113: Solve Replay. When on, the completion modal shows a
+    // "Watch Replay" button for games that have an input event log.
+    // The button opens a modal replay viewer with play/pause, speed
+    // selector, and scrubber. Only meaningful for games where the
+    // user had "Record input events" enabled (RAZ-28). Default ON
+    // so CI previews exercise the path.
+    key: "solve-replay",
+    envKey: "FLAG_SOLVE_REPLAY",
+    defaultValue: true,
+    description:
+      "Show 'Watch Replay' in the completion modal for games with recorded input events. Replay viewer with play/pause, speed, and scrubber.",
+    linearId: "RAZ-113",
+  },
+  {
     // RAZ-106: Offline sudoku gameplay. When on, the app pre-fetches a
     // bank of random puzzles per difficulty bucket into IndexedDB so the
     // player can start a new puzzle without a network connection. Completions

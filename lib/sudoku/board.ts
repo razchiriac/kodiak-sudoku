@@ -272,6 +272,20 @@ export function computeMistakes(
   return out;
 }
 
+// Returns the bitmask of valid candidates for a single empty cell.
+// Filled cells return 0. Factored out of computeAllCandidates so
+// Speed Notes can fill just the selected cell without a full board pass.
+export function computeCellCandidateMask(board: Board, index: CellIndex, variant?: Variant): number {
+  if (board[index] !== 0) return 0;
+  const ALL = 0b1_1111_1111;
+  let mask = ALL;
+  for (const p of peers(index, variant)) {
+    const v = board[p];
+    if (v !== 0) mask &= ~(1 << (v - 1));
+  }
+  return mask;
+}
+
 // Compute the full set of legal candidate digits for every empty cell.
 // For each empty cell, we start with all nine bits set and turn off any
 // digit that already appears in the cell's row, column, or 3x3 box.

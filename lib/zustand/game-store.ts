@@ -9,6 +9,7 @@ import {
   clearCellNotes,
   clearNotesOnEmptyCells,
   computeAllCandidates,
+  computeCellCandidateMask,
   digitCounts,
   emptyNotes,
   parseBoard,
@@ -247,6 +248,13 @@ type GameState = {
     // keyboard input) transforms the digits. Default false so existing players
     // see no change. No feature flag needed — it's a pure display preference.
     zeroBasedMode: boolean;
+    // RAZ-111: Speed Notes — one-tap auto-fill candidates for a cell or the
+    // full board. Shift+N fills the selected cell; Ctrl+Shift+N fills all.
+    // Merge semantics: existing manual pencil marks are preserved, new
+    // candidates are added. Default true so the shortcuts are available
+    // from first play; the settings dialog lets players disable the shortcut
+    // if they prefer strictly manual note-taking.
+    speedNotes: boolean;
   };
   // Feature-flag mirror. The *source* of truth is the server
   // (lib/flags.ts → Edge Config), which PlayClient evaluates server-
@@ -444,6 +452,13 @@ type GameActions = {
   // pencil marks on all empty cells; else fill with computed
   // candidates. Each action is one notes-bulk history step.
   autoFillNotes: () => void;
+  // RAZ-111: Speed Notes — merge valid candidates into the selected
+  // cell's notes without removing any manually-placed marks. No-ops
+  // when disabled in settings or when there is nothing to add.
+  fillCellCandidates: () => void;
+  // RAZ-111: Merge valid candidates into every empty cell's notes
+  // (single undo step, merge semantics identical to fillCellCandidates).
+  fillAllCandidates: () => void;
 
   undo: () => void;
   redo: () => void;
@@ -565,6 +580,8 @@ const INITIAL: GameState = {
     coachingTips: true,
     // RAZ-110: off by default — existing players see no change.
     zeroBasedMode: false,
+    // RAZ-111: on by default so Shift+N / Ctrl+Shift+N work immediately.
+    speedNotes: true,
   },
   featureFlags: {
     haptics: false,
@@ -1183,6 +1200,63 @@ export const useGameStore = create<GameState & GameActions>()(
           history: pushEntry(s.history, entry),
           hintSession: null,
           // RAZ-75: bulk auto-notes is a deliberate player action.
+          lastInputAtMs: s.elapsedMs,
+        });
+      },
+
+      fillCellCandidates: () => {
+        const s = get();
+        if (s.settings.speedNotes === false) return;
+        if (s.isComplete || s.isPaused) return;
+        const idx = s.selection;
+        if (idx == null) return;
+        if (s.fixed[idx]) return;
+        if (s.board[idx] !== 0) return;
+        const v = s.meta?.variant;
+        const computed = computeCellCandidateMask(s.board, idx, v);
+        const prevMask = s.notes[idx];
+        const nextMask = prevMask | computed;
+        if (nextMask === prevMask) return;
+        const nextNotes = new Uint16Array(s.notes);
+        nextNotes[idx] = nextMask;
+        const entry: HistoryEntry = {
+          kind: "note",
+          index: idx,
+          prevMask,
+          nextMask,
+        };
+        set({
+          notes: nextNotes,
+          history: pushEntry(s.history, entry),
+          hintSession: null,
+          lastInputAtMs: s.elapsedMs,
+        });
+      },
+
+      fillAllCandidates: () => {
+        const s = get();
+        if (s.settings.speedNotes === false) return;
+        if (s.isComplete || s.isPaused) return;
+        const v = s.meta?.variant;
+        const computed = computeAllCandidates(s.board, v);
+        const prevNotes = new Uint16Array(s.notes);
+        const nextNotes = new Uint16Array(BOARD_SIZE);
+        let changed = false;
+        for (let i = 0; i < BOARD_SIZE; i++) {
+          const merged = s.notes[i] | computed[i];
+          nextNotes[i] = merged;
+          if (merged !== s.notes[i]) changed = true;
+        }
+        if (!changed) return;
+        const entry: HistoryEntry = {
+          kind: "notes-bulk",
+          prevNotes,
+          nextNotes,
+        };
+        set({
+          notes: nextNotes,
+          history: pushEntry(s.history, entry),
+          hintSession: null,
           lastInputAtMs: s.elapsedMs,
         });
       },

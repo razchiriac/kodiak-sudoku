@@ -255,6 +255,12 @@ type GameState = {
     // from first play; the settings dialog lets players disable the shortcut
     // if they prefer strictly manual note-taking.
     speedNotes: boolean;
+    // RAZ-112: Iron Mode ("Flawless Mode"). When true, one wrong placement
+    // ends the run immediately — no undo, no recovery. Only meaningful when
+    // the client has the puzzle solution (random puzzles). Persists as a
+    // user preference so the last-used state is remembered. Cannot be
+    // toggled mid-game.
+    ironMode: boolean;
   };
   // Feature-flag mirror. The *source* of truth is the server
   // (lib/flags.ts → Edge Config), which PlayClient evaluates server-
@@ -339,6 +345,11 @@ type GameState = {
     // behavior. We also gate the tier-advancing toasts on this flag so
     // an Edge-Config kill switch instantly reverts everyone.
     progressiveHints: boolean;
+    // RAZ-112: when on, the settings dialog renders the "Iron Mode"
+    // toggle and the game store enforces the one-mistake-ends-the-run
+    // rule. When off, the toggle is hidden and ironMode has no effect
+    // even if persisted as true — instant kill switch from Edge Config.
+    ironMode: boolean;
   };
   // RAZ-14: active progressive-hint session. A hint session starts on the
   // first click of the Hint button and advances through tiers on
@@ -405,6 +416,17 @@ type GameState = {
   // before a game has been started (the snapshot accessor returns null
   // in that case anyway, so this should never leak to the server).
   attemptId: string | null;
+  // RAZ-112: Iron Mode failure state. Non-null when an Iron Mode run has
+  // ended due to a wrong placement. Stores the cell index so the UI can
+  // flash the failed cell and the modal can report which cell killed the
+  // run. NOT persisted — the failed state is transient and doesn't survive
+  // a page reload (the player would see the standard completion / resume
+  // flow instead). Reset by startGame / resumeFromSnapshot.
+  ironFailed: {
+    cell: number;
+    digit: number;
+    filledCount: number;
+  } | null;
   // RAZ-49: elapsedMs at the moment the most-recent hint was actually
   // placed on the board. Set inside `applyHintPlacement` (the single
   // funnel for hint placements — both progressive tier-3 and legacy
@@ -582,6 +604,8 @@ const INITIAL: GameState = {
     zeroBasedMode: false,
     // RAZ-111: on by default so Shift+N / Ctrl+Shift+N work immediately.
     speedNotes: true,
+    // RAZ-112: off by default — Iron Mode is an opt-in challenge.
+    ironMode: false,
   },
   featureFlags: {
     haptics: false,
@@ -596,6 +620,9 @@ const INITIAL: GameState = {
     // until PlayClient has mirrored the server-resolved flag value.
     // The play-client effect hydrates this almost immediately on mount.
     progressiveHints: false,
+    // RAZ-112: default false — hydrated by PlayClient on mount from
+    // the resolved `iron-mode` Edge Config flag.
+    ironMode: false,
     // RAZ-28: default false — feature is off by default and hydrates
     // to the resolved Edge Config value on mount. When it flips on
     // mid-session, recording starts on the NEXT mutation (no
@@ -616,6 +643,8 @@ const INITIAL: GameState = {
     adaptiveCoach: false,
   },
   hintSession: null,
+  // RAZ-112: no Iron failure until a wrong placement in Iron Mode.
+  ironFailed: null,
   events: [],
   eventSeq: 0,
   activeDigit: null,
@@ -927,6 +956,8 @@ export const useGameStore = create<GameState & GameActions>()(
         const s = get();
         const v = s.meta?.variant;
         if (s.isComplete || s.isPaused) return;
+        // RAZ-112: block all input once an Iron Mode run has ended.
+        if (s.ironFailed) return;
         const idx = s.selection;
         if (idx == null) return;
         if (s.fixed[idx]) return; // never overwrite a clue
@@ -984,6 +1015,41 @@ export const useGameStore = create<GameState & GameActions>()(
         const isConflict = !isLegalPlacement(s.board, idx, digit, v);
         let mistakes = s.mistakes;
         if (isConflict) mistakes++;
+
+        // RAZ-112: Iron Mode — one wrong placement ends the run. We
+        // compare against the known solution (only available for random
+        // puzzles). A digit is "wrong" if the solution is known and
+        // the placed digit doesn't match it. When the feature flag is
+        // off OR the user hasn't opted in, this block is skipped
+        // entirely and inputDigit behaves as before. We place the digit
+        // on the board (so the cell flashes red) but do NOT create an
+        // undo entry — the run is over, no recovery.
+        const ironActive =
+          s.featureFlags.ironMode && s.settings.ironMode === true;
+        if (ironActive && s.meta?.solution) {
+          const correctDigit = Number(s.meta.solution[idx]);
+          if (digit !== correctDigit) {
+            // Count how many non-fixed, non-empty cells there are for
+            // the "progress %" display in the run-ended modal.
+            let filledCount = 0;
+            for (let i = 0; i < 81; i++) {
+              if (!s.fixed[i] && s.board[i] !== 0) filledCount++;
+            }
+            fireGameHaptic(s, "conflict");
+            set({
+              board,
+              notes,
+              mistakes: mistakes,
+              selection: idx,
+              conflicts: findConflicts(board, v),
+              ironFailed: { cell: idx, digit, filledCount },
+              hintSession: null,
+              events: maybeRecord(s, "v", idx, digit),
+              lastInputAtMs: s.elapsedMs,
+            });
+            return;
+          }
+        }
 
         // RAZ-19 + RAZ-72 haptics. We fire one of three events:
         //   - "complete" when this placement just finished the puzzle
@@ -1124,6 +1190,8 @@ export const useGameStore = create<GameState & GameActions>()(
         const s = get();
         const v = s.meta?.variant;
         if (s.isComplete || s.isPaused) return;
+        // RAZ-112: block erase once Iron Mode run has ended.
+        if (s.ironFailed) return;
         const idx = s.selection;
         if (idx == null) return;
         if (s.fixed[idx]) return;
@@ -1263,6 +1331,8 @@ export const useGameStore = create<GameState & GameActions>()(
 
       undo: () => {
         const s = get();
+        // RAZ-112: no undo once Iron Mode run has ended.
+        if (s.ironFailed) return;
         const v = s.meta?.variant;
         const u = undo(s.history);
         if (!u) return;
@@ -1302,6 +1372,8 @@ export const useGameStore = create<GameState & GameActions>()(
 
       redo: () => {
         const s = get();
+        // RAZ-112: no redo once Iron Mode run has ended.
+        if (s.ironFailed) return;
         const v = s.meta?.variant;
         const r = redo(s.history);
         if (!r) return;
@@ -1343,6 +1415,12 @@ export const useGameStore = create<GameState & GameActions>()(
       hint: async () => {
         const s = get();
         if (s.isComplete || s.isPaused || !s.meta) return;
+        // RAZ-112: hints are disabled in Iron Mode — they would let
+        // the player avoid mistakes, defeating the purpose.
+        if (s.ironFailed) return;
+        const ironActive =
+          s.featureFlags.ironMode && s.settings.ironMode === true;
+        if (ironActive) return;
 
         // RAZ-14 tier-advance branch. If a progressive session is already
         // in flight, this click bumps it to the next tier instead of

@@ -16,6 +16,12 @@ export function Timer() {
   const meta = useGameStore((s) => s.meta);
   const tick = useGameStore((s) => s.tick);
   const togglePause = useGameStore((s) => s.togglePause);
+  // RAZ-112: show ⚔️ next to the timer when Iron Mode is active so the
+  // player always knows the stakes. Read from both the flag and the
+  // per-user setting — flag-off means no icon even if the setting is on.
+  const ironActive = useGameStore(
+    (s) => s.featureFlags.ironMode && s.settings.ironMode === true,
+  );
 
   // Tick once a second. Pausing/completion gates the increment inside
   // tick() itself so we never overshoot when the game ends mid-interval.
@@ -38,6 +44,18 @@ export function Timer() {
 
   return (
     <div className="flex items-center gap-2">
+      {/* RAZ-112: Iron Mode indicator. Small sword emoji adjacent to the
+          timer so the player can't forget the stakes. Hidden when the
+          flag or setting is off. */}
+      {ironActive && (
+        <span
+          className="text-sm"
+          aria-label="Iron Mode active"
+          title="Iron Mode — one wrong move ends the run"
+        >
+          ⚔️
+        </span>
+      )}
       <span
         className="font-mono text-lg tabular-nums"
         aria-live="off"

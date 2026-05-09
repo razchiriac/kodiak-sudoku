@@ -20,6 +20,7 @@ import { LiveRegion } from "@/components/game/live-region";
 import { CompletionModal } from "@/components/game/completion-modal";
 import { ShortcutsOverlay } from "@/components/game/shortcuts-overlay";
 import { SettingsDialog } from "@/components/game/settings-dialog";
+import { IronFailedModal } from "@/components/game/iron-failed-modal";
 import { PrintDialog } from "@/components/game/print-dialog";
 import { RescueChip } from "@/components/game/rescue-chip";
 import { CoachTipBanner } from "@/components/game/coach-tip-banner";
@@ -86,6 +87,11 @@ export function PlayClient({
   aiCoachEnabled = false,
   stuckRescueEnabled = false,
   adaptiveCoachEnabled = false,
+  // RAZ-112: server-resolved value of `iron-mode`. Mirrored into the store
+  // so the settings dialog renders the toggle and inputDigit enforces the
+  // one-wrong-move rule. Off = toggle is hidden and ironMode has no
+  // gameplay effect.
+  ironModeEnabled = false,
   // RAZ-106: true when this session was entered via /play/offline (puzzle
   // was claimed from the IndexedDB offline bank). When true, autosave is
   // skipped (no server DB row to upsert) and completion is enqueued into
@@ -219,6 +225,10 @@ export function PlayClient({
   // flag is flipped off via Edge Config — same kill-switch shape as
   // `stuckRescueEnabled`.
   adaptiveCoachEnabled?: boolean;
+  // RAZ-112: server-resolved value of `iron-mode`. Mirrored into the
+  // store so the settings dialog gates the toggle and inputDigit
+  // enforces the one-wrong-move rule.
+  ironModeEnabled?: boolean;
   // RAZ-106: true for puzzles served from the IndexedDB offline bank via
   // /play/offline. Autosave and live submission are skipped; completion is
   // enqueued locally and synced on reconnect.
@@ -418,6 +428,12 @@ export function PlayClient({
   useEffect(() => {
     setFeatureFlag("adaptiveCoach", adaptiveCoachEnabled);
   }, [adaptiveCoachEnabled, setFeatureFlag]);
+
+  // RAZ-112: mirror the `iron-mode` flag so the settings dialog
+  // can gate the toggle and inputDigit can enforce the rule.
+  useEffect(() => {
+    setFeatureFlag("ironMode", ironModeEnabled);
+  }, [ironModeEnabled, setFeatureFlag]);
 
   // Autosave: every time the relevant slice of state changes, debounce a
   // server action call. Only signed-in users autosave to the server;
@@ -895,7 +911,12 @@ export function PlayClient({
   // Coach is only meaningful for DB-backed puzzles. Custom (pasted)
   // puzzles have no row to look up the solution from, so even when
   // the flag is on the button stays hidden. Same pattern Print uses.
-  const showCoach = aiCoachEnabled && !isCustom;
+  // RAZ-112: also hide Coach in Iron Mode — it would leak information
+  // about which moves are safe, undermining the challenge.
+  const ironActive = useGameStore(
+    (s) => s.featureFlags.ironMode && s.settings.ironMode === true,
+  );
+  const showCoach = aiCoachEnabled && !isCustom && !ironActive;
 
   if (!meta) return null; // first render before startGame() runs
 
@@ -1071,6 +1092,9 @@ export function PlayClient({
       />
       <ShortcutsOverlay open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      {/* RAZ-112: Iron Mode "Run Ended" modal. Only mounts when
+          ironFailed is non-null — renders nothing otherwise. */}
+      <IronFailedModal />
       {/* RAZ-9: only mount the print dialog when the flag is on AND
           this isn't a custom puzzle (no DB row to fetch). Mounting
           it conditionally rather than controlling visibility via the

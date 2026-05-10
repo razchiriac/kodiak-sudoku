@@ -22,7 +22,9 @@ plugins {
 
 def twaManifest = [
     applicationId: 'com.razchiriac.sudoku',
-    hostName: 'sudoku.kodiak.quest', // The domain being opened in the TWA.
+    // RAZ-132: Must match the production origin Chrome verifies via Digital Asset
+    // Links (/.well-known/assetlinks.json). Mismatch → Custom Tabs fallback → URL bar.
+    hostName: 'kodiaksudoku.com',
     launchUrl: '/', // The start path for the TWA. Must be relative to the domain.
     name: 'Sudoku', // The application name.
     launcherName: 'Sudoku', // The name shown on the Android Launcher.
@@ -57,8 +59,8 @@ android {
         applicationId "com.razchiriac.sudoku"
         minSdkVersion 21
         targetSdkVersion 35
-        versionCode 4
-        versionName "4"
+        versionCode 5
+        versionName "5"
 
         // The name for the application
         resValue "string", "appName", twaManifest.name
@@ -76,12 +78,12 @@ android {
             // The URL the Web Manifest for the Progressive Web App that the TWA points to. This
             // is used by Chrome OS and Meta Quest to open the Web version of the PWA instead of
             // the TWA, as it will probably give a better user experience for non-mobile devices.
-            resValue "string", "webManifestUrl", 'https://sudoku.kodiak.quest/manifest.webmanifest'
+            resValue "string", "webManifestUrl", 'https://' + twaManifest.hostName + '/manifest.webmanifest'
         
 
         
             // This is used by Meta Quest.
-            resValue "string", "fullScopeUrl", 'https://sudoku.kodiak.quest/'
+            resValue "string", "fullScopeUrl", 'https://' + twaManifest.hostName + '/'
         
 
         

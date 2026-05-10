@@ -29,6 +29,24 @@ import { defineConfig, devices } from "@playwright/test";
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000";
 const startOwnServer = process.env.PLAYWRIGHT_START_SERVER === "1";
 
+// Vercel previews with Deployment Protection return an auth interstitial unless
+// automation sends the bypass headers — Playwright then hangs until
+// navigationTimeout on every page.goto. Mirror Vercel's Playwright example:
+// https://vercel.com/docs/deployment-protection/methods-to-bypass-deployment-protection/protection-bypass-automation
+//
+// Set VERCEL_AUTOMATION_BYPASS_SECRET in GitHub Actions (same value as
+// "Protection bypass for automation" in the Vercel project). Local runs against
+// localhost ignore this.
+const vercelBypassSecret =
+  process.env.VERCEL_AUTOMATION_BYPASS_SECRET?.trim() ?? "";
+const vercelAutomationHeaders =
+  vercelBypassSecret.length > 0
+    ? {
+        "x-vercel-protection-bypass": vercelBypassSecret,
+        "x-vercel-set-bypass-cookie": "true",
+      }
+    : undefined;
+
 // RAZ-73 — Authed projects live behind an env switch. The
 // /api/test/login route ALSO requires this env to be set on the
 // dev server, so flipping it on at the playwright level without
@@ -62,6 +80,9 @@ export default defineConfig({
 
   use: {
     baseURL,
+    ...(vercelAutomationHeaders
+      ? { extraHTTPHeaders: vercelAutomationHeaders }
+      : {}),
     // Capture traces only on the first retry — full traces on every
     // run bloat test-results/ quickly and we rarely need them for
     // green tests.

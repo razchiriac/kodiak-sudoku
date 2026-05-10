@@ -491,4 +491,17 @@ export const FLAG_REGISTRY: readonly FlagSpec[] = [
       "Pre-fetch puzzle bank into IndexedDB and enable /play/offline route for network-free gameplay. Completions are queued and synced on reconnect.",
     linearId: "RAZ-106",
   },
+  {
+    // RAZ-120: Arrow Sudoku. When on, the play page renders Arrow Sudoku
+    // overlays for puzzles with variant "arrow". Circles mark sum cells,
+    // lines with arrowheads mark body cells whose digits must sum to the
+    // circle. Default ON so CI previews exercise the path; the variant is
+    // only active for puzzles explicitly tagged as "arrow" in the DB.
+    key: "arrow-sudoku",
+    envKey: "FLAG_ARROW_SUDOKU",
+    defaultValue: true,
+    description:
+      "Render Arrow Sudoku overlay (circles + arrow lines) for puzzles with the 'arrow' variant. Digits along each arrow must sum to the circle cell.",
+    linearId: "RAZ-120",
+  },
 ];

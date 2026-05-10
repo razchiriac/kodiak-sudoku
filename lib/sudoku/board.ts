@@ -25,7 +25,8 @@ export type FixedMask = Uint8Array;
 // (each must contain 1-9 exactly once). The type is a string union
 // rather than an enum per project conventions. Future variants (e.g.
 // "killer") can be added without a migration by extending this union.
-export type Variant = "standard" | "diagonal";
+// RAZ-120: "arrow" — digits along each arrow must sum to the circle cell.
+export type Variant = "standard" | "diagonal" | "arrow";
 
 export const BOARD_SIZE = 81;
 export const GRID_DIM = 9;

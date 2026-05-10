@@ -3,6 +3,7 @@
 import { useCallback, useMemo } from "react";
 import { useGameStore } from "@/lib/zustand/game-store";
 import { computeMistakes, peers } from "@/lib/sudoku/board";
+import { ArrowOverlay } from "./arrow-overlay";
 import { Cell } from "./cell";
 
 // The 9x9 grid. Subscribes to the slice of state needed for layout-level
@@ -43,6 +44,9 @@ export function SudokuGrid() {
 
   // RAZ-18: read the variant so peer highlighting respects diagonals.
   const variant = useGameStore((s) => s.meta?.variant);
+  // RAZ-120: arrow constraint definitions for arrow-variant puzzles.
+  const arrows = useGameStore((s) => s.arrows);
+  const arrowSudokuFlag = useGameStore((s) => s.featureFlags.arrowSudoku);
   const handleSelect = useCallback((i: number) => selectCell(i), [selectCell]);
 
   // Pre-compute the peer set for the current selection. Cheap (20 entries)
@@ -133,6 +137,13 @@ export function SudokuGrid() {
           SVG overlay with two lines spanning corner to corner. The
           `pointer-events-none` ensures clicks pass through to cells. */}
       {variant === "diagonal" && <DiagonalOverlay />}
+      {/* RAZ-120: arrow constraint overlay for arrow-variant puzzles.
+          Renders circles and directional lines showing sum constraints.
+          Colors update live as the player fills cells: gray (incomplete),
+          green (satisfied), red (violated). */}
+      {variant === "arrow" && arrowSudokuFlag && arrows.length > 0 && (
+        <ArrowOverlay arrows={arrows} board={board} />
+      )}
       {isPaused && <PauseOverlay />}
     </div>
   );

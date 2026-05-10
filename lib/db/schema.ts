@@ -63,9 +63,14 @@ export const puzzles = pgTable(
     // we can re-bucket post-launch with a single UPDATE.
     difficultyBucket: smallint("difficulty_bucket").notNull(),
     // RAZ-18: Puzzle variant. "standard" for classic 9x9; "diagonal"
-    // adds two diagonal constraint units. Text per project convention
-    // so we can extend without a migration.
+    // adds two diagonal constraint units; "arrow" adds sum-arrow
+    // constraints. Text per project convention so we can extend
+    // without a migration.
     variant: text("variant").notNull().default("standard"),
+    // RAZ-120: Variant-specific metadata. For arrow puzzles this holds
+    // the arrow definitions (circle + body cell indices). NULL for
+    // standard and diagonal variants which need no extra data.
+    variantData: jsonb("variant_data"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -73,7 +78,7 @@ export const puzzles = pgTable(
     index("puzzles_variant_difficulty_idx").on(t.variant, t.difficultyBucket),
     check("puzzles_difficulty_range", sql`${t.difficultyBucket} between 1 and 4`),
     check("puzzles_clue_range", sql`${t.clueCount} between 17 and 40`),
-    check("puzzles_variant_check", sql`${t.variant} in ('standard', 'diagonal')`),
+    check("puzzles_variant_check", sql`${t.variant} in ('standard', 'diagonal', 'arrow')`),
   ],
 );
 

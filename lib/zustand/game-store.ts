@@ -362,6 +362,11 @@ type GameState = {
     // the picker is hidden and the default "digits" rendering is used
     // regardless of the persisted user setting.
     colorCodeMode: boolean;
+    // RAZ-120: when on, the ArrowOverlay renders for puzzles with
+    // variant="arrow". When off, the overlay is hidden. The arrows
+    // data is stored in `arrows` (set from puzzle.variant_data on
+    // startGame). Kill switch via Edge Config.
+    arrowSudoku: boolean;
   };
   // RAZ-14: active progressive-hint session. A hint session starts on the
   // first click of the Hint button and advances through tiers on
@@ -456,11 +461,19 @@ type GameState = {
   lastHintTechnique:
     | HintTechnique
     | null;
+  // RAZ-120: Arrow constraint definitions for arrow-variant puzzles.
+  // Set from puzzle.variant_data on startGame; empty for non-arrow
+  // variants. NOT persisted — it's static puzzle data reloaded from
+  // the server on each page load. SudokuGrid reads this to render
+  // the ArrowOverlay.
+  arrows: import("@/lib/sudoku/arrow").Arrow[];
 };
 
 type GameActions = {
   // Initialize a new game from a fresh puzzle. Resets all transient state.
-  startGame: (args: { meta: GameMeta; puzzle: string }) => void;
+  // RAZ-120: `arrows` carries arrow constraint definitions for
+  // arrow-variant puzzles (from puzzle.variant_data). Omit for non-arrow.
+  startGame: (args: { meta: GameMeta; puzzle: string; arrows?: import("@/lib/sudoku/arrow").Arrow[] }) => void;
   // Resume a saved game from a server snapshot.
   resumeFromSnapshot: (snapshot: GameSnapshot, puzzle: string) => void;
   // Snapshot for autosave / completion submission.
@@ -658,6 +671,10 @@ const INITIAL: GameState = {
     // RAZ-116: default false — hydrated by PlayClient on mount from
     // the resolved `color-code-mode` Edge Config flag.
     colorCodeMode: false,
+    // RAZ-120: default false — hydrated by PlayClient on mount from
+    // the resolved `arrow-sudoku` Edge Config flag. When on, the
+    // ArrowOverlay renders on puzzles with variant="arrow".
+    arrowSudoku: false,
   },
   hintSession: null,
   // RAZ-112: no Iron failure until a wrong placement in Iron Mode.
@@ -676,6 +693,8 @@ const INITIAL: GameState = {
   // reset them via the ...INITIAL spread.
   lastHintAtMs: null,
   lastHintTechnique: null,
+  // RAZ-120: empty for non-arrow variants. Set via startGame args.
+  arrows: [],
 };
 
 // RAZ-16 helper. Given the digit that was just placed and the post-
@@ -857,7 +876,7 @@ export const useGameStore = create<GameState & GameActions>()(
     (set, get) => ({
       ...INITIAL,
 
-      startGame: ({ meta, puzzle }) => {
+      startGame: ({ meta, puzzle, arrows }) => {
         const board = parseBoard(puzzle);
         const fixed = buildFixedMask(puzzle);
         set({
@@ -887,6 +906,8 @@ export const useGameStore = create<GameState & GameActions>()(
           // briefly resets to its INITIAL value between startGame() and
           // the PlayClient effect that re-injects it.
           featureFlags: get().featureFlags,
+          // RAZ-120: store arrow definitions for arrow-variant puzzles.
+          arrows: arrows ?? [],
         });
       },
 

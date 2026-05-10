@@ -1,6 +1,6 @@
 {
   "packageId": "com.razchiriac.sudoku",
-  "host": "sudoku.kodiak.quest",
+  "host": "kodiaksudoku.com",
   "name": "Sudoku",
   "launcherName": "Sudoku",
   "display": "standalone",

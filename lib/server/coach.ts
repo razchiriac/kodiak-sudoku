@@ -64,7 +64,7 @@ import { isLegalPlacement } from "@/lib/sudoku/validate";
 export const CoachInputSchema = z.object({
   board: z.string().length(BOARD_SIZE).regex(/^[0-9]{81}$/),
   difficultyBucket: z.number().int().min(1).max(4),
-  variant: z.enum(["standard", "diagonal"]),
+  variant: z.enum(["standard", "diagonal", "arrow"]),
   mode: z.enum(["daily", "random", "custom", "challenge", "quick"]),
   selected: z.number().int().min(0).max(80).nullable().optional(),
   mistakesSoFar: z.number().int().nonnegative(),

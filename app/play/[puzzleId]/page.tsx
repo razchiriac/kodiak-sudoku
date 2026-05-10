@@ -9,6 +9,7 @@ import {
 } from "@/lib/db/queries";
 import { getCurrentUser } from "@/lib/supabase/server";
 import {
+  arrowSudoku,
   autoPause,
   autoSwitchDigit,
   challengeLink,
@@ -212,6 +213,10 @@ export default async function PuzzlePage({
   // the Symbol Mode picker and cells/number-pad render the active set.
   const colorCodeModeEnabled = await colorCodeMode();
 
+  // RAZ-120 / arrow-sudoku flag. When on and the puzzle variant is
+  // "arrow", the grid renders the ArrowOverlay showing sum constraints.
+  const arrowSudokuEnabled = await arrowSudoku();
+
   return (
     <PlayClient
       puzzle={{
@@ -220,6 +225,7 @@ export default async function PuzzlePage({
         solution: puzzle.solution.trim(),
         difficultyBucket: puzzle.difficultyBucket,
         variant: puzzle.variant,
+        variantData: puzzle.variantData as Record<string, unknown> | null,
       }}
       savedGame={
         saved
@@ -261,6 +267,7 @@ export default async function PuzzlePage({
       ironModeEnabled={ironModeEnabled}
       replayEnabled={replayEnabled}
       colorCodeModeEnabled={colorCodeModeEnabled}
+      arrowSudokuEnabled={arrowSudokuEnabled}
     />
   );
 }

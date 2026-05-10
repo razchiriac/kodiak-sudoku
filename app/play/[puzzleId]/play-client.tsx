@@ -45,6 +45,9 @@ type PuzzleProp = {
   // RAZ-18: Puzzle variant. Defaults to "standard" if absent (for
   // backwards compatibility with existing callers).
   variant?: string;
+  // RAZ-120: Variant-specific metadata. For arrow puzzles, contains
+  // { arrows: Array<{ circle: number; cells: number[] }> }.
+  variantData?: Record<string, unknown> | null;
 };
 
 type SavedProp = {
@@ -96,6 +99,10 @@ export function PlayClient({
   // the store so the settings dialog gates the Symbol Mode picker and
   // Cell/NumberPad render the active symbol set.
   colorCodeModeEnabled = false,
+  // RAZ-120: server-resolved value of `arrow-sudoku`. Mirrored into
+  // the store so SudokuGrid renders the ArrowOverlay for arrow-variant
+  // puzzles. Off = overlay is hidden.
+  arrowSudokuEnabled = false,
   // RAZ-106: true when this session was entered via /play/offline (puzzle
   // was claimed from the IndexedDB offline bank). When true, autosave is
   // skipped (no server DB row to upsert) and completion is enqueued into
@@ -236,6 +243,9 @@ export function PlayClient({
   ironModeEnabled?: boolean;
   // RAZ-116: server-resolved value of `color-code-mode`. See prop docs.
   colorCodeModeEnabled?: boolean;
+  // RAZ-120: server-resolved value of `arrow-sudoku`. Mirrored into
+  // the store so SudokuGrid renders ArrowOverlay for arrow variants.
+  arrowSudokuEnabled?: boolean;
   // RAZ-106: true for puzzles served from the IndexedDB offline bank via
   // /play/offline. Autosave and live submission are skipped; completion is
   // enqueued locally and synced on reconnect.
@@ -321,6 +331,11 @@ export function PlayClient({
     }
 
     // Priority 3: fresh puzzle.
+    // RAZ-120: parse arrow definitions from variantData for arrow puzzles.
+    const arrowDefs =
+      puzzle.variant === "arrow" && puzzle.variantData
+        ? (puzzle.variantData as { arrows?: Array<{ circle: number; cells: number[] }> }).arrows ?? []
+        : [];
     startGame({
       meta: {
         puzzleId: puzzle.id,
@@ -330,6 +345,7 @@ export function PlayClient({
         variant: (puzzle.variant as import("@/lib/sudoku/board").Variant) ?? "standard",
       },
       puzzle: puzzle.puzzle,
+      arrows: arrowDefs,
     });
   }, [puzzle, savedGame, isSignedIn, mode, startGame, resumeFromSnapshot]);
 
@@ -451,6 +467,12 @@ export function PlayClient({
   useEffect(() => {
     setFeatureFlag("colorCodeMode", colorCodeModeEnabled);
   }, [colorCodeModeEnabled, setFeatureFlag]);
+
+  // RAZ-120: mirror the `arrow-sudoku` flag so SudokuGrid renders
+  // the ArrowOverlay for arrow-variant puzzles.
+  useEffect(() => {
+    setFeatureFlag("arrowSudoku", arrowSudokuEnabled);
+  }, [arrowSudokuEnabled, setFeatureFlag]);
 
   // Autosave: every time the relevant slice of state changes, debounce a
   // server action call. Only signed-in users autosave to the server;
@@ -899,7 +921,7 @@ export function PlayClient({
     const coachMode: CoachSnapshot["mode"] =
       st.meta?.mode === "daily" ? "daily" : "random";
     const variant: CoachSnapshot["variant"] =
-      st.meta?.variant === "diagonal" ? "diagonal" : "standard";
+      (st.meta?.variant as CoachSnapshot["variant"]) ?? "standard";
     return {
       puzzleId: puzzle.id,
       board: boardStr,

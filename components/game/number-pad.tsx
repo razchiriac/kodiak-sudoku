@@ -6,6 +6,10 @@ import { cn } from "@/lib/utils";
 // RAZ-72: long-press confirm now goes through the central haptic
 // dispatcher so its strength scales with the active intensity profile.
 import { playHaptic, type HapticProfileId } from "@/lib/haptics/patterns";
+// RAZ-110: display digits as 0–8 in zero-based mode.
+import { displayDigit } from "@/lib/sudoku/display";
+// RAZ-116: symbol set for color-code mode rendering.
+import { getSymbol, type SymbolSetId } from "@/lib/sudoku/symbols";
 
 // Number pad. Renders as a 3x3 grid below the board (matches the
 // visual rhythm of a phone keypad and gives chunky tap targets on
@@ -77,6 +81,14 @@ export function NumberPad() {
   const hapticProfile = useGameStore(
     (s) => s.settings.hapticProfile ?? "standard",
   );
+  // RAZ-110: zero-based display mode. The internal digit (1–9) is
+  // unchanged; only the label shown on each button changes (0–8).
+  const zeroBasedMode = useGameStore((s) => s.settings.zeroBasedMode);
+  // RAZ-116: symbol set for color-code mode. When the flag is off,
+  // force "digits" regardless of the stored setting.
+  const colorCodeFlag = useGameStore((s) => s.featureFlags.colorCodeMode);
+  const symbolSetRaw = useGameStore((s) => s.settings.symbolSet);
+  const symbolSet: SymbolSetId = colorCodeFlag ? (symbolSetRaw ?? "digits") : "digits";
 
   // Live digit counts. Recomputed on every render but cheap (single
   // 81 pass) so we avoid the complexity of a memoized selector.
@@ -108,10 +120,17 @@ export function NumberPad() {
         // the active-digit ring only renders in value mode to avoid
         // the two signals clashing.
         const isActive = activeDigit === digit && mode === "value";
+        // RAZ-110 / RAZ-116: the label the player sees on the button.
+        // Internal digit stays 1-indexed so onTap/onLongPress are unchanged.
+        const displayLabel = displayDigit(digit, zeroBasedMode);
+        const sym = getSymbol(digit, symbolSet);
         return (
           <PadButton
             key={digit}
             digit={digit}
+            displayLabel={displayLabel}
+            symbolSet={symbolSet}
+            sym={sym}
             remaining={remaining}
             // In notes mode the "exhausted" rule doesn't apply: you
             // can still pencil a digit that's fully placed on the
@@ -139,6 +158,11 @@ export function NumberPad() {
 // (useRef) is isolated to exactly one button at a time.
 type PadButtonProps = {
   digit: number;
+  // RAZ-110: the display label (may differ from digit in zero-based mode).
+  displayLabel: string;
+  // RAZ-116: symbol set + resolved symbol for this digit.
+  symbolSet: SymbolSetId;
+  sym: { glyph: string; color: string | null; ariaLabel: string } | null;
   remaining: number;
   disabled: boolean;
   mode: "value" | "notes";
@@ -160,6 +184,9 @@ type PadButtonProps = {
 // inline version; only the event handlers differ.
 function PadButton({
   digit,
+  displayLabel,
+  symbolSet,
+  sym,
   remaining,
   disabled,
   mode,
@@ -266,7 +293,9 @@ function PadButton({
         // hold and ruins the gesture.
         longPressEnabled && "touch-none select-none",
       )}
-      aria-label={`${mode === "notes" ? "Toggle note" : "Place"} ${digit}${
+      // RAZ-110: aria-label uses displayLabel so screen readers
+      // announce the same glyph the sighted player sees on the button.
+      aria-label={`${mode === "notes" ? "Toggle note" : "Place"} ${symbolSet !== "digits" && sym ? sym.ariaLabel : displayLabel}${
         disabled ? " (none remaining)" : ""
       }${isNoted ? " (currently noted)" : ""}${isActive ? " (active)" : ""}${
         // Small affordance for screen-reader users: advertise the
@@ -279,7 +308,11 @@ function PadButton({
       }`}
       aria-pressed={mode === "notes" ? isNoted : isActive ? true : undefined}
     >
-      <span>{digit}</span>
+      {/* RAZ-110 / RAZ-116: render the symbol glyph when in symbol
+          mode, or displayLabel (0–8 / 1–9) in digit modes. */}
+      <span style={sym?.color && symbolSet !== "digits" ? { color: sym.color } : undefined}>
+        {symbolSet !== "digits" && sym ? sym.glyph : displayLabel}
+      </span>
       {/* Remaining-count subscript. Fits in h-16 (64px) buttons
           alongside the digit thanks to the narrow line-height. */}
       <span className="text-[10px] font-normal leading-none text-muted-foreground">

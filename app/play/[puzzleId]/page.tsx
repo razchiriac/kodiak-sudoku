@@ -9,11 +9,13 @@ import {
 } from "@/lib/db/queries";
 import { getCurrentUser } from "@/lib/supabase/server";
 import {
+  arrowSudoku,
   autoPause,
   autoSwitchDigit,
   challengeLink,
   compactControls,
   haptics,
+  ironMode,
   jumpOnPlace,
   longPressNote,
   modePresets,
@@ -29,6 +31,8 @@ import {
   quickPlay,
   shareResult,
   showMistakes,
+  solveReplay,
+  colorCodeMode,
 } from "@/lib/flags";
 import { buildShareOgMetadata } from "@/lib/share/og-metadata";
 import { PlayClient } from "./play-client";
@@ -196,6 +200,23 @@ export default async function PuzzlePage({
   // banner hook can short-circuit on flag-off.
   const adaptiveCoachEnabled = await adaptiveCoach();
 
+  // RAZ-112 / iron-mode flag. Same forwarding pattern — the settings
+  // dialog reads it to gate the Iron Mode toggle, and inputDigit reads
+  // it to enforce the one-wrong-move rule.
+  const ironModeEnabled = await ironMode();
+
+  // RAZ-113 / solve-replay flag. When on AND input events were
+  // recorded, the completion modal shows a "Watch Replay" button.
+  const replayEnabled = await solveReplay();
+
+  // RAZ-116 / color-code-mode flag. When on, the settings dialog shows
+  // the Symbol Mode picker and cells/number-pad render the active set.
+  const colorCodeModeEnabled = await colorCodeMode();
+
+  // RAZ-120 / arrow-sudoku flag. When on and the puzzle variant is
+  // "arrow", the grid renders the ArrowOverlay showing sum constraints.
+  const arrowSudokuEnabled = await arrowSudoku();
+
   return (
     <PlayClient
       puzzle={{
@@ -204,6 +225,7 @@ export default async function PuzzlePage({
         solution: puzzle.solution.trim(),
         difficultyBucket: puzzle.difficultyBucket,
         variant: puzzle.variant,
+        variantData: puzzle.variantData as Record<string, unknown> | null,
       }}
       savedGame={
         saved
@@ -242,6 +264,10 @@ export default async function PuzzlePage({
       aiCoachEnabled={aiCoachEnabled}
       stuckRescueEnabled={stuckRescueEnabled}
       adaptiveCoachEnabled={adaptiveCoachEnabled}
+      ironModeEnabled={ironModeEnabled}
+      replayEnabled={replayEnabled}
+      colorCodeModeEnabled={colorCodeModeEnabled}
+      arrowSudokuEnabled={arrowSudokuEnabled}
     />
   );
 }

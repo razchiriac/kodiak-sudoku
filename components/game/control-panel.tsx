@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import { Eraser, Lightbulb, Pencil, Redo2, Undo2, WandSparkles } from "lucide-react";
 import { toast } from "sonner";
 import { notesMatchComputedCandidates } from "@/lib/sudoku/board";
@@ -32,6 +32,7 @@ export function ControlPanel({ side }: { side: "left" | "right" }) {
   const mode = useGameStore((s) => s.mode);
   const toggleMode = useGameStore((s) => s.toggleMode);
   const autoFillNotes = useGameStore((s) => s.autoFillNotes);
+  const fillAllCandidates = useGameStore((s) => s.fillAllCandidates);
   // RAZ-42: bulk auto-notes can be disabled in Settings (persisted).
   const autoNotesEnabled = useGameStore(
     (s) => s.settings.autoNotesEnabled !== false,
@@ -42,6 +43,13 @@ export function ControlPanel({ side }: { side: "left" | "right" }) {
     notesMatchComputedCandidates(s.board, s.notes, s.meta?.variant),
   );
   const isComplete = useGameStore((s) => s.isComplete);
+  // RAZ-112: Iron Mode blocks hints AND undo/redo/erase — we read the
+  // active state once so all affected buttons can reference it. Also
+  // checks ironFailed to keep buttons disabled after the run ends.
+  const ironActive = useGameStore(
+    (s) => s.featureFlags.ironMode && s.settings.ironMode === true,
+  );
+  const ironFailed = useGameStore((s) => s.ironFailed);
   // RAZ-14 — subscribe to the tiered hint session so we can (a) show
   // a "1/3" / "2/3" badge on the Hint button, (b) fire a sonner toast
   // whenever the session transitions to a new tier. Both the left and
@@ -65,6 +73,36 @@ export function ControlPanel({ side }: { side: "left" | "right" }) {
   // Only one of the two <ControlPanel> mounts (left/right) should
   // own this effect or we'd double-toast. We pick `side === "right"`
   // because that's where the Hint button lives — the side that cares.
+  // RAZ-111: long-press state for the Notes button. 400ms hold triggers
+  // fillAllCandidates (Speed Notes board-fill) without toggling notes mode.
+  const notesLongPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const notesLongPressFired = useRef(false);
+
+  const handleNotesClearTimer = useCallback(() => {
+    if (notesLongPressTimer.current != null) {
+      clearTimeout(notesLongPressTimer.current);
+      notesLongPressTimer.current = null;
+    }
+  }, []);
+
+  const handleNotesPointerDown = useCallback(() => {
+    notesLongPressFired.current = false;
+    handleNotesClearTimer();
+    notesLongPressTimer.current = setTimeout(() => {
+      notesLongPressFired.current = true;
+      fillAllCandidates();
+    }, 400);
+  }, [handleNotesClearTimer, fillAllCandidates]);
+
+  const handleNotesClick = useCallback(() => {
+    handleNotesClearTimer();
+    if (notesLongPressFired.current) {
+      notesLongPressFired.current = false;
+      return;
+    }
+    toggleMode();
+  }, [handleNotesClearTimer, toggleMode]);
+
   const lastSeen = useRef<{ tier: 1 | 2; index: number } | null>(null);
   useEffect(() => {
     if (side !== "right") return;
@@ -107,32 +145,38 @@ export function ControlPanel({ side }: { side: "left" | "right" }) {
               label="Undo"
               shortcut="U"
               onClick={undo}
-              disabled={isComplete}
+              disabled={isComplete || !!ironFailed}
               icon={<Undo2 />}
             />
             <ControlButton
               label="Redo"
               shortcut="R"
               onClick={redo}
-              disabled={isComplete}
+              disabled={isComplete || !!ironFailed}
               icon={<Redo2 />}
             />
             <ControlButton
               label="Erase"
               shortcut="Backspace"
               onClick={erase}
-              disabled={isComplete}
+              disabled={isComplete || !!ironFailed}
               icon={<Eraser />}
             />
           </>
         ) : (
           <>
             {/* "Notes" drops the "(on)" suffix because the active
-                ring + filled background already telegraph state. */}
+                ring + filled background already telegraph state.
+                RAZ-111: long-press (400ms) triggers Speed Notes board-fill
+                instead of toggling notes mode. */}
             <ControlButton
               label="Notes"
               shortcut="N"
-              onClick={toggleMode}
+              onClick={handleNotesClick}
+              onPointerDown={handleNotesPointerDown}
+              onPointerUp={handleNotesClearTimer}
+              onPointerLeave={handleNotesClearTimer}
+              onPointerCancel={handleNotesClearTimer}
               disabled={isComplete}
               active={mode === "notes"}
               icon={<Pencil />}
@@ -148,17 +192,19 @@ export function ControlPanel({ side }: { side: "left" | "right" }) {
                 shows the plain label. */}
             <ControlButton
               label={
-                hintSession
-                  ? hintSession.tier === 1
-                    ? "Hint 2/3"
-                    : "Hint 3/3"
-                  : "Hint"
+                ironActive
+                  ? "Hint"
+                  : hintSession
+                    ? hintSession.tier === 1
+                      ? "Hint 2/3"
+                      : "Hint 3/3"
+                    : "Hint"
               }
               shortcut="H"
               onClick={() => void hint()}
-              disabled={isComplete}
+              disabled={isComplete || ironActive || !!ironFailed}
               icon={<Lightbulb />}
-              active={!!hintSession}
+              active={!ironActive && !!hintSession}
             />
             {/* RAZ-42: optional — hidden when the user turns off "Auto-notes"
                 in Settings (persisted). Replaces every empty cell's pencil
@@ -185,6 +231,10 @@ function ControlButton({
   shortcut,
   icon,
   onClick,
+  onPointerDown,
+  onPointerUp,
+  onPointerLeave,
+  onPointerCancel,
   disabled,
   active,
 }: {
@@ -192,6 +242,10 @@ function ControlButton({
   shortcut: string;
   icon: React.ReactNode;
   onClick: () => void;
+  onPointerDown?: () => void;
+  onPointerUp?: () => void;
+  onPointerLeave?: () => void;
+  onPointerCancel?: () => void;
   disabled?: boolean;
   active?: boolean;
 }) {
@@ -201,6 +255,10 @@ function ControlButton({
         <Button
           variant={active ? "secondary" : "outline"}
           onClick={onClick}
+          onPointerDown={onPointerDown}
+          onPointerUp={onPointerUp}
+          onPointerLeave={onPointerLeave}
+          onPointerCancel={onPointerCancel}
           disabled={disabled}
           // flex-1 lets the three buttons in the stack share the
           // available height equally. Because the outer 5-col grid

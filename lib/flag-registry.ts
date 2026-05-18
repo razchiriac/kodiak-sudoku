@@ -430,4 +430,78 @@ export const FLAG_REGISTRY: readonly FlagSpec[] = [
       "Render deterministic coaching-tip banner under the board (constraint explainer after conflicts, technique follow-up after hints, notes-encouragement, mistake-streak nudge). Pure local logic, no model calls.",
     linearId: "RAZ-49",
   },
+  {
+    // RAZ-112: Iron Mode ("Flawless Mode"). When on, the settings dialog
+    // exposes an "Iron Mode ⚔️" toggle and the game store enforces the
+    // one-wrong-move-ends-the-run rule. Hints and AI Coach are disabled
+    // while Iron Mode is active. Default ON so CI previews exercise the
+    // path; the per-user setting defaults to OFF (opt-in challenge).
+    key: "iron-mode",
+    envKey: "FLAG_IRON_MODE",
+    defaultValue: true,
+    description:
+      "Expose Iron Mode toggle: one wrong placement ends the run immediately. Hints and AI Coach are disabled. Successful completions earn an ⚔️ badge.",
+    linearId: "RAZ-112",
+  },
+  {
+    // RAZ-113: Solve Replay. When on, the completion modal shows a
+    // "Watch Replay" button for games that have an input event log.
+    // The button opens a modal replay viewer with play/pause, speed
+    // selector, and scrubber. Only meaningful for games where the
+    // user had "Record input events" enabled (RAZ-28). Default ON
+    // so CI previews exercise the path.
+    key: "solve-replay",
+    envKey: "FLAG_SOLVE_REPLAY",
+    defaultValue: true,
+    description:
+      "Show 'Watch Replay' in the completion modal for games with recorded input events. Replay viewer with play/pause, speed, and scrubber.",
+    linearId: "RAZ-113",
+  },
+  {
+    // RAZ-116: Color Code Mode. When on, the settings dialog renders a
+    // Symbol Mode picker (Digits / Colors / Shapes / Colors + Shapes)
+    // and the Cell + NumberPad components render the active symbol set
+    // instead of plain digits. Default ON so CI previews exercise the
+    // path. When off, the picker is hidden and digits render normally
+    // regardless of the persisted symbolSet setting.
+    key: "color-code-mode",
+    envKey: "FLAG_COLOR_CODE_MODE",
+    defaultValue: true,
+    description:
+      "Show Symbol Mode picker in settings: replace digits 1–9 with colors, shapes, or color+shape combos. Fully accessible for colorblind users.",
+    linearId: "RAZ-116",
+  },
+  {
+    // RAZ-106: Offline sudoku gameplay. When on, the app pre-fetches a
+    // bank of random puzzles per difficulty bucket into IndexedDB so the
+    // player can start a new puzzle without a network connection. Completions
+    // recorded while offline are queued locally and submitted automatically
+    // when the device reconnects (Background Sync API; fallback: drain on
+    // next `navigator.online` event). The /play/offline route serves puzzles
+    // directly from IndexedDB and renders PlayClient with isOffline=true so
+    // autosave and live completion submission are skipped.
+    //
+    // Default OFF for initial rollout — the service worker cache version
+    // bump (v1 → v2) is a higher-risk change that should be validated in
+    // staging before going live. Flip in Edge Config to enable per-env.
+    key: "offline-play",
+    envKey: "FLAG_OFFLINE_PLAY",
+    defaultValue: false,
+    description:
+      "Pre-fetch puzzle bank into IndexedDB and enable /play/offline route for network-free gameplay. Completions are queued and synced on reconnect.",
+    linearId: "RAZ-106",
+  },
+  {
+    // RAZ-120: Arrow Sudoku. When on, the play page renders Arrow Sudoku
+    // overlays for puzzles with variant "arrow". Circles mark sum cells,
+    // lines with arrowheads mark body cells whose digits must sum to the
+    // circle. Default ON so CI previews exercise the path; the variant is
+    // only active for puzzles explicitly tagged as "arrow" in the DB.
+    key: "arrow-sudoku",
+    envKey: "FLAG_ARROW_SUDOKU",
+    defaultValue: true,
+    description:
+      "Render Arrow Sudoku overlay (circles + arrow lines) for puzzles with the 'arrow' variant. Digits along each arrow must sum to the circle cell.",
+    linearId: "RAZ-120",
+  },
 ];

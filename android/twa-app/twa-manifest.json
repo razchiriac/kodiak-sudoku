@@ -1,0 +1,52 @@
+{
+  "packageId": "com.razchiriac.sudoku",
+  "host": "sudoku.kodiak.quest",
+  "name": "Sudoku",
+  "launcherName": "Sudoku",
+  "display": "standalone",
+  "themeColor": "#0A0A0A",
+  "themeColorDark": "#000000",
+  "navigationColor": "#000000",
+  "navigationColorDark": "#000000",
+  "navigationDividerColor": "#000000",
+  "navigationDividerColorDark": "#000000",
+  "backgroundColor": "#FFFFFF",
+  "enableNotifications": true,
+  "startUrl": "/",
+  "iconUrl": "https://sudoku.kodiak.quest/icons/512.png",
+  "maskableIconUrl": "https://sudoku.kodiak.quest/icons/maskable-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "/Users/raz/.android-keys/sudoku-release.jks",
+    "alias": "sudoku"
+  },
+  "appVersionName": "1",
+  "appVersionCode": 1,
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://sudoku.kodiak.quest/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://sudoku.kodiak.quest/",
+  "minSdkVersion": 21,
+  "orientation": "portrait",
+  "fingerprints": [
+    {
+      "name": "release-keystore",
+      "value": "1B:55:BF:EB:A5:90:AA:CE:D3:4B:B6:65:17:5C:DA:DE:14:E0:3C:6E:0E:52:C8:AD:BE:8C:4C:18:9D:3A:8C:50"
+    }
+  ],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "protocolHandlers": [],
+  "fileHandlers": [],
+  "launchHandlerClientMode": "",
+  "displayOverride": [],
+  "appVersion": "1"
+}

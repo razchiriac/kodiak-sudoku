@@ -1,5 +1,8 @@
 /* eslint-disable no-console */
 
+import { existsSync, readFileSync } from "fs";
+import { resolve } from "path";
+
 type AssetLinksEntry = {
   relation?: unknown;
   target?: {
@@ -32,12 +35,20 @@ function fail(message: string): never {
 }
 
 function validateExpectedConfig(packageName: string, fingerprints: string[]): void {
-  if (!packageName) fail("ANDROID_APP_PACKAGE_NAME is required.");
+  if (!packageName) {
+    fail(
+      "ANDROID_APP_PACKAGE_NAME is required. Add ANDROID_APP_PACKAGE_NAME and ANDROID_APP_SHA256_CERT_FINGERPRINT " +
+        "to .env or .env.local (see .env.example). Use the Play App Signing certificate fingerprint from Play Console.",
+    );
+  }
   if (!PACKAGE_NAME_RE.test(packageName)) {
     fail(`Invalid ANDROID_APP_PACKAGE_NAME: "${packageName}"`);
   }
   if (fingerprints.length === 0) {
-    fail("ANDROID_APP_SHA256_CERT_FINGERPRINT is required.");
+    fail(
+      "ANDROID_APP_SHA256_CERT_FINGERPRINT is required (comma-separated SHA-256 hex pairs). " +
+        "See .env.example; production values often live in .env.local after vercel env pull.",
+    );
   }
   for (const fingerprint of fingerprints) {
     if (!SHA256_FINGERPRINT_RE.test(fingerprint)) {
@@ -66,7 +77,34 @@ function findAndroidTargetEntry(
   return null;
 }
 
+/**
+ * npm passes `--env-file=.env` only. Many developers keep Android vars in
+ * `.env.local` (gitignored) alongside Vercel pulls — merge that file so checks
+ * work without duplicating secrets into `.env`.
+ */
+function mergeEnvLocalOverrides(): void {
+  const path = resolve(process.cwd(), ".env.local");
+  if (!existsSync(path)) return;
+  const raw = readFileSync(path, "utf8");
+  for (const line of raw.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eq = trimmed.indexOf("=");
+    if (eq <= 0) continue;
+    const key = trimmed.slice(0, eq).trim();
+    let val = trimmed.slice(eq + 1).trim();
+    if (
+      (val.startsWith('"') && val.endsWith('"')) ||
+      (val.startsWith("'") && val.endsWith("'"))
+    ) {
+      val = val.slice(1, -1);
+    }
+    process.env[key] = val;
+  }
+}
+
 async function main() {
+  mergeEnvLocalOverrides();
   const rawBaseUrl =
     readArg("url") ??
     process.env.ANDROID_ASSETLINKS_BASE_URL ??

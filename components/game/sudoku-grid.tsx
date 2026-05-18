@@ -3,6 +3,7 @@
 import { useCallback, useMemo } from "react";
 import { useGameStore } from "@/lib/zustand/game-store";
 import { computeMistakes, peers } from "@/lib/sudoku/board";
+import { ArrowOverlay } from "./arrow-overlay";
 import { Cell } from "./cell";
 
 // The 9x9 grid. Subscribes to the slice of state needed for layout-level
@@ -17,6 +18,15 @@ export function SudokuGrid() {
   const conflicts = useGameStore((s) => s.conflicts);
   const isPaused = useGameStore((s) => s.isPaused);
   const highlightSameDigit = useGameStore((s) => s.settings.highlightSameDigit);
+  // RAZ-110: zero-based mode — pass to Cell so digit display is consistent
+  // across the entire board without each cell re-subscribing to the store.
+  const zeroBasedMode = useGameStore((s) => s.settings.zeroBasedMode);
+  // RAZ-116: symbol set — pass to Cell so colors/shapes render consistently.
+  // When the feature flag is off we force "digits" regardless of the stored
+  // setting so the kill-switch works without clearing user preferences.
+  const colorCodeFlag = useGameStore((s) => s.featureFlags.colorCodeMode);
+  const symbolSetRaw = useGameStore((s) => s.settings.symbolSet);
+  const symbolSet = colorCodeFlag ? (symbolSetRaw ?? "digits") : "digits";
   const selectCell = useGameStore((s) => s.selectCell);
   // RAZ-15: derive the set of "mistake" cells — any non-fixed cell
   // whose current value disagrees with the puzzle solution. Only
@@ -34,6 +44,9 @@ export function SudokuGrid() {
 
   // RAZ-18: read the variant so peer highlighting respects diagonals.
   const variant = useGameStore((s) => s.meta?.variant);
+  // RAZ-120: arrow constraint definitions for arrow-variant puzzles.
+  const arrows = useGameStore((s) => s.arrows);
+  const arrowSudokuFlag = useGameStore((s) => s.featureFlags.arrowSudoku);
   const handleSelect = useCallback((i: number) => selectCell(i), [selectCell]);
 
   // Pre-compute the peer set for the current selection. Cheap (20 entries)
@@ -115,6 +128,8 @@ export function SudokuGrid() {
           highlightNoteDigit={
             highlightSameDigit && selectedDigit > 0 ? selectedDigit : 0
           }
+          zeroBasedMode={zeroBasedMode}
+          symbolSet={symbolSet}
           onSelect={handleSelect}
         />
       ))}
@@ -122,6 +137,13 @@ export function SudokuGrid() {
           SVG overlay with two lines spanning corner to corner. The
           `pointer-events-none` ensures clicks pass through to cells. */}
       {variant === "diagonal" && <DiagonalOverlay />}
+      {/* RAZ-120: arrow constraint overlay for arrow-variant puzzles.
+          Renders circles and directional lines showing sum constraints.
+          Colors update live as the player fills cells: gray (incomplete),
+          green (satisfied), red (violated). */}
+      {variant === "arrow" && arrowSudokuFlag && arrows.length > 0 && (
+        <ArrowOverlay arrows={arrows} board={board} />
+      )}
       {isPaused && <PauseOverlay />}
     </div>
   );

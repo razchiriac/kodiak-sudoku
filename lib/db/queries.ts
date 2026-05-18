@@ -6,6 +6,7 @@ import {
   completedGames,
   dailyPuzzles,
   profiles,
+  puzzleAttempts,
   puzzles,
   savedGames,
   type Puzzle,
@@ -46,6 +47,36 @@ export async function getRandomPuzzleByBucket(
     .orderBy(sql`random()`)
     .limit(1);
   return fallback[0] ?? null;
+}
+
+// RAZ-106: Batch variant of getRandomPuzzleByBucket for the offline puzzle
+// bank. Returns up to `count` distinct random puzzles from a bucket so the
+// /api/puzzles/offline-bank endpoint can prefetch multiple puzzles in one
+// query per bucket. TABLESAMPLE with a larger sample size (count * 5, min 20)
+// gives enough rows to deduplicate; falls back to random() scan if the
+// sample is empty (very small buckets, unusual but possible in staging).
+export async function getRandomPuzzlesByBucket(
+  bucket: number,
+  count: number,
+  variant: string = "standard",
+): Promise<Puzzle[]> {
+  const sampleSize = Math.max(count * 5, 20);
+  const sample = await db.execute<Puzzle>(
+    sql`select * from ${puzzles}
+        tablesample system_rows(${sampleSize})
+        where ${puzzles.difficultyBucket} = ${bucket}
+          and ${puzzles.variant} = ${variant}
+        limit ${count}`,
+  );
+  const rows = execRows<Puzzle>(sample);
+  if (rows.length > 0) return rows;
+
+  return db
+    .select()
+    .from(puzzles)
+    .where(and(eq(puzzles.difficultyBucket, bucket), eq(puzzles.variant, variant)))
+    .orderBy(sql`random()`)
+    .limit(count);
 }
 
 export async function getPuzzleById(id: number): Promise<Puzzle | null> {
@@ -288,17 +319,36 @@ export async function listRecentSavedGames(userId: string, limit = 5) {
 
 // User's completion history. Used on the profile page; cap at 50 to keep
 // the page snappy.
+//
+// RAZ-105: use LEFT JOIN instead of INNER JOIN so that any completed_games
+// row whose puzzle_id has no matching puzzles row is still returned (with
+// puzzle: null) rather than silently dropped. Without this, a single orphaned
+// completion causes the entire list to render as "No completions yet." The
+// caller (profile page) filters out null-puzzle rows before rendering; we log
+// them here so the anomaly shows up in Vercel runtime logs.
 export async function listRecentCompletions(userId: string, limit = 20) {
-  return db
+  const rows = await db
     .select({
       completed: completedGames,
       puzzle: puzzles,
     })
     .from(completedGames)
-    .innerJoin(puzzles, eq(puzzles.id, completedGames.puzzleId))
+    .leftJoin(puzzles, eq(puzzles.id, completedGames.puzzleId))
     .where(eq(completedGames.userId, userId))
     .orderBy(desc(completedGames.completedAt))
     .limit(limit);
+
+  for (const r of rows) {
+    if (!r.puzzle) {
+      console.error("[RAZ-105] orphaned completion — no matching puzzle row", {
+        completionId: r.completed.id,
+        puzzleId: r.completed.puzzleId,
+        userId,
+      });
+    }
+  }
+
+  return rows;
 }
 
 // Single-difficulty best time for a user. Used by the personal-best
@@ -703,4 +753,25 @@ export async function getCompletionDates(userId: string): Promise<string[]> {
         order by d desc`,
   );
   return execRows<{ d: string }>(rows).map((r) => r.d);
+}
+
+// RAZ-113: Fetch all input_batch rows for a given puzzle + user,
+// ordered by seq. Returns the raw payload objects so the replay
+// engine can stitch them into a single sorted event stream.
+export async function getReplayBatches(
+  userId: string,
+  puzzleId: number,
+): Promise<{ seq: number; completed: boolean; events: { c: number; d: number; t: number; k: string }[] }[]> {
+  const rows = await db.execute<{
+    payload: { seq: number; completed: boolean; events: { c: number; d: number; t: number; k: string }[] };
+  }>(
+    sql`select ${puzzleAttempts.payload}
+        from ${puzzleAttempts}
+        where ${puzzleAttempts.userId} = ${userId}
+          and ${puzzleAttempts.puzzleId} = ${puzzleId}
+          and ${puzzleAttempts.event} = 'input_batch'
+        order by ${puzzleAttempts.createdAt} asc`,
+  );
+  type Row = { payload: { seq: number; completed: boolean; events: { c: number; d: number; t: number; k: string }[] } };
+  return execRows<Row>(rows).map((r) => r.payload);
 }

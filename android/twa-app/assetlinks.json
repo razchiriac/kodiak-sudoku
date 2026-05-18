@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "com.razchiriac.sudoku",
+        "sha256_cert_fingerprints": ["1B:55:BF:EB:A5:90:AA:CE:D3:4B:B6:65:17:5C:DA:DE:14:E0:3C:6E:0E:52:C8:AD:BE:8C:4C:18:9D:3A:8C:50"]
+      }
+    }]

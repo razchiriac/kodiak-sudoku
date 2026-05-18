@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Calendar, GraduationCap, Sparkles, Swords } from "lucide-react";
+import { ArrowUpRight, Calendar, GraduationCap, Sparkles, Swords } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DIFFICULTY_LABEL } from "@/lib/utils";
 import { getCurrentUser } from "@/lib/supabase/server";
 import { listRecentSavedGames } from "@/lib/db/queries";
-import { modePresets, techniqueJourney } from "@/lib/flags";
+import { arrowSudoku, modePresets, techniqueJourney } from "@/lib/flags";
 import { ModePresetPicker } from "@/components/game/mode-preset-picker";
 
 // Reads the caller's session and saved games; never static.
@@ -15,7 +15,17 @@ export const dynamic = "force-dynamic";
 // "Continue" card directly from saved_games without a client fetch.
 export default async function PlayHomePage() {
   const user = await getCurrentUser();
-  const saved = user ? await listRecentSavedGames(user.id, 3) : [];
+  // RAZ-131: wrap the saved-games query so a DB outage (e.g. connection
+  // pool exhaustion) degrades to an empty "Continue" section instead of
+  // crashing the entire /play page with a 500.
+  let saved: Awaited<ReturnType<typeof listRecentSavedGames>> = [];
+  if (user) {
+    try {
+      saved = await listRecentSavedGames(user.id, 3);
+    } catch (err) {
+      console.error("[play] listRecentSavedGames failed, rendering without Continue section", err);
+    }
+  }
   // RAZ-54: resolve the Mode Presets flag server-side so the client
   // picker hides itself instantly when the flag is off — no flicker
   // from a client effect that runs after first paint.
@@ -25,6 +35,9 @@ export default async function PlayHomePage() {
   // grid below collapses cleanly to two cards. Off-flag = the route
   // 404s anyway, so we never want to advertise a dead link.
   const techniqueJourneyEnabled = await techniqueJourney();
+  // RAZ-120: same SSR-resolved-flag pattern for Arrow Sudoku. When
+  // off, the link card is omitted so we don't advertise a dead route.
+  const arrowSudokuEnabled = await arrowSudoku();
 
   return (
     <div className="container max-w-3xl py-10">
@@ -90,6 +103,20 @@ export default async function PlayHomePage() {
             <div className="text-sm text-muted-foreground">Extra constraints, extra fun.</div>
           </div>
         </Link>
+        {/* RAZ-120: Arrow Sudoku entry. Hidden when the flag is off so
+            we never advertise a route that would redirect back here. */}
+        {arrowSudokuEnabled && (
+          <Link
+            href="/play/arrow"
+            className="flex items-center gap-3 rounded-lg border bg-card p-4 hover:bg-accent"
+          >
+            <ArrowUpRight className="h-5 w-5 text-primary" />
+            <div>
+              <div className="font-medium">Arrow Sudoku</div>
+              <div className="text-sm text-muted-foreground">Digits along arrows sum to the circle.</div>
+            </div>
+          </Link>
+        )}
         <Link
           href="/leaderboard"
           className="flex items-center gap-3 rounded-lg border bg-card p-4 hover:bg-accent"

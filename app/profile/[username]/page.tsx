@@ -38,17 +38,11 @@ export default async function ProfilePage({
   // fetch the last 20 solve times per difficulty so each card can
   // render a sparkline. Four parallel queries is fine — each hits the
   // (user_id, completed_at desc) index and returns at most 20 rows.
-  const [
-    stats,
-    recent,
-    trendEasy,
-    trendMedium,
-    trendHard,
-    trendExpert,
-    heatmapTimestamps,
-    earnedAchievements,
-    completionDates,
-  ] = await Promise.all([
+  // RAZ-105: Promise.allSettled instead of Promise.all so that a single
+  // failing query (e.g. a DB timeout on the 3000-row heatmap fetch) doesn't
+  // blank the entire profile. Each query degrades independently to its empty
+  // fallback; the failure is logged to Vercel runtime logs.
+  const profileResults = await Promise.allSettled([
     getUserStats(profile.id),
     listRecentCompletions(profile.id, 20),
     getRecentTimesByBucket(profile.id, 1, 20),
@@ -69,6 +63,35 @@ export default async function ProfilePage({
     // only ever advances on `mode='daily'` rows.
     getCompletionDates(profile.id),
   ]);
+
+  const profileFallbacks = [[], [], [], [], [], [], [], [], []] as const;
+  const [
+    stats,
+    recent,
+    trendEasy,
+    trendMedium,
+    trendHard,
+    trendExpert,
+    heatmapTimestamps,
+    earnedAchievements,
+    completionDates,
+  ] = profileResults.map((r, i) => {
+    if (r.status === "rejected") {
+      console.error("[profile] query", i, "failed", r.reason);
+      return profileFallbacks[i];
+    }
+    return r.value;
+  }) as [
+    Awaited<ReturnType<typeof getUserStats>>,
+    Awaited<ReturnType<typeof listRecentCompletions>>,
+    Awaited<ReturnType<typeof getRecentTimesByBucket>>,
+    Awaited<ReturnType<typeof getRecentTimesByBucket>>,
+    Awaited<ReturnType<typeof getRecentTimesByBucket>>,
+    Awaited<ReturnType<typeof getRecentTimesByBucket>>,
+    Awaited<ReturnType<typeof getSolveTimestamps>>,
+    Awaited<ReturnType<typeof listEarnedAchievements>>,
+    Awaited<ReturnType<typeof getCompletionDates>>,
+  ];
   const playingStreak = computePlayingStreak(completionDates, utcDateToday());
   // Index trends by bucket so the difficulty map below can look each
   // one up by number without a chain of conditionals.
@@ -170,30 +193,39 @@ export default async function ProfilePage({
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           Recent completions
         </h2>
-        {recent.length === 0 ? (
-          <p className="rounded-lg border bg-card p-6 text-center text-sm text-muted-foreground">
-            No completions yet.
-          </p>
-        ) : (
-          <ol className="divide-y rounded-lg border bg-card">
-            {recent.map(({ completed, puzzle }) => (
-              <li
-                key={completed.id}
-                className="flex items-center gap-3 p-3 text-sm"
-              >
-                <Trophy className="h-4 w-4 shrink-0 text-muted-foreground" />
-                <Link
-                  href={`/play/${puzzle.id}`}
-                  className="flex-1 truncate hover:underline"
+        {/* RAZ-105: filter out orphaned completions (puzzle: null from the
+            LEFT JOIN) so a missing puzzle row doesn't crash the Link render.
+            Orphaned rows are already logged server-side in listRecentCompletions. */}
+        {(() => {
+          const visible = recent.filter((r) => r.puzzle !== null) as {
+            completed: (typeof recent)[0]["completed"];
+            puzzle: NonNullable<(typeof recent)[0]["puzzle"]>;
+          }[];
+          return visible.length === 0 ? (
+            <p className="rounded-lg border bg-card p-6 text-center text-sm text-muted-foreground">
+              No completions yet.
+            </p>
+          ) : (
+            <ol className="divide-y rounded-lg border bg-card">
+              {visible.map(({ completed, puzzle }) => (
+                <li
+                  key={completed.id}
+                  className="flex items-center gap-3 p-3 text-sm"
                 >
-                  {DIFFICULTY_LABEL[puzzle.difficultyBucket]}
-                  {completed.mode === "daily" && " · Daily"}
-                </Link>
-                <span className="font-mono tabular-nums">{formatTime(completed.timeMs)}</span>
-              </li>
-            ))}
-          </ol>
-        )}
+                  <Trophy className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <Link
+                    href={`/play/${puzzle.id}`}
+                    className="flex-1 truncate hover:underline"
+                  >
+                    {DIFFICULTY_LABEL[puzzle.difficultyBucket]}
+                    {completed.mode === "daily" && " · Daily"}
+                  </Link>
+                  <span className="font-mono tabular-nums">{formatTime(completed.timeMs)}</span>
+                </li>
+              ))}
+            </ol>
+          );
+        })()}
       </section>
     </div>
   );

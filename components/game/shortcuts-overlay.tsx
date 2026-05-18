@@ -16,6 +16,8 @@ const SHORTCUTS: ReadonlyArray<{ keys: string[]; label: string }> = [
   { keys: ["1", "...", "9"], label: "Place digit (or note in notes mode)" },
   { keys: ["0", "Backspace"], label: "Erase" },
   { keys: ["N"], label: "Toggle notes mode" },
+  { keys: ["⇧N"], label: "Fill candidates (selected cell)" },
+  { keys: ["⌃⇧N"], label: "Fill candidates (all cells)" },
   { keys: ["⇧H"], label: "Hint" },
   { keys: ["U", "⌘Z"], label: "Undo" },
   { keys: ["R", "⇧⌘Z"], label: "Redo" },

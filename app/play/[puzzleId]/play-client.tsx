@@ -20,6 +20,7 @@ import { LiveRegion } from "@/components/game/live-region";
 import { CompletionModal } from "@/components/game/completion-modal";
 import { ShortcutsOverlay } from "@/components/game/shortcuts-overlay";
 import { SettingsDialog } from "@/components/game/settings-dialog";
+import { IronFailedModal } from "@/components/game/iron-failed-modal";
 import { PrintDialog } from "@/components/game/print-dialog";
 import { RescueChip } from "@/components/game/rescue-chip";
 import { CoachTipBanner } from "@/components/game/coach-tip-banner";
@@ -44,6 +45,9 @@ type PuzzleProp = {
   // RAZ-18: Puzzle variant. Defaults to "standard" if absent (for
   // backwards compatibility with existing callers).
   variant?: string;
+  // RAZ-120: Variant-specific metadata. For arrow puzzles, contains
+  // { arrows: Array<{ circle: number; cells: number[] }> }.
+  variantData?: Record<string, unknown> | null;
 };
 
 type SavedProp = {
@@ -86,6 +90,26 @@ export function PlayClient({
   aiCoachEnabled = false,
   stuckRescueEnabled = false,
   adaptiveCoachEnabled = false,
+  // RAZ-112: server-resolved value of `iron-mode`. Mirrored into the store
+  // so the settings dialog renders the toggle and inputDigit enforces the
+  // one-wrong-move rule. Off = toggle is hidden and ironMode has no
+  // gameplay effect.
+  ironModeEnabled = false,
+  // RAZ-116: server-resolved value of `color-code-mode`. Mirrored into
+  // the store so the settings dialog gates the Symbol Mode picker and
+  // Cell/NumberPad render the active symbol set.
+  colorCodeModeEnabled = false,
+  // RAZ-120: server-resolved value of `arrow-sudoku`. Mirrored into
+  // the store so SudokuGrid renders the ArrowOverlay for arrow-variant
+  // puzzles. Off = overlay is hidden.
+  arrowSudokuEnabled = false,
+  // RAZ-106: true when this session was entered via /play/offline (puzzle
+  // was claimed from the IndexedDB offline bank). When true, autosave is
+  // skipped (no server DB row to upsert) and completion is enqueued into
+  // the local IndexedDB completion-queue instead of being submitted
+  // directly. The queue is drained as soon as the device reconnects.
+  isOffline = false,
+  replayEnabled = false,
 }: {
   puzzle: PuzzleProp;
   savedGame: SavedProp;
@@ -213,6 +237,23 @@ export function PlayClient({
   // flag is flipped off via Edge Config — same kill-switch shape as
   // `stuckRescueEnabled`.
   adaptiveCoachEnabled?: boolean;
+  // RAZ-112: server-resolved value of `iron-mode`. Mirrored into the
+  // store so the settings dialog gates the toggle and inputDigit
+  // enforces the one-wrong-move rule.
+  ironModeEnabled?: boolean;
+  // RAZ-116: server-resolved value of `color-code-mode`. See prop docs.
+  colorCodeModeEnabled?: boolean;
+  // RAZ-120: server-resolved value of `arrow-sudoku`. Mirrored into
+  // the store so SudokuGrid renders ArrowOverlay for arrow variants.
+  arrowSudokuEnabled?: boolean;
+  // RAZ-106: true for puzzles served from the IndexedDB offline bank via
+  // /play/offline. Autosave and live submission are skipped; completion is
+  // enqueued locally and synced on reconnect.
+  isOffline?: boolean;
+  // RAZ-113: server-resolved value of `solve-replay`. Forwarded to the
+  // CompletionModal which shows/hides the "Watch Replay" button based
+  // on it. The button fetches event batches via a server action.
+  replayEnabled?: boolean;
 }) {
   const startGame = useGameStore((s) => s.startGame);
   const resumeFromSnapshot = useGameStore((s) => s.resumeFromSnapshot);
@@ -290,6 +331,11 @@ export function PlayClient({
     }
 
     // Priority 3: fresh puzzle.
+    // RAZ-120: parse arrow definitions from variantData for arrow puzzles.
+    const arrowDefs =
+      puzzle.variant === "arrow" && puzzle.variantData
+        ? (puzzle.variantData as { arrows?: Array<{ circle: number; cells: number[] }> }).arrows ?? []
+        : [];
     startGame({
       meta: {
         puzzleId: puzzle.id,
@@ -299,6 +345,7 @@ export function PlayClient({
         variant: (puzzle.variant as import("@/lib/sudoku/board").Variant) ?? "standard",
       },
       puzzle: puzzle.puzzle,
+      arrows: arrowDefs,
     });
   }, [puzzle, savedGame, isSignedIn, mode, startGame, resumeFromSnapshot]);
 
@@ -409,6 +456,24 @@ export function PlayClient({
     setFeatureFlag("adaptiveCoach", adaptiveCoachEnabled);
   }, [adaptiveCoachEnabled, setFeatureFlag]);
 
+  // RAZ-112: mirror the `iron-mode` flag so the settings dialog
+  // can gate the toggle and inputDigit can enforce the rule.
+  useEffect(() => {
+    setFeatureFlag("ironMode", ironModeEnabled);
+  }, [ironModeEnabled, setFeatureFlag]);
+
+  // RAZ-116: mirror the `color-code-mode` flag so the settings dialog
+  // gates the Symbol Mode picker and Cell/NumberPad render symbols.
+  useEffect(() => {
+    setFeatureFlag("colorCodeMode", colorCodeModeEnabled);
+  }, [colorCodeModeEnabled, setFeatureFlag]);
+
+  // RAZ-120: mirror the `arrow-sudoku` flag so SudokuGrid renders
+  // the ArrowOverlay for arrow-variant puzzles.
+  useEffect(() => {
+    setFeatureFlag("arrowSudoku", arrowSudokuEnabled);
+  }, [arrowSudokuEnabled, setFeatureFlag]);
+
   // Autosave: every time the relevant slice of state changes, debounce a
   // server action call. Only signed-in users autosave to the server;
   // anonymous players rely on the Zustand persist middleware.
@@ -423,6 +488,18 @@ export function PlayClient({
     // RAZ-35: user-pasted puzzles have no DB row, so there's nothing
     // the autosave endpoint could upsert into. Skip entirely.
     if (isCustom) return;
+    // RAZ-106: offline puzzles are claimed from IndexedDB and have no
+    // saved_games row on the server. Skip autosave; Zustand/localStorage
+    // already persists the state locally.
+    if (isOffline) return;
+    // RAZ-104: the autosave debounce is scheduled on every board/timer
+    // change, which means it can fire AFTER submitCompletionAction has
+    // already deleted the saved_games row. If it fires, saveGameAction
+    // re-inserts the row and the puzzle reappears in "Continue".
+    // Guard: once the store marks the puzzle complete, stop autosaving —
+    // there is nothing left to resume and the server-side completion
+    // cleanup has already run (or is in flight).
+    if (isComplete) return;
     if (debounce.current) window.clearTimeout(debounce.current);
     debounce.current = window.setTimeout(() => {
       const snap = snapshot();
@@ -443,7 +520,9 @@ export function PlayClient({
     // We deliberately only depend on values that should trigger save. The
     // store's `snapshot` is stable so it's safe to omit from deps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [board, elapsedMs, isPaused, meta, isSignedIn, mode, isCustom]);
+    // `isComplete` added so the guard above fires immediately when the
+    // puzzle is solved, cancelling any pending debounce before it fires.
+  }, [board, elapsedMs, isPaused, meta, isSignedIn, mode, isCustom, isOffline, isComplete]);
 
   // On completion, submit to the server once. We track submission status
   // for the completion modal so the user gets feedback if it failed.
@@ -675,6 +754,34 @@ export function PlayClient({
       submitted.current = true;
       return;
     }
+    // RAZ-106: for offline puzzles, enqueue the completion locally and
+    // attempt an immediate drain (succeeds instantly if the device has
+    // reconnected by now). If the drain fails, the Background Sync /
+    // `online` event handler in providers.tsx will drain on the next
+    // reconnect. We do NOT call runSubmit — there's no server
+    // saved_games row for this puzzle, and the queue handles the
+    // eventual consistency.
+    if (isOffline) {
+      submitted.current = true;
+      const snap = snapshot();
+      if (snap) {
+        void import("@/lib/offline/completion-queue").then(
+          ({ enqueueCompletion, drainCompletionQueue }) => {
+            void enqueueCompletion({
+              puzzleId: snap.meta.puzzleId,
+              board: snap.board,
+              elapsedMs: snap.elapsedMs,
+              mistakes: snap.mistakes,
+              hintsUsed: snap.hintsUsed,
+              mode: "random",
+              dailyDate: null,
+              attemptId: snap.attemptId ?? null,
+            }).then(() => drainCompletionQueue());
+          },
+        );
+      }
+      return;
+    }
     submitted.current = true;
     // RAZ-78: delegated to the extracted `runSubmit` callback above.
     // It is a strict superset of the RAZ-76 inlined IIFE — same
@@ -686,7 +793,7 @@ export function PlayClient({
     // because they don't belong in `runSubmit` — they're decisions
     // about WHETHER to submit, not HOW.
     void runSubmit();
-  }, [isComplete, meta, isSignedIn, isArchive, isCustom, runSubmit]);
+  }, [isComplete, meta, isSignedIn, isArchive, isCustom, isOffline, runSubmit, snapshot]);
 
   // RAZ-28 — Periodic flush of the in-memory input-event ring buffer
   // to the server. We fire under three triggers: every ~15 seconds
@@ -814,7 +921,7 @@ export function PlayClient({
     const coachMode: CoachSnapshot["mode"] =
       st.meta?.mode === "daily" ? "daily" : "random";
     const variant: CoachSnapshot["variant"] =
-      st.meta?.variant === "diagonal" ? "diagonal" : "standard";
+      (st.meta?.variant as CoachSnapshot["variant"]) ?? "standard";
     return {
       puzzleId: puzzle.id,
       board: boardStr,
@@ -843,7 +950,12 @@ export function PlayClient({
   // Coach is only meaningful for DB-backed puzzles. Custom (pasted)
   // puzzles have no row to look up the solution from, so even when
   // the flag is on the button stays hidden. Same pattern Print uses.
-  const showCoach = aiCoachEnabled && !isCustom;
+  // RAZ-112: also hide Coach in Iron Mode — it would leak information
+  // about which moves are safe, undermining the challenge.
+  const ironActive = useGameStore(
+    (s) => s.featureFlags.ironMode && s.settings.ironMode === true,
+  );
+  const showCoach = aiCoachEnabled && !isCustom && !ironActive;
 
   if (!meta) return null; // first render before startGame() runs
 
@@ -1016,9 +1128,13 @@ export function PlayClient({
         rankContext={rankContext}
         breakdownEnabled={breakdownEnabled}
         aiDebriefEnabled={aiDebriefEnabled}
+        replayEnabled={replayEnabled}
       />
       <ShortcutsOverlay open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      {/* RAZ-112: Iron Mode "Run Ended" modal. Only mounts when
+          ironFailed is non-null — renders nothing otherwise. */}
+      <IronFailedModal />
       {/* RAZ-9: only mount the print dialog when the flag is on AND
           this isn't a custom puzzle (no DB row to fetch). Mounting
           it conditionally rather than controlling visibility via the

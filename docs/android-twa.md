@@ -95,7 +95,21 @@ Rules:
 - Store backups in secure password manager / secret vault.
 - Keep CI signing secrets separate from local dev secrets.
 
-## 7) Rollback
+## 7) Address bar visible in the Android app (RAZ-132)
+
+Chrome hides the URL bar only after **Digital Asset Links** verification succeeds for the **exact origin** the TWA opens (`launchUrl`). If anything mismatches, Chrome falls back to Custom Tabs and shows the toolbar.
+
+Checklist:
+
+1. **`ANDROID_APP_*` on Vercel** — `/.well-known/assetlinks.json` must list your Play package and the **Google Play App Signing** SHA-256 fingerprint (not necessarily your upload key). Re-fetch fingerprints from Play Console → App signing if unsure.
+2. **TWA host alignment** — In `android/twa-app/app/build.gradle`, `hostName` must equal the production hostname (e.g. `kodiaksudoku.com`). The same origin appears in `app/src/main/res/values/strings.xml` inside `assetStatements` (`site`).
+3. **Rebuild and ship** — Bump `versionCode`, upload a new `.aab`, then verify on device after install (Chrome may cache verification state).
+
+```bash
+npm run android:assetlinks:check -- --url=https://kodiaksudoku.com
+```
+
+## 8) Rollback
 
 If Android release regresses:
 

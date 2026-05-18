@@ -1,7 +1,14 @@
 "use client";
 
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { PALETTES, type Palette, useGameStore } from "@/lib/zustand/game-store";
+import {
+  SYMBOL_SET_IDS,
+  SYMBOL_SET_LABEL,
+  getSymbol,
+  type SymbolSetId,
+} from "@/lib/sudoku/symbols";
 import { ModePresetPicker } from "@/components/game/mode-preset-picker";
 import { Button } from "@/components/ui/button";
 // RAZ-72: profile metadata + per-event dispatcher for the new haptic
@@ -164,6 +171,33 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const autoNotesOn = useGameStore(
     (s) => s.settings.autoNotesEnabled !== false,
   );
+  // RAZ-111: Speed Notes — default on.
+  const speedNotesOn = useGameStore((s) => s.settings.speedNotes !== false);
+  // RAZ-110: zero-based mode — no feature flag needed, purely a display
+  // preference. Default off so existing players see no change.
+  const zeroBasedMode = useGameStore(
+    (s) => s.settings.zeroBasedMode === true,
+  );
+  // RAZ-116: Color Code Mode — symbol set picker. Flag-gated.
+  const colorCodeFlag = useGameStore((s) => s.featureFlags.colorCodeMode);
+  const currentSymbolSet = useGameStore(
+    (s) => (s.settings.symbolSet ?? "digits") as SymbolSetId,
+  );
+  // RAZ-112: Iron Mode toggle. Flag-gated like every other optional
+  // surface — when the `iron-mode` flag is off, the row is hidden and
+  // the setting has no gameplay effect. The toggle cannot be changed
+  // mid-game because a player toggling it on after already placing
+  // wrong digits would get an instant failure. We disable the checkbox
+  // when a game is in progress (board has non-fixed cells filled).
+  const ironModeFlag = useGameStore((s) => s.featureFlags.ironMode);
+  const ironModeOn = useGameStore((s) => s.settings.ironMode === true);
+  const hasStartedGame = useGameStore((s) => {
+    if (!s.meta) return false;
+    for (let i = 0; i < 81; i++) {
+      if (!s.fixed[i] && s.board[i] !== 0) return true;
+    }
+    return false;
+  });
   // RAZ-54: mode-presets mirror. Read directly from the store (the
   // PlayClient mirrors the server-resolved value on mount). The
   // inline picker component renders nothing when the flag is off so
@@ -258,6 +292,125 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
               aria-label="Enable auto-notes button"
             />
           </label>
+
+          {/* RAZ-111: Speed Notes toggle. Always available — no feature flag.
+              Shift+N fills candidates for the selected cell; Ctrl+Shift+N (or
+              long-press the Notes button) fills all empty cells. Merge
+              semantics: existing pencil marks are never removed. */}
+          <label className="flex items-start justify-between gap-4 text-sm">
+            <span className="flex flex-col">
+              <span className="font-medium text-foreground">Speed Notes</span>
+              <span className="text-xs text-muted-foreground">
+                ⇧N fills candidates for the selected cell; ⌃⇧N fills all empty
+                cells. Holding the Notes button also fills all. Existing marks
+                are preserved.
+              </span>
+            </span>
+            <input
+              type="checkbox"
+              checked={speedNotesOn}
+              onChange={(e) => setSetting("speedNotes", e.target.checked)}
+              className="mt-1 h-4 w-4 accent-foreground"
+              aria-label="Speed Notes shortcuts"
+            />
+          </label>
+
+          {/* RAZ-110: zero-based mode. Always available — no feature flag.
+              Digits on the board, in notes, and on the number pad show
+              0–8 instead of 1–9. The internal 1-indexed representation
+              is unchanged (solver, DB, leaderboards unaffected). */}
+          <label className="flex items-start justify-between gap-4 text-sm">
+            <span className="flex flex-col">
+              <span className="font-medium text-foreground">Zero-based digits</span>
+              <span className="text-xs text-muted-foreground">
+                Show digits as 0–8 instead of 1–9. Keys 0–8 place digits;
+                Backspace erases. Useful for programmers and competitive players
+                who think in zero-indexed systems.
+              </span>
+            </span>
+            <input
+              type="checkbox"
+              checked={zeroBasedMode}
+              onChange={(e) => setSetting("zeroBasedMode", e.target.checked)}
+              className="mt-1 h-4 w-4 accent-foreground"
+              aria-label="Zero-based digit mode"
+            />
+          </label>
+
+          {/* RAZ-112: Iron Mode toggle. Flag-gated; disabled mid-game
+              because toggling after already placing digits would cause
+              an immediate failure. The tooltip explains what it does. */}
+          {ironModeFlag && (
+            <label className="flex items-start justify-between gap-4 text-sm">
+              <span className="flex flex-col">
+                <span className="font-medium text-foreground">
+                  Iron Mode ⚔️
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  One wrong move ends the run. No undo, no hints, no mercy.
+                  {hasStartedGame && !ironModeOn
+                    ? " Start a new game to enable."
+                    : ""}
+                </span>
+              </span>
+              <input
+                type="checkbox"
+                checked={ironModeOn}
+                onChange={(e) => setSetting("ironMode", e.target.checked)}
+                disabled={hasStartedGame && !ironModeOn}
+                className="mt-1 h-4 w-4 accent-foreground"
+                aria-label="Iron Mode — one wrong move ends the run"
+              />
+            </label>
+          )}
+
+          {/* RAZ-116: Symbol Mode picker. Renders a radio group of the
+              four symbol sets with a small inline preview of three
+              symbols per option. Flag-gated on `color-code-mode`. */}
+          {colorCodeFlag && (
+            <div className="flex flex-col gap-2">
+              <span className="text-sm font-medium text-foreground">Symbol mode</span>
+              <span className="text-xs text-muted-foreground">
+                Replace digits with colors, shapes, or both. Great for
+                kids and visual thinkers. Colors + Shapes is fully
+                colorblind-safe.
+              </span>
+              <div className="grid grid-cols-2 gap-1.5">
+                {SYMBOL_SET_IDS.map((setId) => {
+                  const isActive = currentSymbolSet === setId;
+                  const preview = [1, 2, 3].map((d) => getSymbol(d, setId));
+                  return (
+                    <button
+                      key={setId}
+                      type="button"
+                      onClick={() => setSetting("symbolSet", setId)}
+                      className={cn(
+                        "flex flex-col items-center gap-1 rounded-md border p-2 text-xs transition-colors",
+                        isActive
+                          ? "border-primary bg-primary/10 ring-1 ring-primary"
+                          : "border-border hover:bg-accent",
+                      )}
+                      aria-pressed={isActive}
+                      aria-label={SYMBOL_SET_LABEL[setId]}
+                    >
+                      <span className="flex items-center gap-1.5 text-base">
+                        {preview.map((sym) =>
+                          sym ? (
+                            <span key={sym.value} style={sym.color ? { color: sym.color } : undefined}>
+                              {sym.glyph}
+                            </span>
+                          ) : null,
+                        )}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground">
+                        {SYMBOL_SET_LABEL[setId]}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* RAZ-19 haptics toggle. Rendered only when the server-side
               feature flag is on; anonymous and signed-in users both see

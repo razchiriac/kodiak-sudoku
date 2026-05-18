@@ -25,7 +25,8 @@ export type FixedMask = Uint8Array;
 // (each must contain 1-9 exactly once). The type is a string union
 // rather than an enum per project conventions. Future variants (e.g.
 // "killer") can be added without a migration by extending this union.
-export type Variant = "standard" | "diagonal";
+// RAZ-120: "arrow" — digits along each arrow must sum to the circle cell.
+export type Variant = "standard" | "diagonal" | "arrow";
 
 export const BOARD_SIZE = 81;
 export const GRID_DIM = 9;
@@ -270,6 +271,20 @@ export function computeMistakes(
     if (v !== expected) out.add(i);
   }
   return out;
+}
+
+// Returns the bitmask of valid candidates for a single empty cell.
+// Filled cells return 0. Factored out of computeAllCandidates so
+// Speed Notes can fill just the selected cell without a full board pass.
+export function computeCellCandidateMask(board: Board, index: CellIndex, variant?: Variant): number {
+  if (board[index] !== 0) return 0;
+  const ALL = 0b1_1111_1111;
+  let mask = ALL;
+  for (const p of peers(index, variant)) {
+    const v = board[p];
+    if (v !== 0) mask &= ~(1 << (v - 1));
+  }
+  return mask;
 }
 
 // Compute the full set of legal candidate digits for every empty cell.

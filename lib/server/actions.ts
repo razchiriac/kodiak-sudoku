@@ -16,11 +16,11 @@ import {
 import { evaluateAndAwardAchievements } from "./achievements";
 import { canonicalPair, getFriendship } from "./friends";
 import { getCurrentUser } from "@/lib/supabase/server";
-import { getDailyRankContext, getPuzzleById } from "@/lib/db/queries";
+import { getDailyRankContext, getPuzzleById, getReplayBatches } from "@/lib/db/queries";
 import { findConflicts, isCorrect, isFilled } from "@/lib/sudoku/validate";
 import { parseBoard } from "@/lib/sudoku/board";
 import { nextHint } from "@/lib/sudoku/solver";
-import { dailyCompare, eventLog, solveTimeSanity } from "@/lib/flags";
+import { dailyCompare, eventLog, solveReplay, solveTimeSanity } from "@/lib/flags";
 import {
   HINT_BUCKET,
   HINT_LIMITS,
@@ -60,6 +60,28 @@ export async function saveGameAction(raw: SaveGameInput) {
   // saved_games rows that point to nonexistent puzzles.
   const puzzle = await getPuzzleById(input.puzzleId);
   if (!puzzle) return { ok: false as const, error: "puzzle_not_found" };
+
+  // RAZ-104: server-side belt-and-suspenders for the autosave race.
+  // The client guards against autosaving a completed board via the
+  // `isComplete` check in the autosave effect, but a debounce that
+  // was already in-flight before the guard fired can still reach us.
+  // A fully-filled board (no '0' remaining) that already has a
+  // completed_games row is a re-insert we must reject — the row was
+  // just deleted by submitCompletionAction and recreating it would
+  // make the puzzle reappear in "Continue".
+  if (!input.board.includes("0")) {
+    const done = await db
+      .select({ id: completedGames.id })
+      .from(completedGames)
+      .where(
+        and(
+          eq(completedGames.userId, user.id),
+          eq(completedGames.puzzleId, input.puzzleId),
+        ),
+      )
+      .limit(1);
+    if (done.length > 0) return { ok: true as const };
+  }
 
   await db
     .insert(savedGames)
@@ -590,12 +612,26 @@ export async function updateProfileAction(raw: z.infer<typeof UpdateProfileSchem
   if (!user) return { ok: false as const, error: "unauthenticated" };
   const input = UpdateProfileSchema.parse(raw);
 
+  // RAZ-130: use UPSERT so users whose profile row wasn't created by the
+  // on_auth_user_created trigger (e.g. accounts that predate the trigger)
+  // still get their username stored. A bare UPDATE is a silent no-op when
+  // the row is missing, which meant those users could never be found by
+  // username in the friends search.
   try {
-    const { profiles } = await import("@/lib/db/schema");
     await db
-      .update(profiles)
-      .set({ username: input.username, displayName: input.displayName ?? input.username })
-      .where(eq(profiles.id, user.id));
+      .insert(profiles)
+      .values({
+        id: user.id,
+        username: input.username,
+        displayName: input.displayName ?? input.username,
+      })
+      .onConflictDoUpdate({
+        target: profiles.id,
+        set: {
+          username: input.username,
+          displayName: input.displayName ?? input.username,
+        },
+      });
   } catch (e: unknown) {
     if (typeof e === "object" && e && "code" in e && (e as { code: string }).code === "23505") {
       return { ok: false as const, error: "username_taken" };
@@ -930,4 +966,40 @@ export async function unsubscribePushAction() {
 
   revalidatePath("/profile/edit");
   return { ok: true as const };
+}
+
+// RAZ-113: Fetch input-event batches for a completed puzzle so the
+// client can render a solve replay. Returns the stitched events or
+// an error. Only available for the puzzle's owner (the user who
+// recorded the events). Flag-gated so we can kill the feature from
+// Edge Config without touching client code.
+const FetchReplaySchema = z.object({
+  puzzleId: z.number().int().positive(),
+});
+
+export async function fetchReplayAction(raw: { puzzleId: number }) {
+  if (!(await solveReplay())) {
+    return { ok: false as const, error: "flag_off" };
+  }
+  const input = FetchReplaySchema.parse(raw);
+  const user = await getCurrentUser();
+  if (!user) return { ok: false as const, error: "unauthenticated" };
+
+  const batches = await getReplayBatches(user.id, input.puzzleId);
+  if (batches.length === 0) {
+    return { ok: false as const, error: "no_events" };
+  }
+
+  return {
+    ok: true as const,
+    batches: batches.map((b) => ({
+      seq: b.seq,
+      events: b.events.map((e) => ({
+        c: e.c,
+        d: e.d,
+        t: e.t,
+        k: e.k as "v" | "e" | "h",
+      })),
+    })),
+  };
 }

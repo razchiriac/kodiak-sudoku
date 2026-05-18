@@ -8,13 +8,13 @@ export default function AccountDeletionPage() {
       <h1>Account deletion</h1>
       <p>
         If you want to delete your Sudoku account and associated data, email{" "}
-        <a href="mailto:hello@example.com">hello@example.com</a> from the address used to sign in.
+        <a href="mailto:raz@kodiak.io">raz@kodiak.io</a> from the address used to sign in.
       </p>
       <h2>How to request deletion</h2>
       <ol>
         <li>Sign in to your account once, so we can verify recent account ownership.</li>
         <li>
-          Send an email to <a href="mailto:hello@example.com">hello@example.com</a> with subject
+          Send an email to <a href="mailto:raz@kodiak.io">raz@kodiak.io</a> with subject
           line <strong>Delete my Sudoku account</strong>.
         </li>
         <li>We confirm and process your request within 7 days.</li>

@@ -4,17 +4,17 @@ export const metadata = { title: "Account deletion" };
 
 export default function AccountDeletionPage() {
   return (
-    <div className="container max-w-2xl py-10 prose prose-neutral dark:prose-invert">
+    <div className="prose prose-neutral dark:prose-invert container max-w-2xl py-10">
       <h1>Account deletion</h1>
       <p>
         If you want to delete your Sudoku account and associated data, email{" "}
-        <a href="mailto:raz@kodiak.io">raz@kodiak.io</a> from the address used to sign in.
+        <a href="mailto:raz@playkodiak.com">raz@playkodiak.com</a> from the address used to sign in.
       </p>
       <h2>How to request deletion</h2>
       <ol>
         <li>Sign in to your account once, so we can verify recent account ownership.</li>
         <li>
-          Send an email to <a href="mailto:raz@kodiak.io">raz@kodiak.io</a> with subject
+          Send an email to <a href="mailto:raz@playkodiak.com">raz@playkodiak.com</a> with subject
           line <strong>Delete my Sudoku account</strong>.
         </li>
         <li>We confirm and process your request within 7 days.</li>

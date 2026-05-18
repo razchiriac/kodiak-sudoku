@@ -2,7 +2,7 @@ export const metadata = { title: "Privacy" };
 
 export default function PrivacyPage() {
   return (
-    <div className="container max-w-2xl py-10 prose prose-neutral dark:prose-invert">
+    <div className="prose prose-neutral dark:prose-invert container max-w-2xl py-10">
       <h1>Privacy</h1>
       <p>
         We collect only what we need to run the game: your email (so we can sign you in), your
@@ -15,7 +15,7 @@ export default function PrivacyPage() {
       </p>
       <p>
         You can request deletion of your account by signing in and emailing
-        <a href="mailto:raz@kodiak.io"> raz@kodiak.io</a>; your profile, saved games, and
+        <a href="mailto:raz@playkodiak.com"> raz@playkodiak.com</a>; your profile, saved games, and
         completion history will be removed within 7 days.
       </p>
       <p>

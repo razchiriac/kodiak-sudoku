@@ -82,6 +82,10 @@ jobs:
         env:
           # Drive every test against the Vercel preview URL.
           PLAYWRIGHT_BASE_URL: ${{ github.event.deployment_status.target_url }}
+          # Same secret as Vercel → Deployment Protection → Protection bypass
+          # for automation. Required when previews are protected; playwright.config.ts
+          # sends x-vercel-protection-bypass + cookie handshake headers.
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
           # Tell playwright.config.ts to register the authed projects.
           # The test-login route on the preview deploy must ALSO have
           # this enabled (set in Vercel Preview env). If it isn't,
